@@ -1,7 +1,7 @@
 import { readFile, writeFile, readdir, rm, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { Command } from "commander";
-import { input, select, number, checkbox, confirm } from "@inquirer/prompts";
+import { input, select, number, confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import yaml from "js-yaml";
 import { fundConfigSchema, type FundConfig } from "./types.js";
@@ -194,7 +194,7 @@ fundCommand
 
 // ── Objective prompts ──────────────────────────────────────────
 
-async function promptObjective(type: string, capital: number) {
+async function promptObjective(type: string, _capital: number) {
   switch (type) {
     case "runway": {
       const monthly = (await number({ message: "Monthly burn rate (USD):" })) ?? 2000;

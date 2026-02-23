@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import cron from "node-cron";
 import { Command } from "commander";
 import chalk from "chalk";
-import { DAEMON_PID, DAEMON_LOG } from "./paths.js";
+import { DAEMON_PID } from "./paths.js";
 import { listFundNames, loadFundConfig } from "./fund.js";
 import { runFundSession } from "./session.js";
 

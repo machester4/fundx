@@ -4,6 +4,7 @@ import { fundCommand } from "./fund.js";
 import { statusCommand } from "./status.js";
 import { sessionCommand } from "./session.js";
 import { startCommand, stopCommand } from "./daemon.js";
+import { logsCommand } from "./logs.js";
 
 const program = new Command()
   .name("fundx")
@@ -16,5 +17,6 @@ program.addCommand(statusCommand);
 program.addCommand(sessionCommand);
 program.addCommand(startCommand);
 program.addCommand(stopCommand);
+program.addCommand(logsCommand);
 
 program.parse();
