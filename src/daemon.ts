@@ -6,6 +6,7 @@ import chalk from "chalk";
 import { DAEMON_PID } from "./paths.js";
 import { listFundNames, loadFundConfig } from "./fund.js";
 import { runFundSession } from "./session.js";
+import { startGateway, stopGateway } from "./gateway.js";
 
 /** Check if daemon is already running */
 async function isDaemonRunning(): Promise<boolean> {
@@ -29,6 +30,9 @@ async function startDaemon(): Promise<void> {
 
   await writeFile(DAEMON_PID, String(process.pid), "utf-8");
   console.log(chalk.green(`  ✓ Daemon started (PID ${process.pid})`));
+
+  // Start Telegram gateway alongside scheduler
+  await startGateway();
 
   // Check every minute for pending sessions
   cron.schedule("* * * * *", async () => {
@@ -68,6 +72,7 @@ async function startDaemon(): Promise<void> {
 }
 
 async function cleanup() {
+  await stopGateway();
   await unlink(DAEMON_PID).catch(() => {});
   console.log(chalk.dim("\n  Daemon stopped."));
   process.exit(0);
@@ -92,9 +97,9 @@ async function stopDaemon(): Promise<void> {
 // ── CLI Commands ───────────────────────────────────────────────
 
 export const startCommand = new Command("start")
-  .description("Start the daemon scheduler")
+  .description("Start the daemon scheduler + Telegram gateway")
   .action(startDaemon);
 
 export const stopCommand = new Command("stop")
-  .description("Stop the daemon scheduler")
+  .description("Stop the daemon scheduler + Telegram gateway")
   .action(stopDaemon);
