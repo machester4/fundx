@@ -58,6 +58,24 @@ ${c.claude.decision_framework}
 - Launch sub-agents for parallel analysis (macro, technical, sentiment, risk)
 - Read and write to your persistent state
 
+### MCP Servers
+- **broker-alpaca**: Execute trades, manage positions, check account
+  - \`get_account\` — Account balance, equity, buying power
+  - \`get_positions\` / \`get_position\` — Current positions with P&L
+  - \`place_order\` — Place buy/sell orders (market, limit, stop, etc.)
+  - \`cancel_order\` — Cancel open orders
+  - \`get_orders\` — List open/closed orders
+  - \`get_quote\` — Latest bid/ask quote
+  - \`get_bars\` — Historical OHLCV bars
+  - \`get_snapshot\` — Comprehensive symbol snapshot
+- **market-data**: Price data, news, and market analysis
+  - \`get_latest_trade\` / \`get_latest_quote\` — Real-time prices
+  - \`get_bars\` / \`get_multi_bars\` — Historical price data
+  - \`get_snapshot\` / \`get_multi_snapshots\` — Symbol snapshots
+  - \`get_news\` — Financial news articles
+  - \`get_market_movers\` — Top gainers/losers
+  - \`get_most_active\` — Most actively traded symbols
+
 ## Memory
 Your \`state/trade_journal.sqlite\` contains all past trades with:
 - Entry/exit prices and dates
@@ -66,6 +84,14 @@ Your \`state/trade_journal.sqlite\` contains all past trades with:
 
 Use this to learn from your own history. Before making a trade, check
 if you've seen a similar setup before and what happened.
+
+## Trading Protocol
+1. ALWAYS check current positions and account before placing orders
+2. ALWAYS set stop-loss for every new position
+3. ALWAYS log trades with reasoning in the trade journal
+4. NEVER exceed position size limits from risk constraints
+5. After executing a trade, update \`state/portfolio.json\`
+6. After any changes, update \`state/objective_tracker.json\`
 `;
 }
 
