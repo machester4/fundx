@@ -61,37 +61,74 @@ Each Claude Code session:
 
 ## Tech Stack
 
-| Component    | Technology                          |
-|-------------|-------------------------------------|
-| Language     | Python 3.11+                        |
-| CLI          | Typer + Rich + questionary          |
-| Config       | YAML (PyYAML)                       |
-| State DB     | SQLite (trade journal, conversations)|
-| Vectors      | sqlite-vss or numpy                 |
-| Daemon       | APScheduler                         |
-| Telegram     | python-telegram-bot (async)         |
-| AI Engine    | Claude Code (CLI)                   |
-| MCP Servers  | Node.js (TypeScript)                |
-| Broker       | Alpaca API (alpaca-py)              |
-| Market Data  | yfinance + Alpha Vantage            |
-| Package      | pyproject.toml + pip                |
+| Component    | Technology                                  |
+|-------------|---------------------------------------------|
+| Language     | TypeScript (Node.js 20+)                    |
+| CLI          | Commander.js or oclif + Ink (React for CLI) |
+| Config       | YAML (yaml / js-yaml)                       |
+| State DB     | SQLite (better-sqlite3 or drizzle-orm)      |
+| Vectors      | sqlite-vec or transformers.js               |
+| Daemon       | node-cron or Bree                           |
+| Telegram     | grammy (modern Telegram bot framework)      |
+| AI Engine    | Claude Code (CLI)                           |
+| MCP Servers  | TypeScript (MCP SDK)                        |
+| Broker       | Alpaca API (@alpacahq/alpaca-trade-api)     |
+| Market Data  | Yahoo Finance API + Alpha Vantage           |
+| Package      | package.json + npm/pnpm                     |
+| Build        | tsup or tsx                                 |
+| Runtime      | tsx (dev) / compiled JS (prod)              |
 
 ## Development Conventions
 
 ### Code Style
 
-- Python 3.11+ with type hints throughout
-- Follow PEP 8; use a formatter (black or ruff format) and linter (ruff)
-- Use `pyproject.toml` for all project metadata and tool configuration
-- Prefer dataclasses or Pydantic models for structured data
-- Use `pathlib.Path` over `os.path`
+- TypeScript with strict mode enabled (`"strict": true` in tsconfig.json)
+- Use ESM modules (`"type": "module"` in package.json)
+- Format with Prettier, lint with ESLint (flat config)
+- Prefer Zod schemas for runtime validation of configs and API responses
+- Use `node:path` and `node:fs/promises` (node: protocol prefix)
+- Prefer `interface` over `type` for object shapes; use `type` for unions and intersections
+- Use `async/await` throughout — no raw Promise chains or callbacks
 
 ### Project Structure Patterns
 
-- CLI commands go in a `fundx/cli/` module, one file per command group (e.g., `fund.py`, `session.py`, `config.py`)
-- Business logic belongs in `fundx/core/`, separate from CLI presentation
-- MCP servers are standalone packages in `mcp-servers/` at the repo root (Node.js/TypeScript)
-- Configuration schemas should be validated with Pydantic or a YAML schema validator
+```
+fundx/
+├── src/
+│   ├── cli/              # CLI commands, one file per command group
+│   │   ├── index.ts      # Main CLI entry point
+│   │   ├── fund.ts       # fund create/edit/list/info commands
+│   │   ├── session.ts    # session run/history/next commands
+│   │   └── config.ts     # config show/set/broker/telegram commands
+│   ├── core/             # Business logic (no CLI dependencies)
+│   │   ├── fund.ts       # Fund CRUD operations
+│   │   ├── scheduler.ts  # Daemon/session scheduling
+│   │   ├── session.ts    # Claude Code session runner
+│   │   ├── state.ts      # State file read/write
+│   │   └── config.ts     # Global config management
+│   ├── mcp/              # MCP server implementations
+│   │   ├── broker-alpaca/
+│   │   ├── market-data/
+│   │   └── telegram/
+│   ├── gateway/          # Telegram bot
+│   │   └── bot.ts
+│   ├── schemas/          # Zod schemas for validation
+│   │   ├── fund-config.ts
+│   │   ├── portfolio.ts
+│   │   └── state.ts
+│   ├── types/            # Shared TypeScript types
+│   │   └── index.ts
+│   └── utils/            # Shared utilities
+├── tests/                # Test files mirroring src/ structure
+├── package.json
+├── tsconfig.json
+└── tsup.config.ts        # Build configuration
+```
+
+- CLI commands go in `src/cli/`, one file per command group
+- Business logic belongs in `src/core/`, separate from CLI presentation
+- MCP servers live in `src/mcp/` as part of the monorepo (or as separate packages if needed)
+- Configuration schemas are validated with Zod in `src/schemas/`
 - State files (JSON, SQLite) are per-fund under `state/`
 
 ### Configuration
@@ -136,22 +173,22 @@ When implementing fund logic, support these objective types:
 Development follows 6 phases. When implementing, follow this order:
 
 ### Phase 1 — MVP (Foundation) — START HERE
-- Project structure + `pyproject.toml`
+- Project structure + `package.json` + `tsconfig.json`
 - `fundx init` (workspace setup)
 - `fundx fund create` (interactive wizard)
 - `fundx fund list` / `fundx fund info`
 - `fundx status` (read from state files)
 - CLAUDE.md template generation per fund
-- `fund_config.yaml` schema + validation
+- `fund_config.yaml` Zod schema + validation
 - State file initialization
-- Basic daemon with APScheduler
+- Basic daemon with node-cron or Bree
 - Session runner (launches Claude Code)
 - `fundx start` / `fundx stop` / `fundx logs`
 - `fundx session run` (manual trigger)
 
 ### Phase 2 — Broker & Trading
 - MCP server: broker-alpaca (paper trading)
-- MCP server: market-data (yfinance wrapper)
+- MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
 - Portfolio state auto-sync, trade execution, journal logging
 - Stop-loss monitoring
 
@@ -168,37 +205,60 @@ Development follows 6 phases. When implementing, follow this order:
 - Live trading, multi-broker, fund templates, special sessions
 
 ### Phase 6 — Community & Polish
-- `pip install fundx` distribution, documentation, plugin system
+- `npm install -g fundx` / `npx fundx` distribution, documentation, plugin system
 
 ## Build & Run Commands
 
 No build system exists yet. When implemented, expect:
 
 ```bash
-# Install in development mode
-pip install -e ".[dev]"
+# Install dependencies
+pnpm install
 
-# Run the CLI
-fundx --help
+# Run in development mode (with tsx)
+pnpm dev -- --help
+
+# Build for production
+pnpm build
+
+# Run production build
+pnpm start -- --help
 
 # Run tests
-pytest
+pnpm test
 
 # Lint and format
-ruff check .
-ruff format .
+pnpm lint
+pnpm format
 
-# Type check
-mypy fundx/
+# Type check (without emitting)
+pnpm typecheck
+```
+
+### package.json Scripts (expected)
+
+```json
+{
+  "scripts": {
+    "dev": "tsx src/cli/index.ts",
+    "build": "tsup",
+    "start": "node dist/cli/index.js",
+    "test": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
+  }
+}
 ```
 
 ## Testing Conventions
 
-- Use `pytest` as the test framework
-- Test files go in `tests/` mirroring the `fundx/` source structure
-- Use fixtures for fund configs, mock state files, and broker API stubs
-- MCP server tests should mock external APIs (Alpaca, yfinance)
-- Integration tests for CLI commands should use Typer's `CliRunner`
+- Use **Vitest** as the test framework
+- Test files go in `tests/` mirroring the `src/` structure (e.g., `tests/core/fund.test.ts`)
+- Use Vitest fixtures and `beforeEach`/`afterEach` for fund configs, mock state files, and broker API stubs
+- MCP server tests should mock external APIs (Alpaca, Yahoo Finance)
+- Integration tests for CLI commands should invoke the CLI as a subprocess or test command handlers directly
+- Use `vi.mock()` for module mocking and `vi.spyOn()` for partial mocking
 
 ## Important Notes for AI Assistants
 
@@ -208,4 +268,4 @@ mypy fundx/
 - Fund state files must always be updated atomically (write to temp file, then rename)
 - Every trade must be logged in the SQLite journal with reasoning
 - Per-fund `CLAUDE.md` files are auto-generated from `fund_config.yaml` — they are separate from this root `CLAUDE.md`
-- The `.gitignore` is currently Node.js-focused; add Python patterns (`.venv/`, `__pycache__/`, `*.pyc`, `.mypy_cache/`, etc.) when setting up the Python project
+- The `.gitignore` already covers Node.js patterns (node_modules, dist, etc.) — extend it with `*.tsbuildinfo` if not already present
