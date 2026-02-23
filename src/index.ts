@@ -5,6 +5,9 @@ import { statusCommand } from "./status.js";
 import { sessionCommand } from "./session.js";
 import { startCommand, stopCommand } from "./daemon.js";
 import { logsCommand } from "./logs.js";
+import { portfolioCommand } from "./portfolio-cmd.js";
+import { tradesCommand } from "./trades-cmd.js";
+import { performanceCommand } from "./performance-cmd.js";
 
 const program = new Command()
   .name("fundx")
@@ -18,5 +21,8 @@ program.addCommand(sessionCommand);
 program.addCommand(startCommand);
 program.addCommand(stopCommand);
 program.addCommand(logsCommand);
+program.addCommand(portfolioCommand);
+program.addCommand(tradesCommand);
+program.addCommand(performanceCommand);
 
 program.parse();

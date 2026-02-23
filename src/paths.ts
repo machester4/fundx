@@ -1,5 +1,8 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Root workspace: ~/.fundx */
 export const WORKSPACE = join(homedir(), ".fundx");
@@ -16,6 +19,15 @@ export const DAEMON_PID = join(WORKSPACE, "daemon.pid");
 /** Daemon log file */
 export const DAEMON_LOG = join(WORKSPACE, "daemon.log");
 
+/** Shared directory */
+export const SHARED_DIR = join(WORKSPACE, "shared");
+
+/** MCP server executables (resolved from dist/mcp at runtime) */
+export const MCP_SERVERS = {
+  brokerAlpaca: join(__dirname, "mcp", "broker-alpaca.js"),
+  marketData: join(__dirname, "mcp", "market-data.js"),
+};
+
 /** Paths relative to a fund directory */
 export function fundPaths(fundName: string) {
   const root = join(FUNDS_DIR, fundName);
@@ -23,6 +35,8 @@ export function fundPaths(fundName: string) {
     root,
     config: join(root, "fund_config.yaml"),
     claudeMd: join(root, "CLAUDE.md"),
+    claudeDir: join(root, ".claude"),
+    claudeSettings: join(root, ".claude", "settings.json"),
     state: {
       dir: join(root, "state"),
       portfolio: join(root, "state", "portfolio.json"),

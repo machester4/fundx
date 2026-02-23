@@ -204,3 +204,132 @@ export const sessionLogSchema = z.object({
 });
 
 export type SessionLog = z.infer<typeof sessionLogSchema>;
+
+// ── Trade Journal Schemas ─────────────────────────────────────
+
+export const tradeRecordSchema = z.object({
+  id: z.number().optional(),
+  timestamp: z.string(),
+  fund: z.string(),
+  symbol: z.string(),
+  side: z.enum(["buy", "sell"]),
+  quantity: z.number().positive(),
+  price: z.number().positive(),
+  total_value: z.number(),
+  order_type: z.enum(["market", "limit", "stop", "stop_limit", "trailing_stop"]),
+  session_type: z.string().optional(),
+  reasoning: z.string().optional(),
+  analysis_ref: z.string().optional(),
+  closed_at: z.string().optional(),
+  close_price: z.number().optional(),
+  pnl: z.number().optional(),
+  pnl_pct: z.number().optional(),
+  lessons_learned: z.string().optional(),
+  market_context: z.string().optional(),
+});
+
+export type TradeRecord = z.infer<typeof tradeRecordSchema>;
+
+export const sessionRecordSchema = z.object({
+  id: z.number().optional(),
+  timestamp: z.string(),
+  fund: z.string(),
+  session_type: z.string(),
+  duration_seconds: z.number().optional(),
+  trades_executed: z.number().default(0),
+  analysis_file: z.string().optional(),
+  summary: z.string().optional(),
+  claude_model: z.string().optional(),
+});
+
+export type SessionRecord = z.infer<typeof sessionRecordSchema>;
+
+// ── Alpaca API Schemas ────────────────────────────────────────
+
+export const alpacaAccountSchema = z.object({
+  id: z.string(),
+  account_number: z.string(),
+  status: z.string(),
+  currency: z.string(),
+  cash: z.string(),
+  portfolio_value: z.string(),
+  buying_power: z.string(),
+  equity: z.string(),
+  last_equity: z.string(),
+  long_market_value: z.string(),
+  short_market_value: z.string(),
+  daytrade_count: z.number(),
+  pattern_day_trader: z.boolean(),
+});
+
+export type AlpacaAccount = z.infer<typeof alpacaAccountSchema>;
+
+export const alpacaPositionSchema = z.object({
+  asset_id: z.string(),
+  symbol: z.string(),
+  exchange: z.string(),
+  asset_class: z.string(),
+  avg_entry_price: z.string(),
+  qty: z.string(),
+  side: z.string(),
+  market_value: z.string(),
+  cost_basis: z.string(),
+  unrealized_pl: z.string(),
+  unrealized_plpc: z.string(),
+  current_price: z.string(),
+  lastday_price: z.string(),
+  change_today: z.string(),
+});
+
+export type AlpacaPosition = z.infer<typeof alpacaPositionSchema>;
+
+export const alpacaOrderSchema = z.object({
+  id: z.string(),
+  client_order_id: z.string(),
+  created_at: z.string(),
+  updated_at: z.string().optional(),
+  submitted_at: z.string().optional(),
+  filled_at: z.string().nullable().optional(),
+  expired_at: z.string().nullable().optional(),
+  canceled_at: z.string().nullable().optional(),
+  asset_id: z.string(),
+  symbol: z.string(),
+  asset_class: z.string(),
+  qty: z.string().nullable().optional(),
+  filled_qty: z.string(),
+  type: z.string(),
+  side: z.string(),
+  time_in_force: z.string(),
+  limit_price: z.string().nullable().optional(),
+  stop_price: z.string().nullable().optional(),
+  filled_avg_price: z.string().nullable().optional(),
+  status: z.string(),
+  order_class: z.string().optional(),
+});
+
+export type AlpacaOrder = z.infer<typeof alpacaOrderSchema>;
+
+export const alpacaBarSchema = z.object({
+  t: z.string(),
+  o: z.number(),
+  h: z.number(),
+  l: z.number(),
+  c: z.number(),
+  v: z.number(),
+  n: z.number().optional(),
+  vw: z.number().optional(),
+});
+
+export type AlpacaBar = z.infer<typeof alpacaBarSchema>;
+
+export const alpacaQuoteSchema = z.object({
+  t: z.string().optional(),
+  ap: z.number(),
+  as: z.number(),
+  bp: z.number(),
+  bs: z.number(),
+  ax: z.string().optional(),
+  bx: z.string().optional(),
+});
+
+export type AlpacaQuote = z.infer<typeof alpacaQuoteSchema>;
