@@ -75,6 +75,12 @@ ${c.claude.decision_framework}
   - \`get_news\` — Financial news articles
   - \`get_market_movers\` — Top gainers/losers
   - \`get_most_active\` — Most actively traded symbols
+- **telegram-notify**: Send notifications to the user via Telegram
+  - \`send_message\` — Send any text message (supports HTML formatting)
+  - \`send_trade_alert\` — Formatted trade execution notification
+  - \`send_stop_loss_alert\` — Stop-loss triggered alert (always sends, even in quiet hours)
+  - \`send_daily_digest\` — End-of-day summary with P&L, trades, and metrics
+  - \`send_milestone_alert\` — Objective milestone notification
 
 ## Memory
 Your \`state/trade_journal.sqlite\` contains all past trades with:

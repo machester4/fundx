@@ -102,7 +102,12 @@ src/
   fund.ts        # `fundx fund *` commands + fund CRUD logic
   status.ts      # `fundx status` command — dashboard
   session.ts     # `fundx session run` + Claude Code launcher
-  daemon.ts      # `fundx start/stop` + node-cron scheduler
+  daemon.ts      # `fundx start/stop` + node-cron scheduler + gateway startup
+  gateway.ts     # Telegram bot + quick commands + free question routing
+  mcp/
+    broker-alpaca.ts    # MCP server: Alpaca broker integration
+    market-data.ts      # MCP server: market data provider
+    telegram-notify.ts  # MCP server: Telegram notifications for Claude sessions
 ```
 
 **Design pattern:** Each file owns its domain completely — CLI command definition and business logic live together. No separate "commands" and "core" layers. This avoids indirection while the codebase is small. Split only when a file gets too large.
@@ -175,9 +180,15 @@ Development follows 6 phases. When implementing, follow this order:
 - Portfolio state auto-sync, trade execution, journal logging
 - Stop-loss monitoring
 
-### Phase 3 — Telegram
-- Telegram bot, quick commands, notification system
-- Free question → wake Claude flow
+### Phase 3 — Telegram — COMPLETE
+- [x] Telegram bot with grammy (`gateway.ts`)
+- [x] Quick commands: /status, /portfolio, /trades, /pause, /resume, /next
+- [x] Free question → wake Claude flow with auto-fund detection
+- [x] MCP server: telegram-notify (send_message, send_trade_alert, send_stop_loss_alert, send_daily_digest, send_milestone_alert)
+- [x] Notification system with quiet hours and priority override
+- [x] Authorization middleware (only owner chat_id can interact)
+- [x] Daemon starts gateway alongside scheduler
+- [x] `fundx gateway start` — standalone gateway, `fundx gateway test` — send test message
 
 ### Phase 4 — Intelligence
 - Sub-agent parallel execution
