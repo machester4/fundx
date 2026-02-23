@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import yaml from "js-yaml";
 import { globalConfigSchema, type GlobalConfig } from "./types.js";
-import { GLOBAL_CONFIG, WORKSPACE } from "./paths.js";
+import { GLOBAL_CONFIG } from "./paths.js";
 
 export async function loadGlobalConfig(): Promise<GlobalConfig> {
   try {

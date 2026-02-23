@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Command } from "commander";
-import chalk from "chalk";
 import ora from "ora";
 import { loadFundConfig } from "./fund.js";
 import { loadGlobalConfig } from "./config.js";
@@ -65,6 +64,7 @@ export async function runFundSession(
     session_type: sessionType,
     started_at: startedAt,
     ended_at: new Date().toISOString(),
+    trades_executed: 0,
     summary: result.stdout.slice(0, 500),
   };
 
