@@ -4,7 +4,7 @@
 
 FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform** powered by Claude Code. It lets users define investment funds with real-life financial objectives (e.g., "sustain 18 months of living expenses") and delegates analysis, decision-making, and trade execution to Claude Code running autonomously via scheduled sessions.
 
-**Current status:** Pre-implementation / planning phase. The repository contains a detailed architectural README but no source code yet. All development starts from scratch following the roadmap in `README.md`.
+**Current status:** Project scaffolding complete. Core architecture, types, and CLI skeleton are implemented. Ready for Phase 1 feature work.
 
 **License:** Apache 2.0
 
@@ -61,22 +61,20 @@ Each Claude Code session:
 
 ## Tech Stack
 
-| Component    | Technology                                  |
-|-------------|---------------------------------------------|
-| Language     | TypeScript (Node.js 20+)                    |
-| CLI          | Commander.js or oclif + Ink (React for CLI) |
-| Config       | YAML (yaml / js-yaml)                       |
-| State DB     | SQLite (better-sqlite3 or drizzle-orm)      |
-| Vectors      | sqlite-vec or transformers.js               |
-| Daemon       | node-cron or Bree                           |
-| Telegram     | grammy (modern Telegram bot framework)      |
-| AI Engine    | Claude Code (CLI)                           |
-| MCP Servers  | TypeScript (MCP SDK)                        |
-| Broker       | Alpaca API (@alpacahq/alpaca-trade-api)     |
-| Market Data  | Yahoo Finance API + Alpha Vantage           |
-| Package      | package.json + npm/pnpm                     |
-| Build        | tsup or tsx                                 |
-| Runtime      | tsx (dev) / compiled JS (prod)              |
+| Component    | Technology                              |
+|-------------|-----------------------------------------|
+| Language     | TypeScript (Node.js 20+)                |
+| CLI          | Commander.js + @inquirer/prompts + chalk |
+| Config       | YAML (js-yaml) + Zod validation         |
+| State DB     | SQLite (better-sqlite3)                 |
+| Daemon       | node-cron                               |
+| Telegram     | grammy (Phase 3)                        |
+| AI Engine    | Claude Code (CLI via child_process)     |
+| MCP Servers  | TypeScript (Phase 2+)                   |
+| Broker       | Alpaca API (Phase 2)                    |
+| Build        | tsup (prod) / tsx (dev)                 |
+| Test         | Vitest                                  |
+| Package      | pnpm                                    |
 
 ## Development Conventions
 
@@ -90,46 +88,29 @@ Each Claude Code session:
 - Prefer `interface` over `type` for object shapes; use `type` for unions and intersections
 - Use `async/await` throughout — no raw Promise chains or callbacks
 
-### Project Structure Patterns
+### Source Structure
 
 ```
-fundx/
-├── src/
-│   ├── cli/              # CLI commands, one file per command group
-│   │   ├── index.ts      # Main CLI entry point
-│   │   ├── fund.ts       # fund create/edit/list/info commands
-│   │   ├── session.ts    # session run/history/next commands
-│   │   └── config.ts     # config show/set/broker/telegram commands
-│   ├── core/             # Business logic (no CLI dependencies)
-│   │   ├── fund.ts       # Fund CRUD operations
-│   │   ├── scheduler.ts  # Daemon/session scheduling
-│   │   ├── session.ts    # Claude Code session runner
-│   │   ├── state.ts      # State file read/write
-│   │   └── config.ts     # Global config management
-│   ├── mcp/              # MCP server implementations
-│   │   ├── broker-alpaca/
-│   │   ├── market-data/
-│   │   └── telegram/
-│   ├── gateway/          # Telegram bot
-│   │   └── bot.ts
-│   ├── schemas/          # Zod schemas for validation
-│   │   ├── fund-config.ts
-│   │   ├── portfolio.ts
-│   │   └── state.ts
-│   ├── types/            # Shared TypeScript types
-│   │   └── index.ts
-│   └── utils/            # Shared utilities
-├── tests/                # Test files mirroring src/ structure
-├── package.json
-├── tsconfig.json
-└── tsup.config.ts        # Build configuration
+src/
+  index.ts       # CLI entry point — wires all commands via Commander.js
+  types.ts       # Zod schemas + inferred TypeScript types (single source of truth)
+  paths.ts       # ~/.fundx path constants and per-fund path helpers
+  config.ts      # Global config read/write (~/.fundx/config.yaml)
+  state.ts       # Per-fund state file CRUD (portfolio, tracker, session log)
+  template.ts    # Per-fund CLAUDE.md generation from fund_config.yaml
+  init.ts        # `fundx init` command — workspace setup wizard
+  fund.ts        # `fundx fund *` commands + fund CRUD logic
+  status.ts      # `fundx status` command — dashboard
+  session.ts     # `fundx session run` + Claude Code launcher
+  daemon.ts      # `fundx start/stop` + node-cron scheduler
 ```
 
-- CLI commands go in `src/cli/`, one file per command group
-- Business logic belongs in `src/core/`, separate from CLI presentation
-- MCP servers live in `src/mcp/` as part of the monorepo (or as separate packages if needed)
-- Configuration schemas are validated with Zod in `src/schemas/`
-- State files (JSON, SQLite) are per-fund under `state/`
+**Design pattern:** Each file owns its domain completely — CLI command definition and business logic live together. No separate "commands" and "core" layers. This avoids indirection while the codebase is small. Split only when a file gets too large.
+
+- All Zod schemas and types live in `types.ts` — single import for any module
+- `paths.ts` is the only place that knows about `~/.fundx` structure
+- `state.ts` handles all JSON read/write with atomic writes (tmp + rename)
+- New commands get their own file (e.g., `ask.ts`, `portfolio.ts`) and register in `index.ts`
 
 ### Configuration
 
@@ -172,19 +153,21 @@ When implementing fund logic, support these objective types:
 
 Development follows 6 phases. When implementing, follow this order:
 
-### Phase 1 — MVP (Foundation) — START HERE
-- Project structure + `package.json` + `tsconfig.json`
-- `fundx init` (workspace setup)
-- `fundx fund create` (interactive wizard)
-- `fundx fund list` / `fundx fund info`
-- `fundx status` (read from state files)
-- CLAUDE.md template generation per fund
-- `fund_config.yaml` Zod schema + validation
-- State file initialization
-- Basic daemon with node-cron or Bree
-- Session runner (launches Claude Code)
-- `fundx start` / `fundx stop` / `fundx logs`
-- `fundx session run` (manual trigger)
+### Phase 1 — MVP (Foundation) — IN PROGRESS
+- [x] Project structure + `package.json` + `tsconfig.json` + `tsup.config.ts`
+- [x] Zod schemas for fund config, state, global config (`types.ts`)
+- [x] Path helpers (`paths.ts`)
+- [x] Global config management (`config.ts`)
+- [x] State file CRUD with atomic writes (`state.ts`)
+- [x] Per-fund CLAUDE.md generation (`template.ts`)
+- [x] `fundx init` — workspace setup wizard (`init.ts`)
+- [x] `fundx fund create/list/info/delete` (`fund.ts`)
+- [x] `fundx status` — dashboard (`status.ts`)
+- [x] `fundx session run` — Claude Code launcher (`session.ts`)
+- [x] `fundx start/stop` — daemon with node-cron (`daemon.ts`)
+- [ ] Install dependencies and verify build
+- [ ] `fundx logs` command
+- [ ] End-to-end test: init → create fund → run session
 
 ### Phase 2 — Broker & Trading
 - MCP server: broker-alpaca (paper trading)
@@ -209,56 +192,23 @@ Development follows 6 phases. When implementing, follow this order:
 
 ## Build & Run Commands
 
-No build system exists yet. When implemented, expect:
-
 ```bash
-# Install dependencies
-pnpm install
-
-# Run in development mode (with tsx)
-pnpm dev -- --help
-
-# Build for production
-pnpm build
-
-# Run production build
-pnpm start -- --help
-
-# Run tests
-pnpm test
-
-# Lint and format
-pnpm lint
-pnpm format
-
-# Type check (without emitting)
-pnpm typecheck
-```
-
-### package.json Scripts (expected)
-
-```json
-{
-  "scripts": {
-    "dev": "tsx src/cli/index.ts",
-    "build": "tsup",
-    "start": "node dist/cli/index.js",
-    "test": "vitest",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
-  }
-}
+pnpm install              # Install dependencies
+pnpm dev -- --help        # Run CLI in dev mode (tsx)
+pnpm build                # Build for production (tsup)
+pnpm start -- --help      # Run production build
+pnpm test                 # Run tests (vitest)
+pnpm lint                 # Lint (eslint)
+pnpm format               # Format (prettier)
+pnpm typecheck            # Type check (tsc --noEmit)
 ```
 
 ## Testing Conventions
 
-- Use **Vitest** as the test framework
-- Test files go in `tests/` mirroring the `src/` structure (e.g., `tests/core/fund.test.ts`)
-- Use Vitest fixtures and `beforeEach`/`afterEach` for fund configs, mock state files, and broker API stubs
-- MCP server tests should mock external APIs (Alpaca, Yahoo Finance)
-- Integration tests for CLI commands should invoke the CLI as a subprocess or test command handlers directly
-- Use `vi.mock()` for module mocking and `vi.spyOn()` for partial mocking
+- **Vitest** as test framework — test files in `tests/` (e.g., `tests/fund.test.ts`)
+- Use `vi.mock()` for module mocking, `vi.spyOn()` for partial mocking
+- Mock `fs` operations and external APIs — never hit real broker/market APIs in tests
+- CLI integration tests should test command handler functions directly
 
 ## Important Notes for AI Assistants
 
