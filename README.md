@@ -56,7 +56,7 @@ This project builds on ideas from several existing projects, combining the best 
                ▼                               ▼
 ┌──────────────────────────┐    ┌──────────────────────────────┐
 │      Daemon/Scheduler     │    │       Telegram Gateway        │
-│  (cron / APScheduler)     │    │  (always-on bot)              │
+│  (node-cron / Bree)       │    │  (always-on bot)              │
 │                           │    │                               │
 │  For each active fund:    │    │  IN:  user messages/commands  │
 │  - Check schedule         │    │  OUT: alerts, reports, trades │
@@ -73,7 +73,7 @@ This project builds on ideas from several existing projects, combining the best 
 │  2. Read fund_config.yaml (constraints)                       │
 │  3. Read persistent state (portfolio, journal, past analyses) │
 │  4. Create & execute temporary scripts as needed:             │
-│     - Market data download (yfinance, Alpha Vantage)          │
+│     - Market data download (Yahoo Finance, Alpha Vantage)     │
 │     - Technical indicators calculation                        │
 │     - News/sentiment scraping                                 │
 │     - Backtesting                                             │
@@ -97,7 +97,7 @@ This project builds on ideas from several existing projects, combining the best 
 │                       │  │  - broker-alpaca (stocks/ETFs)     │
 │  - portfolio.json     │  │  - broker-ibkr (intl markets)     │
 │  - runway_tracker.json│  │  - broker-binance (crypto)        │
-│  - trade_journal.db   │  │  - market-data (yfinance/AV)      │
+│  - trade_journal.db   │  │  - market-data (Yahoo Fin/AV)     │
 │  - analysis_archive/  │  │  - news-sentiment                 │
 │  - strategies/        │  │  - telegram-notifications          │
 │  - reports/           │  │                                    │
@@ -164,12 +164,12 @@ This project builds on ideas from several existing projects, combining the best 
 │       └── custom.yaml
 │
 ├── gateway/
-│   ├── telegram_bot.py                # Always-on Telegram bot
+│   ├── bot.ts                         # Always-on Telegram bot
 │   └── conversation_store.sqlite      # Chat history
 │
 └── orchestrator/
-    ├── daemon.py                      # Session scheduler
-    ├── session_runner.py              # Launches Claude Code sessions
+    ├── daemon.ts                      # Session scheduler
+    ├── session_runner.ts              # Launches Claude Code sessions
     └── fund_registry.json             # Active funds + schedules
 ```
 
@@ -404,7 +404,7 @@ You are the AI fund manager for "{display_name}".
 6. If uncertain about a trade, DON'T do it. Document why in analysis.
 
 ## Tools Available
-- Create and execute Python scripts for any analysis
+- Create and execute TypeScript/JavaScript scripts for any analysis
 - Use web search for news, macro data, sentiment
 - Use MCP servers: {mcp_servers_list}
 - Launch sub-agents for parallel analysis (macro, technical, sentiment, risk)
@@ -432,15 +432,15 @@ if you've seen a similar setup before and what happened.
 
 ### Technology Stack
 
-- **Language:** Python 3.11+
-- **CLI Framework:** Typer (Click-based, with rich output)
-- **Rich Output:** Rich library (tables, panels, progress bars)
-- **Interactive Prompts:** questionary (inquirer-style)
-- **Configuration:** PyYAML
-- **Database:** SQLite (trade journal, conversation store)
-- **Daemon:** APScheduler or simple cron wrapper
-- **Telegram:** python-telegram-bot (async)
-- **Package:** pip installable via pyproject.toml
+- **Language:** TypeScript (Node.js 20+)
+- **CLI Framework:** Commander.js or oclif
+- **Rich Output:** Ink (React for CLI) + chalk
+- **Interactive Prompts:** @inquirer/prompts
+- **Configuration:** YAML (yaml / js-yaml)
+- **Database:** SQLite (better-sqlite3 or drizzle-orm)
+- **Daemon:** node-cron or Bree
+- **Telegram:** grammy (modern Telegram bot framework)
+- **Package:** npm/pnpm installable via package.json
 
 ### Command Reference
 
@@ -755,45 +755,49 @@ $ fundx ask --cross "cuál de mis fondos tiene más riesgo esta semana?"
 
 The daemon checks every minute which funds have pending sessions and launches Claude Code with the appropriate context:
 
-```python
-# Pseudocode — session_runner.py
+```typescript
+// Pseudocode — session_runner.ts
 
-def run_session(fund_name: str, session_type: str):
-    fund_dir = WORKSPACE / "funds" / fund_name
-    config = load_config(fund_dir / "fund_config.yaml")
-    
-    # Build the prompt based on session type
-    session_config = config["schedule"]["sessions"][session_type]
-    
-    prompt = f"""
-    You are running a {session_type} session for fund '{fund_name}'.
-    
-    Focus: {session_config['focus']}
-    
+import { execFile } from "node:child_process";
+import { join } from "node:path";
+import { loadConfig } from "./config.js";
+import { logSession } from "./logger.js";
+
+async function runSession(fundName: string, sessionType: string) {
+  const fundDir = join(WORKSPACE, "funds", fundName);
+  const config = await loadConfig(join(fundDir, "fund_config.yaml"));
+
+  // Build the prompt based on session type
+  const sessionConfig = config.schedule.sessions[sessionType];
+  const today = new Date().toISOString().split("T")[0];
+
+  const prompt = `
+    You are running a ${sessionType} session for fund '${fundName}'.
+
+    Focus: ${sessionConfig.focus}
+
     Start by reading your state files, then proceed with analysis
     and actions as appropriate. Remember to:
     1. Update state files after any changes
-    2. Write analysis to analysis/{today}_{session_type}.md
+    2. Write analysis to analysis/${today}_${sessionType}.md
     3. Send Telegram notifications for trades or important insights
     4. Update objective_tracker.json
-    """
-    
-    # Launch Claude Code in the fund's directory
-    result = subprocess.run(
-        [
-            "claude",
-            "--project-dir", str(fund_dir),
-            "--prompt", prompt,
-            "--allowedTools", "bash,write,read,web_search,web_fetch,mcp",
-            "--model", config["claude"]["model"],
-            "--max-turns", "50",
-        ],
-        timeout=session_config.get("max_duration_minutes", 15) * 60,
-        capture_output=True,
-    )
-    
-    # Log session result
-    log_session(fund_name, session_type, result)
+  `;
+
+  // Launch Claude Code in the fund's directory
+  const result = await execFileAsync("claude", [
+    "--project-dir", fundDir,
+    "--prompt", prompt,
+    "--allowedTools", "bash,write,read,web_search,web_fetch,mcp",
+    "--model", config.claude.model,
+    "--max-turns", "50",
+  ], {
+    timeout: (sessionConfig.maxDurationMinutes ?? 15) * 60 * 1000,
+  });
+
+  // Log session result
+  await logSession(fundName, sessionType, result);
+}
 ```
 
 ### Daemon Modes
@@ -901,7 +905,7 @@ Target: $20,000 (2x)
 |Server           |Purpose                                    |Priority|
 |-----------------|-------------------------------------------|--------|
 |`broker-alpaca`  |Execute trades, get positions, account info|P0 (MVP)|
-|`market-data`    |Price data, indicators (wraps yfinance)    |P0 (MVP)|
+|`market-data`    |Price data, indicators (Yahoo Finance/AV)  |P0 (MVP)|
 |`telegram-notify`|Send messages to Telegram                  |P0 (MVP)|
 |`news-sentiment` |Web scraping for financial news            |P1      |
 |`broker-binance` |Crypto trading                             |P2      |
@@ -1043,7 +1047,7 @@ CREATE TABLE sessions (
 
 ### Phase 1 — MVP (Foundation)
 
-- [ ] Project structure + pyproject.toml
+- [ ] Project structure + package.json + tsconfig.json
 - [ ] `fundx init` (workspace setup)
 - [ ] `fundx fund create` (interactive wizard)
 - [ ] `fundx fund list` / `fundx fund info`
@@ -1051,7 +1055,7 @@ CREATE TABLE sessions (
 - [ ] CLAUDE.md template generation
 - [ ] fund_config.yaml schema + validation
 - [ ] State file initialization (portfolio.json, objective_tracker.json)
-- [ ] Basic daemon with APScheduler
+- [ ] Basic daemon with node-cron or Bree
 - [ ] Session runner (launches Claude Code)
 - [ ] `fundx start` / `fundx stop`
 - [ ] `fundx logs`
@@ -1060,7 +1064,7 @@ CREATE TABLE sessions (
 ### Phase 2 — Broker & Trading
 
 - [ ] MCP server: broker-alpaca (paper trading)
-- [ ] MCP server: market-data (yfinance wrapper)
+- [ ] MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
 - [ ] Portfolio state auto-sync from broker
 - [ ] Trade execution + journal logging
 - [ ] Stop-loss monitoring
@@ -1093,14 +1097,14 @@ CREATE TABLE sessions (
 - [ ] Fund templates (export/import)
 - [ ] `fundx fund clone`
 - [ ] Special sessions (FOMC, OpEx, etc.)
-- [ ] Performance charting (terminal-based with plotext or Rich)
+- [ ] Performance charting (terminal-based with Ink or cli-chart)
 - [ ] Daily/weekly/monthly auto-reports
 - [ ] Cross-fund correlation monitoring
 - [ ] Runway projections with Monte Carlo simulation
 
 ### Phase 6 — Community & Polish
 
-- [ ] `pip install fundx` distribution
+- [ ] `npm install -g fundx` / `npx fundx` distribution
 - [ ] Comprehensive documentation
 - [ ] Example funds (templates) for common objectives
 - [ ] Plugin system for custom MCP servers
@@ -1111,19 +1115,19 @@ CREATE TABLE sessions (
 
 ## Tech Stack Summary
 
-|Component  |Technology                         |Why                                     |
-|-----------|-----------------------------------|----------------------------------------|
-|CLI        |Python + Typer + Rich + questionary|Best DX for interactive CLIs            |
-|Config     |YAML (PyYAML)                      |Human-readable, git-friendly            |
-|State DB   |SQLite                             |Zero-config, file-based, embedded       |
-|Vectors    |sqlite-vss or numpy                |Trade similarity search                 |
-|Daemon     |APScheduler                        |Cron-like but in-process, timezone-aware|
-|Telegram   |python-telegram-bot (async)        |Most mature Python Telegram lib         |
-|AI Engine  |Claude Code (CLI)                  |Leverages subscription, full autonomy   |
-|MCP Servers|Node.js (TypeScript)               |Best MCP ecosystem support              |
-|Broker     |Alpaca API (alpaca-py)             |Best API for US stocks/ETFs             |
-|Market Data|yfinance + Alpha Vantage           |Free, reliable                          |
-|Package    |pyproject.toml + pip               |Standard Python distribution            |
+|Component  |Technology                              |Why                                        |
+|-----------|----------------------------------------|-------------------------------------------|
+|CLI        |TypeScript + Commander.js/oclif + Ink   |Best DX for interactive CLIs               |
+|Config     |YAML (yaml / js-yaml)                   |Human-readable, git-friendly               |
+|State DB   |SQLite (better-sqlite3 / drizzle-orm)   |Zero-config, file-based, embedded          |
+|Vectors    |sqlite-vec or transformers.js           |Trade similarity search                    |
+|Daemon     |node-cron or Bree                       |Cron-like but in-process, timezone-aware   |
+|Telegram   |grammy                                  |Modern, TypeScript-first Telegram framework|
+|AI Engine  |Claude Code (CLI)                       |Leverages subscription, full autonomy      |
+|MCP Servers|TypeScript (MCP SDK)                    |Best MCP ecosystem support                 |
+|Broker     |Alpaca API (@alpacahq/alpaca-trade-api) |Best API for US stocks/ETFs                |
+|Market Data|Yahoo Finance API + Alpha Vantage       |Free, reliable                             |
+|Package    |package.json + npm/pnpm                 |Standard Node.js distribution              |
 
 -----
 
