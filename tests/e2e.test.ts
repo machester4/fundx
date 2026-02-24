@@ -103,6 +103,7 @@ import { saveGlobalConfig, loadGlobalConfig } from "../src/config.js";
 import { saveFundConfig, loadFundConfig, listFundNames } from "../src/fund.js";
 import { initFundState, readPortfolio, readTracker, writeSessionLog, readSessionLog } from "../src/state.js";
 import { generateFundClaudeMd } from "../src/template.js";
+import { runFundSession } from "../src/session.js";
 import { fundConfigSchema, globalConfigSchema } from "../src/types.js";
 import type { GlobalConfig, FundConfig } from "../src/types.js";
 
@@ -290,7 +291,7 @@ describe("E2E: init → create fund → run session", () => {
     expect(loaded!.summary).toContain("Analyzed market conditions");
   });
 
-  it("Full flow: init → create → session → verify state", async () => {
+  it("Full flow: init → create → run session → verify state", async () => {
     // 1. Init workspace
     const globalConfig = globalConfigSchema.parse({
       claude_path: "claude",
@@ -335,17 +336,19 @@ describe("E2E: init → create fund → run session", () => {
     const names = await listFundNames();
     expect(names).toContain("growth-fund");
 
-    // 4. Simulate a session with a trade
-    await writeSessionLog("growth-fund", {
-      fund: "growth-fund",
-      session_type: "pre_market",
-      started_at: "2026-02-01T09:00:00Z",
-      ended_at: "2026-02-01T09:10:00Z",
-      trades_executed: 1,
-      summary: "Bought 10 shares of SPY at $490.",
-    });
+    // 4. Actually run a session (uses mocked child_process.execFile)
+    await runFundSession("growth-fund", "pre_market");
 
-    // 5. Verify final state
+    // 5. Verify session log was written by runFundSession
+    const sessionLog = await readSessionLog("growth-fund");
+    expect(sessionLog).not.toBeNull();
+    expect(sessionLog!.fund).toBe("growth-fund");
+    expect(sessionLog!.session_type).toBe("pre_market");
+    expect(sessionLog!.summary).toContain("Session completed");
+    expect(sessionLog!.started_at).toBeDefined();
+    expect(sessionLog!.ended_at).toBeDefined();
+
+    // 6. Verify portfolio and tracker state persisted
     const portfolio = await readPortfolio("growth-fund");
     expect(portfolio.cash).toBe(25000);
     expect(portfolio.total_value).toBe(25000);
@@ -354,14 +357,16 @@ describe("E2E: init → create fund → run session", () => {
     expect(tracker.type).toBe("growth");
     expect(tracker.initial_capital).toBe(25000);
 
-    const sessionLog = await readSessionLog("growth-fund");
-    expect(sessionLog).not.toBeNull();
-    expect(sessionLog!.trades_executed).toBe(1);
-    expect(sessionLog!.summary).toContain("SPY");
-
-    // 6. Verify config is loadable
+    // 7. Verify config is loadable
     const loaded = await loadFundConfig("growth-fund");
     expect(loaded.fund.display_name).toBe("Growth Fund");
     expect(loaded.objective.type).toBe("growth");
+
+    // 8. Verify MCP settings were written
+    const settingsPath = `${FUNDS_DIR}/growth-fund/.claude/settings.json`;
+    expect(fileSystem.has(settingsPath)).toBe(true);
+    const settings = JSON.parse(fileSystem.get(settingsPath)!);
+    expect(settings.mcpServers).toHaveProperty("broker-alpaca");
+    expect(settings.mcpServers).toHaveProperty("market-data");
   });
 });

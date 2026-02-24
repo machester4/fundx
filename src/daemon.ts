@@ -1,14 +1,21 @@
-import { writeFile, readFile, unlink } from "node:fs/promises";
+import { writeFile, readFile, appendFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import cron from "node-cron";
 import { Command } from "commander";
 import chalk from "chalk";
-import { DAEMON_PID } from "./paths.js";
+import { DAEMON_PID, DAEMON_LOG } from "./paths.js";
 import { listFundNames, loadFundConfig } from "./fund.js";
 import { runFundSession } from "./session.js";
 import { startGateway, stopGateway } from "./gateway.js";
 import { checkSpecialSessions } from "./special-sessions.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.js";
+
+/** Append a timestamped line to the daemon log file */
+async function log(message: string): Promise<void> {
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  console.log(message);
+  await appendFile(DAEMON_LOG, line, "utf-8").catch(() => {});
+}
 
 /** Check if daemon is already running */
 async function isDaemonRunning(): Promise<boolean> {
@@ -31,7 +38,7 @@ async function startDaemon(): Promise<void> {
   }
 
   await writeFile(DAEMON_PID, String(process.pid), "utf-8");
-  console.log(chalk.green(`  ✓ Daemon started (PID ${process.pid})`));
+  await log(`Daemon started (PID ${process.pid})`);
 
   // Start Telegram gateway alongside scheduler
   await startGateway();
@@ -58,9 +65,9 @@ async function startDaemon(): Promise<void> {
           if (!session.enabled) continue;
           if (session.time !== currentTime) continue;
 
-          console.log(`  Running ${sessionType} for '${name}'...`);
-          runFundSession(name, sessionType).catch((err) => {
-            console.error(`  Session error (${name}/${sessionType}): ${err}`);
+          await log(`Running ${sessionType} for '${name}'...`);
+          runFundSession(name, sessionType).catch(async (err) => {
+            await log(`Session error (${name}/${sessionType}): ${err}`);
           });
         }
 
@@ -70,30 +77,30 @@ async function startDaemon(): Promise<void> {
           if (special.time !== currentTime) continue;
 
           const specialType = `special_${special.trigger.replace(/\s+/g, "_").toLowerCase()}`;
-          console.log(`  Running special session for '${name}': ${special.trigger}...`);
-          runFundSession(name, specialType).catch((err) => {
-            console.error(`  Special session error (${name}/${specialType}): ${err}`);
+          await log(`Running special session for '${name}': ${special.trigger}...`);
+          runFundSession(name, specialType, { focus: special.focus }).catch(async (err) => {
+            await log(`Special session error (${name}/${specialType}): ${err}`);
           });
         }
 
         // Auto-reports: daily at 18:30, weekly on Fri, monthly on 1st
         if (currentTime === "18:30") {
-          generateDailyReport(name).catch((err) => {
-            console.error(`  Daily report error (${name}): ${err}`);
+          generateDailyReport(name).catch(async (err) => {
+            await log(`Daily report error (${name}): ${err}`);
           });
         }
         if (currentDay === "FRI" && currentTime === "19:00") {
-          generateWeeklyReport(name).catch((err) => {
-            console.error(`  Weekly report error (${name}): ${err}`);
+          generateWeeklyReport(name).catch(async (err) => {
+            await log(`Weekly report error (${name}): ${err}`);
           });
         }
         if (now.getDate() === 1 && currentTime === "19:00") {
-          generateMonthlyReport(name).catch((err) => {
-            console.error(`  Monthly report error (${name}): ${err}`);
+          generateMonthlyReport(name).catch(async (err) => {
+            await log(`Monthly report error (${name}): ${err}`);
           });
         }
       } catch (err) {
-        console.error(`  Error checking fund '${name}': ${err}`);
+        await log(`Error checking fund '${name}': ${err}`);
       }
     }
   });
@@ -106,7 +113,7 @@ async function startDaemon(): Promise<void> {
 async function cleanup() {
   await stopGateway();
   await unlink(DAEMON_PID).catch(() => {});
-  console.log(chalk.dim("\n  Daemon stopped."));
+  await log("Daemon stopped.");
   process.exit(0);
 }
 

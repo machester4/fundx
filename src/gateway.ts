@@ -389,6 +389,8 @@ async function wakeClaudeForQuestion(
 
 // ── Notification sender (used by daemon/session code) ────────
 
+const TELEGRAM_API = "https://api.telegram.org";
+
 export async function sendTelegramNotification(
   message: string,
   parseMode: "HTML" | "MarkdownV2" | "Markdown" = "HTML",
@@ -407,8 +409,6 @@ export async function sendTelegramNotification(
     }),
   });
 }
-
-const TELEGRAM_API = "https://api.telegram.org";
 
 // ── Bot setup and start ──────────────────────────────────────
 

@@ -220,7 +220,8 @@ export async function runSpecialSession(
   trigger: string,
   focus: string,
 ): Promise<void> {
-  await runFundSession(fundName, `special_${trigger.replace(/\s+/g, "_").toLowerCase()}`);
+  const sessionType = `special_${trigger.replace(/\s+/g, "_").toLowerCase()}`;
+  await runFundSession(fundName, sessionType, { focus });
 }
 
 /**

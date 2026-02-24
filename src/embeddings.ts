@@ -76,19 +76,6 @@ export function ensureEmbeddingSchema(db: Database.Database): void {
   }
 }
 
-/** Rebuild FTS index from scratch (useful after bulk inserts or schema changes) */
-export function rebuildIndex(db: Database.Database): void {
-  db.exec(`
-    DELETE FROM trades_fts;
-    INSERT INTO trades_fts(trade_id, symbol, side, reasoning, market_context, lessons_learned)
-    SELECT id, symbol, side,
-      COALESCE(reasoning, ''),
-      COALESCE(market_context, ''),
-      COALESCE(lessons_learned, '')
-    FROM trades;
-  `);
-}
-
 /**
  * Search for trades matching a text query using FTS5 ranking.
  * Returns trades sorted by relevance score.
@@ -153,38 +140,6 @@ export function searchTrades(
     rank: i + 1,
     score: Math.abs(row.fts_rank),
   }));
-}
-
-/**
- * Find trades similar to a given trade by using its text fields as a query.
- */
-export function findSimilarTrades(
-  db: Database.Database,
-  tradeId: number,
-  fundName?: string,
-  limit = 5,
-): SimilarTradeResult[] {
-  const trade = db
-    .prepare("SELECT * FROM trades WHERE id = ?")
-    .get(tradeId) as TradeRecord | undefined;
-
-  if (!trade) return [];
-
-  // Build query from trade's text fields
-  const queryParts: string[] = [];
-  if (trade.reasoning) queryParts.push(trade.reasoning);
-  if (trade.market_context) queryParts.push(trade.market_context);
-  if (trade.symbol) queryParts.push(trade.symbol);
-
-  if (queryParts.length === 0) return [];
-
-  const query = queryParts.join(" ");
-  const results = searchTrades(db, query, fundName, limit + 1);
-
-  // Exclude the source trade itself
-  return results
-    .filter((r) => r.trade_id !== tradeId)
-    .slice(0, limit);
 }
 
 /**
