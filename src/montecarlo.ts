@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { loadFundConfig } from "./fund.js";
-import { readPortfolio, readTracker } from "./state.js";
+import { readPortfolio } from "./state.js";
 import { openJournal, getTradesInDays } from "./journal.js";
 import type { MonteCarloResult, TradeRecord } from "./types.js";
 

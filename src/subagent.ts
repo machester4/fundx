@@ -6,7 +6,7 @@ import { loadFundConfig } from "./fund.js";
 import { loadGlobalConfig } from "./config.js";
 import { fundPaths } from "./paths.js";
 import { writeMcpSettings } from "./mcp-config.js";
-import type { SubAgentConfig, SubAgentResult, SubAgentType } from "./types.js";
+import type { SubAgentConfig, SubAgentResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 

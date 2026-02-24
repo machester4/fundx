@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { loadFundConfig, listFundNames } from "./fund.js";
+import { listFundNames } from "./fund.js";
 import { readPortfolio } from "./state.js";
 import { openJournal, getTradesInDays } from "./journal.js";
 import type { CorrelationEntry, Portfolio, TradeRecord } from "./types.js";

@@ -2,7 +2,7 @@ import { readFile, writeFile, readdir, mkdir, cp } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { Command } from "commander";
-import { input, confirm } from "@inquirer/prompts";
+import { input } from "@inquirer/prompts";
 import chalk from "chalk";
 import yaml from "js-yaml";
 import {
@@ -14,7 +14,6 @@ import {
 import {
   loadFundConfig,
   saveFundConfig,
-  listFundNames,
 } from "./fund.js";
 import { initFundState } from "./state.js";
 import { generateFundClaudeMd } from "./template.js";
