@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fundPaths } from "./paths.js";
+import { ensureEmbeddingSchema } from "./embeddings.js";
 import type { TradeRecord, SessionRecord } from "./types.js";
 
 /** Initialize the trade journal database for a fund */
@@ -11,6 +12,7 @@ export function openJournal(fundName: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   ensureSchema(db);
+  ensureEmbeddingSchema(db);
   return db;
 }
 

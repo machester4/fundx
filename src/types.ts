@@ -363,3 +363,55 @@ export const telegramNotificationSchema = z.object({
 });
 
 export type TelegramNotification = z.infer<typeof telegramNotificationSchema>;
+
+// ── Phase 4: Sub-Agent Schemas ──────────────────────────────
+
+export const subAgentTypeSchema = z.enum([
+  "macro",
+  "technical",
+  "sentiment",
+  "risk",
+  "custom",
+]);
+
+export type SubAgentType = z.infer<typeof subAgentTypeSchema>;
+
+export const subAgentConfigSchema = z.object({
+  type: subAgentTypeSchema,
+  name: z.string(),
+  prompt: z.string(),
+  max_turns: z.number().positive().default(20),
+  model: z.enum(["opus", "sonnet"]).optional(),
+});
+
+export type SubAgentConfig = z.infer<typeof subAgentConfigSchema>;
+
+export const subAgentResultSchema = z.object({
+  type: subAgentTypeSchema,
+  name: z.string(),
+  started_at: z.string(),
+  ended_at: z.string(),
+  status: z.enum(["success", "error", "timeout"]),
+  output: z.string(),
+  error: z.string().optional(),
+});
+
+export type SubAgentResult = z.infer<typeof subAgentResultSchema>;
+
+// ── Phase 4: Trade Similarity Search Schema ─────────────────
+
+export const similarTradeResultSchema = z.object({
+  trade_id: z.number(),
+  symbol: z.string(),
+  side: z.enum(["buy", "sell"]),
+  timestamp: z.string(),
+  reasoning: z.string().optional(),
+  market_context: z.string().optional(),
+  lessons_learned: z.string().optional(),
+  pnl: z.number().optional(),
+  pnl_pct: z.number().optional(),
+  rank: z.number(),
+  score: z.number(),
+});
+
+export type SimilarTradeResult = z.infer<typeof similarTradeResultSchema>;

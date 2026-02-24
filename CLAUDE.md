@@ -101,9 +101,12 @@ src/
   init.ts        # `fundx init` command — workspace setup wizard
   fund.ts        # `fundx fund *` commands + fund CRUD logic
   status.ts      # `fundx status` command — dashboard
-  session.ts     # `fundx session run` + Claude Code launcher
+  session.ts     # `fundx session run` + Claude Code launcher + sub-agent integration
   daemon.ts      # `fundx start/stop` + node-cron scheduler + gateway startup
   gateway.ts     # Telegram bot + quick commands + free question routing
+  ask.ts         # `fundx ask` command — question answering + cross-fund analysis
+  subagent.ts    # Sub-agent parallel execution (macro, technical, sentiment, risk)
+  embeddings.ts  # Trade journal FTS5 indexing + similarity search
   mcp/
     broker-alpaca.ts    # MCP server: Alpaca broker integration
     market-data.ts      # MCP server: market data provider
@@ -190,10 +193,15 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] Daemon starts gateway alongside scheduler
 - [x] `fundx gateway start` — standalone gateway, `fundx gateway test` — send test message
 
-### Phase 4 — Intelligence
-- Sub-agent parallel execution
-- `fundx ask` and cross-fund analysis
-- Trade journal vector embeddings + similarity search
+### Phase 4 — Intelligence — COMPLETE
+- [x] Sub-agent parallel execution (`subagent.ts`) — macro, technical, sentiment, risk agents
+- [x] `fundx ask` command with cross-fund analysis (`ask.ts`)
+- [x] `fundx session run --parallel` — session with sub-agent analysis
+- [x] `fundx session agents` — standalone sub-agent analysis
+- [x] Trade journal FTS5 vector embeddings + similarity search (`embeddings.ts`)
+- [x] Zod schemas for sub-agent config, results, and similar trade results (`types.ts`)
+- [x] Auto-indexing via SQLite triggers (INSERT, UPDATE, DELETE sync)
+- [x] Trade context summary generation for prompts
 
 ### Phase 5 — Advanced
 - Live trading, multi-broker, fund templates, special sessions
