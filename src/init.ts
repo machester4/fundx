@@ -69,6 +69,7 @@ export const initCommand = new Command("init")
       telegram: {
         bot_token: botToken || undefined,
         chat_id: chatId,
+        enabled: !!botToken,
       },
     };
 
