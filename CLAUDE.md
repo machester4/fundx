@@ -183,7 +183,7 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx start/stop` — daemon with node-cron (`daemon.ts`)
 - [ ] Install dependencies and verify build
 - [x] `fundx logs` command
-- [x] End-to-end test: init → create fund → run session
+- [ ] End-to-end test: init → create fund → run session
 
 ### Phase 2 — Broker & Trading
 - MCP server: broker-alpaca (paper trading)
