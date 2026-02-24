@@ -182,8 +182,8 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx session run` — Claude Code launcher (`session.ts`)
 - [x] `fundx start/stop` — daemon with node-cron (`daemon.ts`)
 - [ ] Install dependencies and verify build
-- [ ] `fundx logs` command
-- [ ] End-to-end test: init → create fund → run session
+- [x] `fundx logs` command
+- [x] End-to-end test: init → create fund → run session
 
 ### Phase 2 — Broker & Trading
 - MCP server: broker-alpaca (paper trading)
