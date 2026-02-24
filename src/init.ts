@@ -1,9 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Command } from "commander";
 import { input, select, password } from "@inquirer/prompts";
 import chalk from "chalk";
-import { WORKSPACE, FUNDS_DIR } from "./paths.js";
+import { WORKSPACE, FUNDS_DIR, SHARED_DIR } from "./paths.js";
 import { saveGlobalConfig } from "./config.js";
 import type { GlobalConfig } from "./types.js";
 
@@ -27,8 +28,9 @@ export const initCommand = new Command("init")
     const defaultModel = await select({
       message: "Default Claude model:",
       choices: [
-        { value: "sonnet" as const, name: "Sonnet (faster, cheaper)" },
-        { value: "opus" as const, name: "Opus (most capable)" },
+        { value: "sonnet", name: "Sonnet (balanced)" },
+        { value: "opus", name: "Opus (most capable)" },
+        { value: "haiku", name: "Haiku (fastest, cheapest)" },
       ],
     });
 
@@ -75,6 +77,7 @@ export const initCommand = new Command("init")
 
     await mkdir(WORKSPACE, { recursive: true });
     await mkdir(FUNDS_DIR, { recursive: true });
+    await mkdir(join(SHARED_DIR, "templates"), { recursive: true });
     await saveGlobalConfig(config);
 
     console.log(chalk.green(`\n  ✓ Workspace initialized at ${WORKSPACE}`));

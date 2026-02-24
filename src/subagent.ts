@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile, mkdir, readFile } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { loadFundConfig } from "./fund.js";
 import { loadGlobalConfig } from "./config.js";
 import { fundPaths } from "./paths.js";
-import { writeMcpSettings } from "./session.js";
+import { writeMcpSettings } from "./mcp-config.js";
 import type { SubAgentConfig, SubAgentResult, SubAgentType } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -106,20 +106,6 @@ export function getDefaultSubAgents(fundName: string): SubAgentConfig[] {
   ];
 }
 
-/** Create a custom sub-agent with a user-defined prompt */
-export function createCustomSubAgent(
-  name: string,
-  prompt: string,
-  maxTurns = 15,
-): SubAgentConfig {
-  return {
-    type: "custom" as SubAgentType,
-    name,
-    prompt,
-    max_turns: maxTurns,
-  };
-}
-
 /**
  * Run a single sub-agent (Claude Code instance) and return its result.
  */
@@ -143,7 +129,7 @@ async function runSingleSubAgent(
         "--max-turns", String(agent.max_turns),
         agent.prompt,
       ],
-      { timeout },
+      { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
     );
 
     return {
@@ -300,14 +286,3 @@ export async function saveSubAgentAnalysis(
   return filePath;
 }
 
-/**
- * Load a previously saved sub-agent analysis.
- */
-export async function loadSubAgentAnalysis(
-  fundName: string,
-  filename: string,
-): Promise<string> {
-  const paths = fundPaths(fundName);
-  const filePath = join(paths.analysis, filename);
-  return readFile(filePath, "utf-8");
-}

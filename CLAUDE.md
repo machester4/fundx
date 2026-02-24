@@ -169,7 +169,7 @@ When implementing fund logic, support these objective types:
 
 Development follows 6 phases. When implementing, follow this order:
 
-### Phase 1 — MVP (Foundation) — IN PROGRESS
+### Phase 1 — MVP (Foundation) — COMPLETE
 - [x] Project structure + `package.json` + `tsconfig.json` + `tsup.config.ts`
 - [x] Zod schemas for fund config, state, global config (`types.ts`)
 - [x] Path helpers (`paths.ts`)
@@ -181,15 +181,15 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx status` — dashboard (`status.ts`)
 - [x] `fundx session run` — Claude Code launcher (`session.ts`)
 - [x] `fundx start/stop` — daemon with node-cron (`daemon.ts`)
-- [ ] Install dependencies and verify build
-- [ ] `fundx logs` command
-- [ ] End-to-end test: init → create fund → run session
+- [x] Install dependencies and verify build
+- [x] `fundx logs` command
+- [x] End-to-end test: init → create fund → run session
 
-### Phase 2 — Broker & Trading
-- MCP server: broker-alpaca (paper trading)
-- MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
-- Portfolio state auto-sync, trade execution, journal logging
-- Stop-loss monitoring
+### Phase 2 — Broker & Trading — COMPLETE
+- [x] MCP server: broker-alpaca (paper trading)
+- [x] MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
+- [x] Portfolio state auto-sync, trade execution, journal logging
+- [x] Stop-loss monitoring
 
 ### Phase 3 — Telegram — COMPLETE
 - [x] Telegram bot with grammy (`gateway.ts`)

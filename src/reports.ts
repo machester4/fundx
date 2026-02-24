@@ -5,7 +5,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { loadFundConfig, listFundNames } from "./fund.js";
 import { readPortfolio, readTracker } from "./state.js";
-import { openJournal, getTradesInDays, getTradeSummary } from "./journal.js";
+import { openJournal, getTradesInDays } from "./journal.js";
 import { fundPaths } from "./paths.js";
 import type { FundConfig, Portfolio, ObjectiveTracker, TradeRecord } from "./types.js";
 
@@ -99,7 +99,7 @@ function formatReport(data: ReportData): string {
     `| Initial Capital | $${fund.capital.initial.toLocaleString()} |`,
     `| Current Value | $${portfolio.total_value.toLocaleString(undefined, { minimumFractionDigits: 2 })} |`,
     `| Total Return | $${totalReturn.toFixed(2)} (${totalReturnPct >= 0 ? "+" : ""}${totalReturnPct.toFixed(2)}%) |`,
-    `| Cash | $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${((portfolio.cash / portfolio.total_value) * 100).toFixed(1)}%) |`,
+    `| Cash | $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${portfolio.total_value > 0 ? ((portfolio.cash / portfolio.total_value) * 100).toFixed(1) : "0.0"}%) |`,
     `| Positions | ${portfolio.positions.length} |`,
     ``,
   ];
@@ -213,93 +213,6 @@ async function saveReport(
   const filePath = join(dir, `${date}.md`);
   await writeFile(filePath, content, "utf-8");
   return filePath;
-}
-
-/** Generate a Telegram-friendly summary for notifications */
-export function formatTelegramDigest(
-  data: ReportData,
-): string {
-  const { fund, portfolio, tracker, trades, period } = data;
-  const periodLabel =
-    period === "daily" ? "Daily" : period === "weekly" ? "Weekly" : "Monthly";
-
-  const totalReturn = portfolio.total_value - fund.capital.initial;
-  const totalReturnPct = (totalReturn / fund.capital.initial) * 100;
-  const pnlSign = totalReturn >= 0 ? "+" : "";
-
-  const lines: string[] = [
-    `<b>${periodLabel} Digest — ${fund.fund.display_name}</b>`,
-    `──────────────────────────`,
-    `P&amp;L: ${pnlSign}$${totalReturn.toFixed(0)} (${pnlSign}${totalReturnPct.toFixed(1)}%)`,
-  ];
-
-  if (tracker) {
-    lines.push(`Progress: ${tracker.progress_pct.toFixed(1)}% — ${tracker.status}`);
-  }
-
-  if (trades.length > 0) {
-    lines.push(`Trades: ${trades.length}`);
-  }
-
-  const cashPct = ((portfolio.cash / portfolio.total_value) * 100).toFixed(0);
-  lines.push(
-    `Cash: ${cashPct}% | Exposure: ${(100 - parseFloat(cashPct)).toFixed(0)}%`,
-  );
-
-  if (portfolio.positions.length > 0) {
-    const topMover = [...portfolio.positions].sort(
-      (a, b) =>
-        Math.abs(b.unrealized_pnl_pct) - Math.abs(a.unrealized_pnl_pct),
-    )[0];
-    const sign = topMover.unrealized_pnl_pct >= 0 ? "+" : "";
-    lines.push(
-      `Top mover: ${topMover.symbol} ${sign}${topMover.unrealized_pnl_pct.toFixed(1)}%`,
-    );
-  }
-
-  return lines.join("\n");
-}
-
-/**
- * Generate all pending auto-reports for all active funds.
- * Called by the daemon scheduler.
- */
-export async function generatePendingReports(): Promise<
-  Array<{ fund: string; period: string; file: string }>
-> {
-  const names = await listFundNames();
-  const generated: Array<{ fund: string; period: string; file: string }> = [];
-
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  const dayOfMonth = now.getDate();
-
-  for (const name of names) {
-    try {
-      const config = await loadFundConfig(name);
-      if (config.fund.status !== "active") continue;
-
-      // Daily report
-      const dailyFile = await generateDailyReport(name);
-      generated.push({ fund: name, period: "daily", file: dailyFile });
-
-      // Weekly report (default: Friday)
-      if (dayOfWeek === 5) {
-        const weeklyFile = await generateWeeklyReport(name);
-        generated.push({ fund: name, period: "weekly", file: weeklyFile });
-      }
-
-      // Monthly report (default: 1st of month)
-      if (dayOfMonth === 1) {
-        const monthlyFile = await generateMonthlyReport(name);
-        generated.push({ fund: name, period: "monthly", file: monthlyFile });
-      }
-    } catch {
-      // Skip funds with errors
-    }
-  }
-
-  return generated;
 }
 
 // ── CLI Commands ───────────────────────────────────────────────

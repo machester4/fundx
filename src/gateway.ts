@@ -372,7 +372,7 @@ async function wakeClaudeForQuestion(
         "--max-turns", "10",
         prompt,
       ],
-      { timeout: 5 * 60 * 1000 }, // 5 minute timeout for questions
+      { timeout: 5 * 60 * 1000, env: { ...process.env, ANTHROPIC_MODEL: model } },
     );
 
     const answer = result.stdout.trim();
@@ -388,6 +388,8 @@ async function wakeClaudeForQuestion(
 }
 
 // ── Notification sender (used by daemon/session code) ────────
+
+const TELEGRAM_API = "https://api.telegram.org";
 
 export async function sendTelegramNotification(
   message: string,
@@ -407,8 +409,6 @@ export async function sendTelegramNotification(
     }),
   });
 }
-
-const TELEGRAM_API = "https://api.telegram.org";
 
 // ── Bot setup and start ──────────────────────────────────────
 

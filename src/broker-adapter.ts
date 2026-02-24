@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./fund.js";
 import type { BrokerCapabilities } from "./types.js";
@@ -363,9 +364,6 @@ export class BinanceAdapter implements BrokerAdapter {
   }
 
   private createSignature(queryString: string): string {
-    // HMAC SHA256 signature would be computed here
-    // Using a placeholder since crypto module usage depends on runtime
-    const { createHmac } = require("node:crypto") as typeof import("node:crypto");
     return createHmac("sha256", this.secretKey)
       .update(queryString)
       .digest("hex");
@@ -580,29 +578,3 @@ export async function createBrokerAdapter(
   }
 }
 
-/**
- * Get supported broker info for display.
- */
-export function getSupportedBrokers(): Array<{
-  name: string;
-  displayName: string;
-  capabilities: BrokerCapabilities;
-}> {
-  return [
-    {
-      name: "alpaca",
-      displayName: "Alpaca",
-      capabilities: new AlpacaAdapter("", "", "").capabilities,
-    },
-    {
-      name: "ibkr",
-      displayName: "Interactive Brokers (IBKR)",
-      capabilities: new IBKRAdapter("", 0).capabilities,
-    },
-    {
-      name: "binance",
-      displayName: "Binance",
-      capabilities: new BinanceAdapter("", "", true).capabilities,
-    },
-  ];
-}

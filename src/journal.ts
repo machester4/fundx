@@ -1,9 +1,7 @@
 import Database from "better-sqlite3";
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import { fundPaths } from "./paths.js";
 import { ensureEmbeddingSchema } from "./embeddings.js";
-import type { TradeRecord, SessionRecord } from "./types.js";
+import type { TradeRecord } from "./types.js";
 
 /** Initialize the trade journal database for a fund */
 export function openJournal(fundName: string): Database.Database {
@@ -59,12 +57,6 @@ function ensureSchema(db: Database.Database): void {
   `);
 }
 
-/** Ensure the journal directory exists before opening */
-export async function ensureJournalDir(fundName: string): Promise<void> {
-  const paths = fundPaths(fundName);
-  await mkdir(dirname(paths.state.journal), { recursive: true });
-}
-
 /** Insert a trade record */
 export function insertTrade(db: Database.Database, trade: TradeRecord): number {
   const stmt = db.prepare(`
@@ -91,31 +83,6 @@ export function insertTrade(db: Database.Database, trade: TradeRecord): number {
     market_context: trade.market_context ?? null,
   });
   return Number(result.lastInsertRowid);
-}
-
-/** Close a trade (update with exit info) */
-export function closeTrade(
-  db: Database.Database,
-  tradeId: number,
-  closePrice: number,
-  pnl: number,
-  pnlPct: number,
-  lessonsLearned?: string,
-): void {
-  const stmt = db.prepare(`
-    UPDATE trades
-    SET closed_at = @closed_at, close_price = @close_price,
-        pnl = @pnl, pnl_pct = @pnl_pct, lessons_learned = @lessons_learned
-    WHERE id = @id
-  `);
-  stmt.run({
-    id: tradeId,
-    closed_at: new Date().toISOString(),
-    close_price: closePrice,
-    pnl,
-    pnl_pct: pnlPct,
-    lessons_learned: lessonsLearned ?? null,
-  });
 }
 
 /** Get recent trades for a fund */
@@ -161,61 +128,6 @@ export function getTradesInDays(
     ORDER BY timestamp DESC
   `);
   return stmt.all(fundName, since.toISOString()) as TradeRecord[];
-}
-
-/** Get all open trades (buys without a close) */
-export function getOpenTrades(
-  db: Database.Database,
-  fundName: string,
-): TradeRecord[] {
-  const stmt = db.prepare(`
-    SELECT * FROM trades
-    WHERE fund = ? AND side = 'buy' AND closed_at IS NULL
-    ORDER BY timestamp DESC
-  `);
-  return stmt.all(fundName) as TradeRecord[];
-}
-
-/** Insert a session record */
-export function insertSession(
-  db: Database.Database,
-  session: SessionRecord,
-): number {
-  const stmt = db.prepare(`
-    INSERT INTO sessions (
-      timestamp, fund, session_type, duration_seconds,
-      trades_executed, analysis_file, summary, claude_model
-    ) VALUES (
-      @timestamp, @fund, @session_type, @duration_seconds,
-      @trades_executed, @analysis_file, @summary, @claude_model
-    )
-  `);
-  const result = stmt.run({
-    timestamp: session.timestamp,
-    fund: session.fund,
-    session_type: session.session_type,
-    duration_seconds: session.duration_seconds ?? null,
-    trades_executed: session.trades_executed ?? 0,
-    analysis_file: session.analysis_file ?? null,
-    summary: session.summary ?? null,
-    claude_model: session.claude_model ?? null,
-  });
-  return Number(result.lastInsertRowid);
-}
-
-/** Get recent sessions for a fund */
-export function getRecentSessions(
-  db: Database.Database,
-  fundName: string,
-  limit = 10,
-): SessionRecord[] {
-  const stmt = db.prepare(`
-    SELECT * FROM sessions
-    WHERE fund = ?
-    ORDER BY timestamp DESC
-    LIMIT ?
-  `);
-  return stmt.all(fundName, limit) as SessionRecord[];
 }
 
 /** Get trade summary stats for a fund */

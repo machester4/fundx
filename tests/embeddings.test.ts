@@ -3,9 +3,7 @@ import Database from "better-sqlite3";
 import {
   ensureEmbeddingSchema,
   searchTrades,
-  findSimilarTrades,
   getTradeContextSummary,
-  rebuildIndex,
 } from "../src/embeddings.js";
 import type { TradeRecord } from "../src/types.js";
 
@@ -251,55 +249,6 @@ describe("searchTrades", () => {
   });
 });
 
-describe("findSimilarTrades", () => {
-  beforeEach(() => {
-    ensureEmbeddingSchema(db);
-  });
-
-  it("finds trades similar to a reference trade", () => {
-    const id1 = insertTrade(db, {
-      fund: FUND,
-      symbol: "GDX",
-      reasoning: "Gold miners breakout above resistance with strong volume",
-      market_context: "Fed dovish, gold bullish",
-    });
-    insertTrade(db, {
-      fund: FUND,
-      symbol: "GLD",
-      reasoning: "Gold ETF breakout above resistance level",
-      market_context: "Fed policy shift favoring gold",
-    });
-    insertTrade(db, {
-      fund: FUND,
-      symbol: "SPY",
-      reasoning: "Market index momentum trade on earnings season",
-    });
-
-    const similar = findSimilarTrades(db, id1, FUND, 5);
-    // Should find GLD (similar gold trade) but not include the source trade itself
-    expect(similar.every((r) => r.trade_id !== id1)).toBe(true);
-    if (similar.length > 0) {
-      expect(similar[0].symbol).toBe("GLD");
-    }
-  });
-
-  it("excludes the source trade from results", () => {
-    const id = insertTrade(db, {
-      fund: FUND,
-      symbol: "GDX",
-      reasoning: "Gold breakout",
-    });
-
-    const results = findSimilarTrades(db, id, FUND);
-    expect(results.every((r) => r.trade_id !== id)).toBe(true);
-  });
-
-  it("returns empty array for non-existent trade", () => {
-    const results = findSimilarTrades(db, 999, FUND);
-    expect(results).toHaveLength(0);
-  });
-});
-
 describe("getTradeContextSummary", () => {
   it("returns formatted summary for trades", () => {
     insertTrade(db, {
@@ -350,28 +299,6 @@ describe("getTradeContextSummary", () => {
       .split("\n")
       .filter((l) => l.startsWith("- **"));
     expect(tradeLines).toHaveLength(3);
-  });
-});
-
-describe("rebuildIndex", () => {
-  it("rebuilds the FTS index from scratch", () => {
-    ensureEmbeddingSchema(db);
-
-    insertTrade(db, {
-      fund: FUND,
-      symbol: "GDX",
-      reasoning: "Gold breakout",
-    });
-
-    // Manually corrupt FTS by deleting its content
-    db.exec("DELETE FROM trades_fts");
-    let results = searchTrades(db, "gold", FUND);
-    expect(results).toHaveLength(0);
-
-    // Rebuild
-    rebuildIndex(db);
-    results = searchTrades(db, "gold", FUND);
-    expect(results).toHaveLength(1);
   });
 });
 

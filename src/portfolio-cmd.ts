@@ -36,7 +36,7 @@ export const portfolioCommand = new Command("portfolio")
         : chalk.red(`-$${Math.abs(pnl).toFixed(2)} (${pnlPct.toFixed(1)}%)`);
 
       console.log(`  Total Value:  $${portfolio.total_value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
-      console.log(`  Cash:         $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${((portfolio.cash / portfolio.total_value) * 100).toFixed(1)}%)`);
+      console.log(`  Cash:         $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${portfolio.total_value > 0 ? ((portfolio.cash / portfolio.total_value) * 100).toFixed(1) : "0.0"}%)`);
       console.log(`  P&L:          ${pnlStr}`);
       console.log();
 
