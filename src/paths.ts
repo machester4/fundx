@@ -26,6 +26,7 @@ export const SHARED_DIR = join(WORKSPACE, "shared");
 export const MCP_SERVERS = {
   brokerAlpaca: join(__dirname, "mcp", "broker-alpaca.js"),
   marketData: join(__dirname, "mcp", "market-data.js"),
+  telegramNotify: join(__dirname, "mcp", "telegram-notify.js"),
 };
 
 /** Paths relative to a fund directory */

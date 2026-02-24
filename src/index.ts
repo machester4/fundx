@@ -8,6 +8,7 @@ import { logsCommand } from "./logs.js";
 import { portfolioCommand } from "./portfolio-cmd.js";
 import { tradesCommand } from "./trades-cmd.js";
 import { performanceCommand } from "./performance-cmd.js";
+import { gatewayCommand } from "./gateway.js";
 
 const program = new Command()
   .name("fundx")
@@ -24,5 +25,6 @@ program.addCommand(logsCommand);
 program.addCommand(portfolioCommand);
 program.addCommand(tradesCommand);
 program.addCommand(performanceCommand);
+program.addCommand(gatewayCommand);
 
 program.parse();
