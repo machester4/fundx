@@ -185,11 +185,11 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx logs` command
 - [x] End-to-end test: init → create fund → run session
 
-### Phase 2 — Broker & Trading
-- MCP server: broker-alpaca (paper trading)
-- MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
-- Portfolio state auto-sync, trade execution, journal logging
-- Stop-loss monitoring
+### Phase 2 — Broker & Trading — COMPLETE
+- [x] MCP server: broker-alpaca (paper trading)
+- [x] MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
+- [x] Portfolio state auto-sync, trade execution, journal logging
+- [x] Stop-loss monitoring
 
 ### Phase 3 — Telegram — COMPLETE
 - [x] Telegram bot with grammy (`gateway.ts`)

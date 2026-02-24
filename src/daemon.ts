@@ -9,6 +9,8 @@ import { runFundSession } from "./session.js";
 import { startGateway, stopGateway } from "./gateway.js";
 import { checkSpecialSessions } from "./special-sessions.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.js";
+import { syncPortfolio } from "./sync.js";
+import { checkStopLosses, executeStopLosses } from "./stoploss.js";
 
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
@@ -98,6 +100,33 @@ async function startDaemon(): Promise<void> {
           generateMonthlyReport(name).catch(async (err) => {
             await log(`Monthly report error (${name}): ${err}`);
           });
+        }
+
+        // Portfolio sync: once daily at market open (09:30)
+        if (currentTime === "09:30") {
+          syncPortfolio(name).catch(async (err) => {
+            await log(`Portfolio sync error (${name}): ${err}`);
+          });
+        }
+
+        // Stop-loss monitoring: every 5 minutes during market hours (09:30–16:00)
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        const duringMarket =
+          (hour > 9 || (hour === 9 && minute >= 30)) && hour < 16;
+        if (duringMarket && minute % 5 === 0) {
+          checkStopLosses(name)
+            .then(async (triggered) => {
+              if (triggered.length > 0) {
+                await log(
+                  `Stop-loss triggered for '${name}': ${triggered.map((t) => t.symbol).join(", ")}`,
+                );
+                return executeStopLosses(name, triggered);
+              }
+            })
+            .catch(async (err) => {
+              await log(`Stop-loss check error (${name}): ${err}`);
+            });
         }
       } catch (err) {
         await log(`Error checking fund '${name}': ${err}`);
