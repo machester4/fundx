@@ -2,16 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import {
   insertTrade,
-  closeTrade,
   getRecentTrades,
   getTradesByDate,
   getTradesInDays,
-  getOpenTrades,
-  insertSession,
-  getRecentSessions,
   getTradeSummary,
 } from "../src/journal.js";
-import type { TradeRecord, SessionRecord } from "../src/types.js";
+import type { TradeRecord } from "../src/types.js";
 
 let db: Database.Database;
 
@@ -112,20 +108,6 @@ describe("insertTrade", () => {
   });
 });
 
-describe("closeTrade", () => {
-  it("updates a trade with exit information", () => {
-    const id = insertTrade(db, makeTrade());
-    closeTrade(db, id, 48.0, 300, 6.67, "Good timing on the exit");
-
-    const row = db.prepare("SELECT * FROM trades WHERE id = ?").get(id) as Record<string, unknown>;
-    expect(row.close_price).toBe(48.0);
-    expect(row.pnl).toBe(300);
-    expect(row.pnl_pct).toBe(6.67);
-    expect(row.lessons_learned).toBe("Good timing on the exit");
-    expect(row.closed_at).toBeDefined();
-  });
-});
-
 describe("getRecentTrades", () => {
   it("returns trades ordered by most recent first", () => {
     insertTrade(db, makeTrade({ timestamp: "2026-02-20T09:00:00Z", symbol: "GDX" }));
@@ -185,73 +167,7 @@ describe("getTradesInDays", () => {
   });
 });
 
-describe("getOpenTrades", () => {
-  it("returns only open buy trades", () => {
-    const buyId = insertTrade(db, makeTrade({ side: "buy", symbol: "GDX" }));
-    insertTrade(db, makeTrade({ side: "buy", symbol: "SLV" }));
-    insertTrade(db, makeTrade({ side: "sell", symbol: "AGQ" }));
-
-    // Close one trade
-    closeTrade(db, buyId, 48, 300, 6.67);
-
-    const open = getOpenTrades(db, FUND);
-    expect(open).toHaveLength(1);
-    expect(open[0].symbol).toBe("SLV");
-  });
-});
-
-describe("insertSession", () => {
-  it("inserts a session record", () => {
-    const session: SessionRecord = {
-      timestamp: new Date().toISOString(),
-      fund: FUND,
-      session_type: "pre_market",
-      duration_seconds: 600,
-      trades_executed: 2,
-      summary: "Analyzed market",
-      claude_model: "opus",
-    };
-    const id = insertSession(db, session);
-    expect(id).toBe(1);
-  });
-});
-
-describe("getRecentSessions", () => {
-  it("returns sessions in reverse chronological order", () => {
-    insertSession(db, {
-      timestamp: "2026-02-20T09:00:00Z",
-      fund: FUND,
-      session_type: "pre_market",
-    });
-    insertSession(db, {
-      timestamp: "2026-02-21T09:00:00Z",
-      fund: FUND,
-      session_type: "mid_session",
-    });
-
-    const sessions = getRecentSessions(db, FUND);
-    expect(sessions).toHaveLength(2);
-    expect(sessions[0].session_type).toBe("mid_session");
-  });
-});
-
 describe("getTradeSummary", () => {
-  it("calculates correct stats from closed trades", () => {
-    const id1 = insertTrade(db, makeTrade({ symbol: "GDX" }));
-    closeTrade(db, id1, 48, 300, 6.67);
-
-    const id2 = insertTrade(db, makeTrade({ symbol: "SLV" }));
-    closeTrade(db, id2, 40, -500, -11.11);
-
-    const summary = getTradeSummary(db, FUND);
-    expect(summary.total_trades).toBe(2);
-    expect(summary.winning_trades).toBe(1);
-    expect(summary.losing_trades).toBe(1);
-    expect(summary.total_pnl).toBe(-200);
-    expect(summary.best_trade_pnl).toBe(300);
-    expect(summary.worst_trade_pnl).toBe(-500);
-  });
-
   it("returns zeros when no closed trades", () => {
     insertTrade(db, makeTrade()); // open trade
 

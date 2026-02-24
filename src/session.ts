@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile, mkdir } from "node:fs/promises";
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import { loadFundConfig } from "./fund.js";
 import { loadGlobalConfig } from "./config.js";
 import { writeSessionLog } from "./state.js";
-import { fundPaths, MCP_SERVERS } from "./paths.js";
+import { fundPaths } from "./paths.js";
+import { writeMcpSettings } from "./mcp-config.js";
 import {
   runSubAgents,
   getDefaultSubAgents,
@@ -16,73 +16,24 @@ import {
 } from "./subagent.js";
 import type { SessionLog } from "./types.js";
 
+// Re-export so existing consumers (ask.ts, gateway.ts) keep working
+export { writeMcpSettings } from "./mcp-config.js";
+
 const execFileAsync = promisify(execFile);
-
-/**
- * Write .claude/settings.json for a fund so Claude Code can use MCP servers.
- * Called before each session to ensure config is up-to-date.
- */
-export async function writeMcpSettings(fundName: string): Promise<void> {
-  const paths = fundPaths(fundName);
-  const globalConfig = await loadGlobalConfig();
-  const fundConfig = await loadFundConfig(fundName);
-
-  const brokerEnv: Record<string, string> = {};
-  if (globalConfig.broker.api_key) brokerEnv.ALPACA_API_KEY = globalConfig.broker.api_key;
-  if (globalConfig.broker.secret_key) brokerEnv.ALPACA_SECRET_KEY = globalConfig.broker.secret_key;
-  brokerEnv.ALPACA_MODE = fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
-
-  const mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
-    "broker-alpaca": {
-      command: "node",
-      args: [MCP_SERVERS.brokerAlpaca],
-      env: brokerEnv,
-    },
-    "market-data": {
-      command: "node",
-      args: [MCP_SERVERS.marketData],
-      env: brokerEnv,
-    },
-  };
-
-  // Add telegram-notify MCP server if Telegram is configured
-  if (
-    globalConfig.telegram.bot_token &&
-    globalConfig.telegram.chat_id &&
-    fundConfig.notifications.telegram.enabled
-  ) {
-    const telegramEnv: Record<string, string> = {
-      TELEGRAM_BOT_TOKEN: globalConfig.telegram.bot_token,
-      TELEGRAM_CHAT_ID: globalConfig.telegram.chat_id,
-    };
-    if (fundConfig.notifications.quiet_hours.enabled) {
-      telegramEnv.QUIET_HOURS_START = fundConfig.notifications.quiet_hours.start;
-      telegramEnv.QUIET_HOURS_END = fundConfig.notifications.quiet_hours.end;
-    }
-    mcpServers["telegram-notify"] = {
-      command: "node",
-      args: [MCP_SERVERS.telegramNotify],
-      env: telegramEnv,
-    };
-  }
-
-  const settings = { mcpServers };
-
-  await mkdir(paths.claudeDir, { recursive: true });
-  await writeFile(paths.claudeSettings, JSON.stringify(settings, null, 2), "utf-8");
-}
 
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
   fundName: string,
   sessionType: string,
+  options?: { focus?: string },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
   const global = await loadGlobalConfig();
   const paths = fundPaths(fundName);
 
   const sessionConfig = config.schedule.sessions[sessionType];
-  if (!sessionConfig) {
+  const focus = options?.focus ?? sessionConfig?.focus;
+  if (!focus) {
     throw new Error(
       `Session type '${sessionType}' not found in fund '${fundName}'`,
     );
@@ -96,7 +47,7 @@ export async function runFundSession(
   const prompt = [
     `You are running a ${sessionType} session for fund '${fundName}'.`,
     ``,
-    `Focus: ${sessionConfig.focus}`,
+    `Focus: ${focus}`,
     ``,
     `Start by reading your state files, then proceed with analysis`,
     `and actions as appropriate. Remember to:`,
@@ -111,7 +62,7 @@ export async function runFundSession(
 
   const claudePath = global.claude_path || "claude";
   const model = config.claude.model || global.default_model || "sonnet";
-  const timeout = (sessionConfig.max_duration_minutes ?? 15) * 60 * 1000;
+  const timeout = (sessionConfig?.max_duration_minutes ?? 15) * 60 * 1000;
 
   const startedAt = new Date().toISOString();
 

@@ -20,12 +20,3 @@ export async function saveGlobalConfig(config: GlobalConfig): Promise<void> {
   await writeFile(GLOBAL_CONFIG, content, "utf-8");
 }
 
-export async function updateGlobalConfig(
-  updates: Partial<GlobalConfig>,
-): Promise<GlobalConfig> {
-  const current = await loadGlobalConfig();
-  const merged = { ...current, ...updates };
-  const validated = globalConfigSchema.parse(merged);
-  await saveGlobalConfig(validated);
-  return validated;
-}

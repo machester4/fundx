@@ -24,7 +24,7 @@ export const performanceCommand = new Command("performance")
       console.log(`  Initial Capital:  $${config.capital.initial.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
       console.log(`  Current Value:    $${portfolio.total_value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
       console.log(`  Total Return:     ${returnColor(`$${totalReturn.toFixed(2)} (${totalReturnPct.toFixed(2)}%)`)}`);
-      console.log(`  Cash:             $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${((portfolio.cash / portfolio.total_value) * 100).toFixed(1)}%)`);
+      console.log(`  Cash:             $${portfolio.cash.toLocaleString(undefined, { minimumFractionDigits: 2 })} (${portfolio.total_value > 0 ? ((portfolio.cash / portfolio.total_value) * 100).toFixed(1) : "0.0"}%)`);
       console.log(`  Positions:        ${portfolio.positions.length}`);
       console.log();
 

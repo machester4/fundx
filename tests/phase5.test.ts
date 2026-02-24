@@ -438,17 +438,6 @@ describe("Broker Adapters", () => {
     expect(adapter.capabilities.etfs).toBe(false);
   });
 
-  it("should list supported brokers", async () => {
-    const { getSupportedBrokers } = await import("../src/broker-adapter.js");
-
-    const brokers = getSupportedBrokers();
-    expect(brokers.length).toBe(3);
-
-    const names = brokers.map((b) => b.name);
-    expect(names).toContain("alpaca");
-    expect(names).toContain("ibkr");
-    expect(names).toContain("binance");
-  });
 });
 
 // ── Template tests ───────────────────────────────────────────

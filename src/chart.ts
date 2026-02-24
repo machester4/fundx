@@ -9,26 +9,11 @@ import type { TradeRecord } from "./types.js";
 
 const CHART_CHARS = {
   full: "█",
-  seven_eighths: "▉",
-  three_quarters: "▊",
-  five_eighths: "▋",
-  half: "▌",
-  three_eighths: "▍",
-  quarter: "▎",
-  eighth: "▏",
   empty: " ",
   horizontal: "─",
   vertical: "│",
-  corner_tl: "┌",
-  corner_tr: "┐",
   corner_bl: "└",
-  corner_br: "┘",
-  cross: "┼",
   tee_right: "├",
-  tee_left: "┤",
-  dot: "•",
-  up: "▲",
-  down: "▼",
 };
 
 interface ChartOptions {
@@ -36,7 +21,6 @@ interface ChartOptions {
   height: number;
   title?: string;
   showLabels?: boolean;
-  color?: (s: string) => string;
 }
 
 /**
@@ -112,81 +96,6 @@ function renderAllocation(
       `  ${item.label.padEnd(10)} ${bar} ${item.pct.toFixed(1)}%`,
     );
   }
-
-  return lines.join("\n");
-}
-
-/**
- * Render a simple line chart using braille-like characters.
- */
-function renderLineChart(
-  values: number[],
-  options: Partial<ChartOptions> = {},
-): string {
-  const width = Math.min(options.width ?? 60, values.length);
-  const height = options.height ?? 10;
-  const lines: string[] = [];
-
-  if (values.length === 0) return "  No data";
-
-  // Resample if more values than width
-  const sampled: number[] = [];
-  if (values.length > width) {
-    const step = values.length / width;
-    for (let i = 0; i < width; i++) {
-      const idx = Math.floor(i * step);
-      sampled.push(values[idx]);
-    }
-  } else {
-    sampled.push(...values);
-  }
-
-  const min = Math.min(...sampled);
-  const max = Math.max(...sampled);
-  const range = max - min || 1;
-
-  if (options.title) {
-    lines.push(chalk.bold(`  ${options.title}`));
-  }
-
-  // Render chart grid
-  for (let row = height; row >= 0; row--) {
-    const threshold = min + (row / height) * range;
-    let line = "";
-
-    // Y-axis label
-    if (row === height) {
-      line += chalk.dim(`$${max.toFixed(0).padStart(8)} ${CHART_CHARS.tee_right}`);
-    } else if (row === 0) {
-      line += chalk.dim(`$${min.toFixed(0).padStart(8)} ${CHART_CHARS.tee_right}`);
-    } else if (row === Math.floor(height / 2)) {
-      const mid = (min + max) / 2;
-      line += chalk.dim(`$${mid.toFixed(0).padStart(8)} ${CHART_CHARS.tee_right}`);
-    } else {
-      line += chalk.dim(`${" ".repeat(9)} ${CHART_CHARS.vertical}`);
-    }
-
-    // Plot points
-    for (let col = 0; col < sampled.length; col++) {
-      const normalizedValue = ((sampled[col] - min) / range) * height;
-      if (Math.abs(normalizedValue - row) < 0.5) {
-        const isUp =
-          col > 0 ? sampled[col] >= sampled[col - 1] : true;
-        line += isUp ? chalk.green(CHART_CHARS.dot) : chalk.red(CHART_CHARS.dot);
-      } else if (normalizedValue > row && normalizedValue < row + 1) {
-        line += chalk.dim("·");
-      } else {
-        line += " ";
-      }
-    }
-
-    lines.push(`  ${line}`);
-  }
-
-  // X-axis
-  lines.push(
-    `  ${" ".repeat(10)}${CHART_CHARS.corner_bl}${CHART_CHARS.horizontal.repeat(sampled.length)}`,
-  );
 
   return lines.join("\n");
 }

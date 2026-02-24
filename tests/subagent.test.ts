@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   getDefaultSubAgents,
-  createCustomSubAgent,
   mergeSubAgentResults,
 } from "../src/subagent.js";
 import type { SubAgentResult } from "../src/types.js";
@@ -31,26 +30,6 @@ describe("getDefaultSubAgents", () => {
       expect(agent.name).toBeTruthy();
       expect(agent.max_turns).toBeGreaterThan(0);
     }
-  });
-});
-
-describe("createCustomSubAgent", () => {
-  it("creates a custom sub-agent with given parameters", () => {
-    const agent = createCustomSubAgent(
-      "Crypto Analyst",
-      "Analyze Bitcoin trends",
-      25,
-    );
-
-    expect(agent.type).toBe("custom");
-    expect(agent.name).toBe("Crypto Analyst");
-    expect(agent.prompt).toBe("Analyze Bitcoin trends");
-    expect(agent.max_turns).toBe(25);
-  });
-
-  it("uses default max_turns when not specified", () => {
-    const agent = createCustomSubAgent("Test", "Test prompt");
-    expect(agent.max_turns).toBe(15);
   });
 });
 

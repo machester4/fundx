@@ -8,6 +8,7 @@ import { fundConfigSchema, type FundConfig } from "./types.js";
 import { FUNDS_DIR, fundPaths } from "./paths.js";
 import { initFundState } from "./state.js";
 import { generateFundClaudeMd } from "./template.js";
+import { loadGlobalConfig } from "./config.js";
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -128,8 +129,8 @@ fundCommand
           },
         },
       },
-      broker: { provider: "alpaca", mode: brokerMode },
-      claude: { model: "sonnet" },
+      broker: { provider: (await loadGlobalConfig()).broker.provider, mode: brokerMode },
+      claude: { model: (await loadGlobalConfig()).default_model ?? "sonnet" },
     });
 
     await saveFundConfig(config);

@@ -9,7 +9,7 @@ import { loadGlobalConfig } from "./config.js";
 import { readPortfolio, readTracker } from "./state.js";
 import { fundPaths } from "./paths.js";
 import { writeMcpSettings } from "./session.js";
-import { openJournal, getRecentTrades, getTradeSummary } from "./journal.js";
+import { openJournal, getTradeSummary } from "./journal.js";
 import { searchTrades, getTradeContextSummary } from "./embeddings.js";
 
 const execFileAsync = promisify(execFile);
@@ -241,13 +241,13 @@ export const askCommand = new Command("ask")
     ) => {
       const spinner = ora("Thinking...").start();
       try {
-        spinner.stop();
         await runAsk(question, {
           fund: opts.fund,
           all: opts.all,
           search: opts.search,
           model: opts.model,
         });
+        spinner.stop();
       } catch (err) {
         spinner.fail(`Ask failed: ${err}`);
       }
