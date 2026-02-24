@@ -97,7 +97,6 @@ import { fundConfigSchema } from "../src/types.js";
 const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
 
 // Track listeners we add so we can clean up
-const originalOn = process.on.bind(process);
 const addedListeners: Array<{ event: string; fn: (...args: unknown[]) => void }> = [];
 vi.spyOn(process, "on").mockImplementation(((event: string, fn: (...args: unknown[]) => void) => {
   addedListeners.push({ event, fn });

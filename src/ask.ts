@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile } from "node:fs/promises";
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";

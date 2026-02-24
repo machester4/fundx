@@ -1,11 +1,42 @@
 {
   "name": "fundx",
   "version": "0.1.0",
-  "description": "Autonomous AI Fund Manager powered by Claude Code",
+  "description": "Autonomous AI Fund Manager powered by Claude Code — goal-oriented, multi-fund investment platform",
   "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/machester4/fundx.git"
+  },
+  "homepage": "https://github.com/machester4/fundx#readme",
+  "bugs": {
+    "url": "https://github.com/machester4/fundx/issues"
+  },
+  "keywords": [
+    "fundx",
+    "investment",
+    "trading",
+    "autonomous",
+    "ai",
+    "claude",
+    "claude-code",
+    "mcp",
+    "fund-manager",
+    "portfolio",
+    "cli",
+    "alpaca",
+    "telegram"
+  ],
   "bin": {
     "fundx": "./dist/index.js"
   },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsup",
@@ -13,7 +44,8 @@
     "test": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.5.0",

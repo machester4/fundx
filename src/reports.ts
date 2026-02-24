@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
-import { loadFundConfig, listFundNames } from "./fund.js";
+import { loadFundConfig } from "./fund.js";
 import { readPortfolio, readTracker } from "./state.js";
 import { openJournal, getTradesInDays } from "./journal.js";
 import { fundPaths } from "./paths.js";
