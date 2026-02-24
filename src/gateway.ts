@@ -4,8 +4,7 @@ import chalk from "chalk";
 import { loadGlobalConfig } from "./config.js";
 import { listFundNames, loadFundConfig } from "./fund.js";
 import { readPortfolio, readTracker, readSessionLog } from "./state.js";
-import { runFundSession } from "./session.js";
-import type { FundConfig, GlobalConfig, Portfolio, ObjectiveTracker } from "./types.js";
+import type { GlobalConfig } from "./types.js";
 
 // ── Bot instance (module-level for use in daemon) ────────────
 
@@ -143,7 +142,7 @@ async function handlePortfolio(ctx: Context, fundName: string): Promise<void> {
   }
 }
 
-async function handleTrades(ctx: Context, fundName: string, period?: string): Promise<void> {
+async function handleTrades(ctx: Context, fundName: string, _period?: string): Promise<void> {
   try {
     const config = await loadFundConfig(fundName);
     // For now, read from session log — full trade journal access requires importing journal.ts
@@ -232,7 +231,7 @@ async function handleNext(ctx: Context): Promise<void> {
         if (!session.enabled) continue;
         const [h, m] = session.time.split(":").map(Number);
         const sessionMinutes = h * 60 + m;
-        let minutesUntil = sessionMinutes - currentMinutes;
+        const minutesUntil = sessionMinutes - currentMinutes;
         if (minutesUntil < 0) continue; // Already passed today
 
         upcoming.push({

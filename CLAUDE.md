@@ -4,7 +4,7 @@
 
 FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform** powered by Claude Code. It lets users define investment funds with real-life financial objectives (e.g., "sustain 18 months of living expenses") and delegates analysis, decision-making, and trade execution to Claude Code running autonomously via scheduled sessions.
 
-**Current status:** Project scaffolding complete. Core architecture, types, and CLI skeleton are implemented. Ready for Phase 1 feature work.
+**Current status:** Phases 1-5 complete. All core features implemented. Ready for Phase 6 (Community & Polish).
 
 **License:** Apache 2.0
 

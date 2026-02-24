@@ -80,12 +80,10 @@ export async function runSafetyChecks(
   }
 
   // Check 4: Minimum paper trading history
-  let paperTrades = 0;
   try {
     const db = openJournal(fundName);
     try {
       const summary = getTradeSummary(db, fundName);
-      paperTrades = summary.total_trades;
       const minTrades = 5;
       checks.push({
         name: `Minimum trade history (>=${minTrades})`,
