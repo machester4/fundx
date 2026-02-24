@@ -218,7 +218,7 @@ async function runAsk(
       "--max-turns", "30",
       prompt,
     ],
-    { timeout: 5 * 60 * 1000 },
+    { timeout: 5 * 60 * 1000, env: { ...process.env, ANTHROPIC_MODEL: model } },
   );
 
   console.log();
@@ -233,7 +233,7 @@ export const askCommand = new Command("ask")
   .option("-f, --fund <name>", "Ask about a specific fund")
   .option("-a, --all", "Cross-fund analysis (all funds)")
   .option("-s, --search", "Search trade history for relevant context")
-  .option("-m, --model <model>", "Claude model (sonnet or opus)")
+  .option("-m, --model <model>", "Claude model (sonnet, opus, haiku, or full model ID)")
   .action(
     async (
       question: string,

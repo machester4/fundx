@@ -372,7 +372,7 @@ async function wakeClaudeForQuestion(
         "--max-turns", "10",
         prompt,
       ],
-      { timeout: 5 * 60 * 1000 }, // 5 minute timeout for questions
+      { timeout: 5 * 60 * 1000, env: { ...process.env, ANTHROPIC_MODEL: model } },
     );
 
     const answer = result.stdout.trim();

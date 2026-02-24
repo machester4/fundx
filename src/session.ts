@@ -75,7 +75,7 @@ export async function runFundSession(
       "--max-turns", "50",
       prompt,
     ],
-    { timeout },
+    { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
   );
 
   const log: SessionLog = {
@@ -164,7 +164,7 @@ export async function runFundSessionWithSubAgents(
       "--max-turns", "50",
       prompt,
     ],
-    { timeout },
+    { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
   );
 
   const successCount = results.filter((r) => r.status === "success").length;
@@ -220,7 +220,7 @@ sessionCommand
   .command("agents")
   .description("Run only the sub-agent analysis (no trading)")
   .argument("<fund>", "Fund name")
-  .option("-m, --model <model>", "Claude model (sonnet or opus)")
+  .option("-m, --model <model>", "Claude model (sonnet, opus, haiku, or full model ID)")
   .action(async (fund: string, opts: { model?: string }) => {
     const spinner = ora(
       `Running sub-agent analysis for '${fund}'...`,

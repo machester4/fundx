@@ -145,7 +145,7 @@ export const fundConfigSchema = z.object({
     .default({}),
   claude: z
     .object({
-      model: z.enum(["opus", "sonnet"]).default("sonnet"),
+      model: z.string().default("sonnet"),
       personality: z.string().default(""),
       decision_framework: z.string().default(""),
     })
@@ -161,7 +161,7 @@ export type Schedule = z.infer<typeof scheduleSchema>;
 
 export const globalConfigSchema = z.object({
   claude_path: z.string().default("claude"),
-  default_model: z.enum(["opus", "sonnet"]).default("sonnet"),
+  default_model: z.string().default("sonnet"),
   timezone: z.string().default("UTC"),
   broker: z
     .object({
@@ -390,7 +390,7 @@ export const subAgentConfigSchema = z.object({
   name: z.string(),
   prompt: z.string(),
   max_turns: z.number().positive().default(20),
-  model: z.enum(["opus", "sonnet"]).optional(),
+  model: z.string().optional(),
 });
 
 export type SubAgentConfig = z.infer<typeof subAgentConfigSchema>;

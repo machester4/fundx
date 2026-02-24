@@ -28,8 +28,9 @@ export const initCommand = new Command("init")
     const defaultModel = await select({
       message: "Default Claude model:",
       choices: [
-        { value: "sonnet" as const, name: "Sonnet (faster, cheaper)" },
-        { value: "opus" as const, name: "Opus (most capable)" },
+        { value: "sonnet", name: "Sonnet (balanced)" },
+        { value: "opus", name: "Opus (most capable)" },
+        { value: "haiku", name: "Haiku (fastest, cheapest)" },
       ],
     });
 

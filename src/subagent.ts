@@ -129,7 +129,7 @@ async function runSingleSubAgent(
         "--max-turns", String(agent.max_turns),
         agent.prompt,
       ],
-      { timeout },
+      { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
     );
 
     return {
