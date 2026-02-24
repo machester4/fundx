@@ -2,11 +2,18 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile, mkdir } from "node:fs/promises";
 import { Command } from "commander";
+import chalk from "chalk";
 import ora from "ora";
 import { loadFundConfig } from "./fund.js";
 import { loadGlobalConfig } from "./config.js";
 import { writeSessionLog } from "./state.js";
 import { fundPaths, MCP_SERVERS } from "./paths.js";
+import {
+  runSubAgents,
+  getDefaultSubAgents,
+  mergeSubAgentResults,
+  saveSubAgentAnalysis,
+} from "./subagent.js";
 import type { SessionLog } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -132,6 +139,98 @@ export async function runFundSession(
   await writeSessionLog(fundName, log);
 }
 
+/**
+ * Launch a fund session with parallel sub-agents for analysis.
+ *
+ * Sub-agents (macro, technical, sentiment, risk) run in parallel first,
+ * then a main session incorporates their combined analysis.
+ */
+export async function runFundSessionWithSubAgents(
+  fundName: string,
+  sessionType: string,
+): Promise<void> {
+  const config = await loadFundConfig(fundName);
+  const global = await loadGlobalConfig();
+  const paths = fundPaths(fundName);
+
+  const sessionConfig = config.schedule.sessions[sessionType];
+  if (!sessionConfig) {
+    throw new Error(
+      `Session type '${sessionType}' not found in fund '${fundName}'`,
+    );
+  }
+
+  await writeMcpSettings(fundName);
+
+  const today = new Date().toISOString().split("T")[0];
+  const startedAt = new Date().toISOString();
+
+  // Phase 1: Run sub-agents in parallel
+  const agents = getDefaultSubAgents(fundName);
+  const results = await runSubAgents(fundName, agents, {
+    timeoutMinutes: 8,
+    model: config.claude.model || global.default_model || "sonnet",
+  });
+
+  // Save sub-agent analysis
+  const analysisPath = await saveSubAgentAnalysis(fundName, results, sessionType);
+  const combinedAnalysis = mergeSubAgentResults(results);
+
+  // Phase 2: Run main decision-making session with sub-agent context
+  const prompt = [
+    `You are running a ${sessionType} session for fund '${fundName}'.`,
+    ``,
+    `Focus: ${sessionConfig.focus}`,
+    ``,
+    `## Sub-Agent Analysis`,
+    `Your analysis team has completed their research. Here is their combined output:`,
+    ``,
+    combinedAnalysis.slice(0, 8000),
+    ``,
+    `## Your Task`,
+    `Review the sub-agent analysis above and make trading decisions.`,
+    `Start by reading your state files, then:`,
+    `1. Synthesize the macro, technical, sentiment, and risk analysis`,
+    `2. Decide on trades that align with all signals and fund constraints`,
+    `3. Execute trades via MCP broker-alpaca tools`,
+    `4. Update state files after any changes`,
+    `5. Write your synthesis to analysis/${today}_${sessionType}.md`,
+    `6. Use MCP telegram-notify tools to send alerts (if available)`,
+    `7. Update objective_tracker.json`,
+    `8. Log all trades in state/trade_journal.sqlite`,
+  ].join("\n");
+
+  const claudePath = global.claude_path || "claude";
+  const model = config.claude.model || global.default_model || "sonnet";
+  const timeout = (sessionConfig.max_duration_minutes ?? 15) * 60 * 1000;
+
+  const result = await execFileAsync(
+    claudePath,
+    [
+      "--print",
+      "--project-dir", paths.root,
+      "--model", model,
+      "--max-turns", "50",
+      prompt,
+    ],
+    { timeout },
+  );
+
+  const successCount = results.filter((r) => r.status === "success").length;
+
+  const log: SessionLog = {
+    fund: fundName,
+    session_type: `${sessionType}_parallel`,
+    started_at: startedAt,
+    ended_at: new Date().toISOString(),
+    trades_executed: 0,
+    analysis_file: analysisPath,
+    summary: `Sub-agents: ${successCount}/${results.length} OK. ${result.stdout.slice(0, 300)}`,
+  };
+
+  await writeSessionLog(fundName, log);
+}
+
 // ── CLI Commands ───────────────────────────────────────────────
 
 export const sessionCommand = new Command("session").description(
@@ -143,12 +242,76 @@ sessionCommand
   .description("Manually trigger a session")
   .argument("<fund>", "Fund name")
   .argument("<type>", "Session type (pre_market, mid_session, post_market)")
-  .action(async (fund: string, type: string) => {
-    const spinner = ora(`Running ${type} session for '${fund}'...`).start();
+  .option("-p, --parallel", "Use sub-agent parallel analysis")
+  .action(async (fund: string, type: string, opts: { parallel?: boolean }) => {
+    const useParallel = opts.parallel ?? false;
+    const mode = useParallel ? "parallel" : "standard";
+    const spinner = ora(
+      `Running ${type} session for '${fund}' (${mode})...`,
+    ).start();
     try {
-      await runFundSession(fund, type);
-      spinner.succeed(`Session complete for '${fund}'.`);
+      if (useParallel) {
+        spinner.text = `Running sub-agent analysis for '${fund}'...`;
+        await runFundSessionWithSubAgents(fund, type);
+        spinner.succeed(
+          `Parallel session complete for '${fund}'.`,
+        );
+      } else {
+        await runFundSession(fund, type);
+        spinner.succeed(`Session complete for '${fund}'.`);
+      }
     } catch (err) {
       spinner.fail(`Session failed: ${err}`);
+    }
+  });
+
+sessionCommand
+  .command("agents")
+  .description("Run only the sub-agent analysis (no trading)")
+  .argument("<fund>", "Fund name")
+  .option("-m, --model <model>", "Claude model (sonnet or opus)")
+  .action(async (fund: string, opts: { model?: string }) => {
+    const spinner = ora(
+      `Running sub-agent analysis for '${fund}'...`,
+    ).start();
+    try {
+      const agents = getDefaultSubAgents(fund);
+      spinner.text = `Launching ${agents.length} sub-agents in parallel...`;
+
+      const results = await runSubAgents(fund, agents, {
+        model: opts.model,
+      });
+
+      const analysisPath = await saveSubAgentAnalysis(fund, results, "manual");
+
+      const successCount = results.filter((r) => r.status === "success").length;
+      const errorCount = results.filter((r) => r.status === "error").length;
+      const timeoutCount = results.filter((r) => r.status === "timeout").length;
+
+      spinner.succeed(`Sub-agent analysis complete.`);
+      console.log();
+
+      for (const r of results) {
+        const icon =
+          r.status === "success"
+            ? chalk.green("OK")
+            : r.status === "timeout"
+              ? chalk.yellow("TIMEOUT")
+              : chalk.red("ERR");
+        const started = new Date(r.started_at).getTime();
+        const ended = new Date(r.ended_at).getTime();
+        const dur = ((ended - started) / 1000).toFixed(0);
+        console.log(`  ${icon}  ${r.name} (${dur}s)`);
+      }
+
+      console.log();
+      console.log(
+        chalk.dim(
+          `  ${successCount} succeeded, ${errorCount} errors, ${timeoutCount} timeouts`,
+        ),
+      );
+      console.log(chalk.dim(`  Analysis saved: ${analysisPath}`));
+    } catch (err) {
+      spinner.fail(`Sub-agent analysis failed: ${err}`);
     }
   });
