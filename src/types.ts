@@ -81,12 +81,21 @@ const sessionScheduleSchema = z.object({
   max_duration_minutes: z.number().positive().default(15),
 });
 
+const specialSessionSchema = z.object({
+  trigger: z.string(),
+  time: z.string(),
+  focus: z.string(),
+  enabled: z.boolean().default(true),
+  max_duration_minutes: z.number().positive().default(15),
+});
+
 export const scheduleSchema = z.object({
   timezone: z.string().default("UTC"),
   trading_days: z
     .array(z.enum(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]))
     .default(["MON", "TUE", "WED", "THU", "FRI"]),
   sessions: z.record(z.string(), sessionScheduleSchema).default({}),
+  special_sessions: z.array(specialSessionSchema).default([]),
 });
 
 // ── Fund Config Schema ─────────────────────────────────────────
@@ -415,3 +424,133 @@ export const similarTradeResultSchema = z.object({
 });
 
 export type SimilarTradeResult = z.infer<typeof similarTradeResultSchema>;
+
+// ── Phase 5: Special Sessions Schema ─────────────────────────
+
+export const specialSessionTriggerSchema = z.object({
+  trigger: z.string(),
+  time: z.string(),
+  focus: z.string(),
+  enabled: z.boolean().default(true),
+  max_duration_minutes: z.number().positive().default(15),
+});
+
+export type SpecialSessionTrigger = z.infer<typeof specialSessionTriggerSchema>;
+
+// ── Phase 5: Live Trading Safety Schema ──────────────────────
+
+export const liveTradingConfirmationSchema = z.object({
+  fund: z.string(),
+  confirmed_at: z.string(),
+  confirmed_by: z.enum(["cli", "telegram"]),
+  previous_mode: z.enum(["paper", "live"]),
+  new_mode: z.enum(["paper", "live"]),
+  paper_trading_days: z.number().optional(),
+  total_paper_trades: z.number().optional(),
+  paper_pnl: z.number().optional(),
+});
+
+export type LiveTradingConfirmation = z.infer<typeof liveTradingConfirmationSchema>;
+
+// ── Phase 5: Fund Template Schema ────────────────────────────
+
+export const fundTemplateSchema = z.object({
+  template_name: z.string(),
+  template_version: z.string().default("1.0"),
+  description: z.string().default(""),
+  created: z.string(),
+  source_fund: z.string().optional(),
+  config: fundConfigSchema,
+});
+
+export type FundTemplate = z.infer<typeof fundTemplateSchema>;
+
+// ── Phase 5: Broker Adapter Schema ───────────────────────────
+
+export const brokerCapabilitiesSchema = z.object({
+  stocks: z.boolean().default(false),
+  etfs: z.boolean().default(false),
+  options: z.boolean().default(false),
+  crypto: z.boolean().default(false),
+  forex: z.boolean().default(false),
+  paper_trading: z.boolean().default(false),
+  live_trading: z.boolean().default(false),
+  streaming: z.boolean().default(false),
+});
+
+export type BrokerCapabilities = z.infer<typeof brokerCapabilitiesSchema>;
+
+export const brokerAdapterConfigSchema = z.object({
+  provider: z.string(),
+  display_name: z.string(),
+  capabilities: brokerCapabilitiesSchema,
+  api_base_url: z.string().optional(),
+  paper_url: z.string().optional(),
+  live_url: z.string().optional(),
+  credentials: z.record(z.string(), z.string()).default({}),
+});
+
+export type BrokerAdapterConfig = z.infer<typeof brokerAdapterConfigSchema>;
+
+// ── Phase 5: Correlation Schema ──────────────────────────────
+
+export const correlationEntrySchema = z.object({
+  fund_a: z.string(),
+  fund_b: z.string(),
+  correlation: z.number().min(-1).max(1),
+  period_days: z.number(),
+  computed_at: z.string(),
+  overlapping_symbols: z.array(z.string()).default([]),
+  warning: z.string().optional(),
+});
+
+export type CorrelationEntry = z.infer<typeof correlationEntrySchema>;
+
+// ── Phase 5: Monte Carlo Projection Schema ───────────────────
+
+export const monteCarloResultSchema = z.object({
+  fund: z.string(),
+  simulations: z.number(),
+  horizon_months: z.number(),
+  computed_at: z.string(),
+  percentiles: z.object({
+    p5: z.number(),
+    p10: z.number(),
+    p25: z.number(),
+    p50: z.number(),
+    p75: z.number(),
+    p90: z.number(),
+    p95: z.number(),
+  }),
+  runway_months: z
+    .object({
+      p5: z.number(),
+      p25: z.number(),
+      p50: z.number(),
+      p75: z.number(),
+      p95: z.number(),
+    })
+    .optional(),
+  probability_of_ruin: z.number().min(0).max(1),
+  mean_final_value: z.number(),
+  std_final_value: z.number(),
+  monthly_return_mean: z.number(),
+  monthly_return_std: z.number(),
+});
+
+export type MonteCarloResult = z.infer<typeof monteCarloResultSchema>;
+
+// ── Phase 5: Auto-Report Schema ──────────────────────────────
+
+export const autoReportConfigSchema = z.object({
+  daily: z.boolean().default(true),
+  weekly: z.boolean().default(true),
+  monthly: z.boolean().default(true),
+  daily_time: z.string().default("18:30"),
+  weekly_day: z.enum(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]).default("FRI"),
+  weekly_time: z.string().default("19:00"),
+  monthly_day: z.number().min(1).max(28).default(1),
+  monthly_time: z.string().default("19:00"),
+});
+
+export type AutoReportConfig = z.infer<typeof autoReportConfigSchema>;

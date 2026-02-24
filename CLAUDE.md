@@ -107,6 +107,14 @@ src/
   ask.ts         # `fundx ask` command — question answering + cross-fund analysis
   subagent.ts    # Sub-agent parallel execution (macro, technical, sentiment, risk)
   embeddings.ts  # Trade journal FTS5 indexing + similarity search
+  live-trading.ts     # Live trading mode with safety checks + CLI
+  broker-adapter.ts   # Multi-broker adapter (Alpaca, IBKR, Binance)
+  templates.ts        # Fund templates (export/import/builtin) + CLI
+  special-sessions.ts # Event-triggered sessions (FOMC, OpEx, etc.) + CLI
+  chart.ts            # Terminal-based performance charts + CLI
+  reports.ts          # Auto-reports (daily/weekly/monthly) + CLI
+  correlation.ts      # Cross-fund correlation monitoring + CLI
+  montecarlo.ts       # Monte Carlo runway/portfolio projections + CLI
   mcp/
     broker-alpaca.ts    # MCP server: Alpaca broker integration
     market-data.ts      # MCP server: market data provider
@@ -203,8 +211,18 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] Auto-indexing via SQLite triggers (INSERT, UPDATE, DELETE sync)
 - [x] Trade context summary generation for prompts
 
-### Phase 5 — Advanced
-- Live trading, multi-broker, fund templates, special sessions
+### Phase 5 — Advanced — COMPLETE
+- [x] Live trading mode with safety checks and double confirmation (`live-trading.ts`)
+- [x] Multi-broker adapter system: Alpaca, IBKR, Binance (`broker-adapter.ts`)
+- [x] Fund templates: built-in (runway, growth, accumulation, income), export/import (`templates.ts`)
+- [x] `fundx fund clone` — clone existing fund configuration
+- [x] Special sessions: FOMC, OpEx, CPI, NFP, Earnings Season triggers (`special-sessions.ts`)
+- [x] Terminal-based performance charting: allocation, P&L bars, sparklines (`chart.ts`)
+- [x] Auto-reports: daily, weekly, monthly markdown reports (`reports.ts`)
+- [x] Cross-fund correlation monitoring with position overlap detection (`correlation.ts`)
+- [x] Monte Carlo simulation: runway projections, probability of ruin (`montecarlo.ts`)
+- [x] Daemon integration: special session triggers + auto-report generation
+- [x] Zod schemas for all Phase 5 types (`types.ts`)
 
 ### Phase 6 — Community & Polish
 - `npm install -g fundx` / `npx fundx` distribution, documentation, plugin system

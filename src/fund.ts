@@ -192,6 +192,28 @@ fundCommand
     console.log(chalk.green(`  ✓ Fund '${name}' deleted.`));
   });
 
+fundCommand
+  .command("clone")
+  .description("Clone an existing fund's configuration")
+  .argument("<source>", "Source fund name")
+  .argument("<target>", "New fund name")
+  .action(async (source: string, target: string) => {
+    try {
+      const targetPaths = fundPaths(target);
+      if (existsSync(targetPaths.root)) {
+        console.log(chalk.red(`  Fund '${target}' already exists.`));
+        return;
+      }
+
+      const { cloneFund } = await import("./templates.js");
+      await cloneFund(source, target);
+      console.log(chalk.green(`  ✓ Fund '${source}' cloned to '${target}'.`));
+      console.log(chalk.dim(`  Start trading: fundx start ${target}\n`));
+    } catch (err) {
+      console.error(chalk.red(`  Error: ${err}`));
+    }
+  });
+
 // ── Objective prompts ──────────────────────────────────────────
 
 async function promptObjective(type: string, _capital: number) {

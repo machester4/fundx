@@ -10,6 +10,14 @@ import { tradesCommand } from "./trades-cmd.js";
 import { performanceCommand } from "./performance-cmd.js";
 import { gatewayCommand } from "./gateway.js";
 import { askCommand } from "./ask.js";
+// Phase 5 imports
+import { liveCommand } from "./live-trading.js";
+import { templateCommand } from "./templates.js";
+import { specialCommand } from "./special-sessions.js";
+import { chartCommand } from "./chart.js";
+import { reportCommand } from "./reports.js";
+import { correlationCommand } from "./correlation.js";
+import { monteCarloCommand } from "./montecarlo.js";
 
 const program = new Command()
   .name("fundx")
@@ -28,5 +36,13 @@ program.addCommand(tradesCommand);
 program.addCommand(performanceCommand);
 program.addCommand(gatewayCommand);
 program.addCommand(askCommand);
+// Phase 5 commands
+program.addCommand(liveCommand);
+program.addCommand(templateCommand);
+program.addCommand(specialCommand);
+program.addCommand(chartCommand);
+program.addCommand(reportCommand);
+program.addCommand(correlationCommand);
+program.addCommand(monteCarloCommand);
 
 program.parse();
