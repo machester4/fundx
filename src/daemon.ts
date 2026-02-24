@@ -7,6 +7,8 @@ import { DAEMON_PID } from "./paths.js";
 import { listFundNames, loadFundConfig } from "./fund.js";
 import { runFundSession } from "./session.js";
 import { startGateway, stopGateway } from "./gateway.js";
+import { checkSpecialSessions } from "./special-sessions.js";
+import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.js";
 
 /** Check if daemon is already running */
 async function isDaemonRunning(): Promise<boolean> {
@@ -49,6 +51,7 @@ async function startDaemon(): Promise<void> {
         if (!config.schedule.trading_days.includes(currentDay as never))
           continue;
 
+        // Regular sessions
         for (const [sessionType, session] of Object.entries(
           config.schedule.sessions,
         )) {
@@ -58,6 +61,35 @@ async function startDaemon(): Promise<void> {
           console.log(`  Running ${sessionType} for '${name}'...`);
           runFundSession(name, sessionType).catch((err) => {
             console.error(`  Session error (${name}/${sessionType}): ${err}`);
+          });
+        }
+
+        // Special sessions (event-triggered)
+        const specialMatches = checkSpecialSessions(config);
+        for (const special of specialMatches) {
+          if (special.time !== currentTime) continue;
+
+          const specialType = `special_${special.trigger.replace(/\s+/g, "_").toLowerCase()}`;
+          console.log(`  Running special session for '${name}': ${special.trigger}...`);
+          runFundSession(name, specialType).catch((err) => {
+            console.error(`  Special session error (${name}/${specialType}): ${err}`);
+          });
+        }
+
+        // Auto-reports: daily at 18:30, weekly on Fri, monthly on 1st
+        if (currentTime === "18:30") {
+          generateDailyReport(name).catch((err) => {
+            console.error(`  Daily report error (${name}): ${err}`);
+          });
+        }
+        if (currentDay === "FRI" && currentTime === "19:00") {
+          generateWeeklyReport(name).catch((err) => {
+            console.error(`  Weekly report error (${name}): ${err}`);
+          });
+        }
+        if (now.getDate() === 1 && currentTime === "19:00") {
+          generateMonthlyReport(name).catch((err) => {
+            console.error(`  Monthly report error (${name}): ${err}`);
           });
         }
       } catch (err) {
