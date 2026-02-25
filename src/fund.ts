@@ -38,13 +38,25 @@ export const fundCommand = new Command("fund").description(
   "Manage investment funds",
 );
 
+/** Validate fund name: alphanumeric, hyphens, underscores only */
+function validateFundName(name: string): string {
+  const trimmed = name.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    throw new Error(
+      "Fund name must start with a letter/digit and contain only letters, digits, hyphens, and underscores.",
+    );
+  }
+  return trimmed;
+}
+
 fundCommand
   .command("create")
   .description("Interactive fund creation wizard")
   .action(async () => {
     console.log(chalk.bold("\n  New Fund\n"));
 
-    const name = await input({ message: "Fund name (slug):" });
+    const rawName = await input({ message: "Fund name (slug):" });
+    const name = validateFundName(rawName);
     const displayName = await input({ message: "Display name:" });
     const description = await input({ message: "Description:" });
 

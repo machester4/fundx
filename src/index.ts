@@ -21,7 +21,7 @@ import { monteCarloCommand } from "./montecarlo.js";
 
 const program = new Command()
   .name("fundx")
-  .description("FundX — Autonomous AI Fund Manager powered by Claude Code")
+  .description("FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK")
   .version("0.1.0");
 
 program.addCommand(initCommand);

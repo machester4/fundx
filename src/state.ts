@@ -66,8 +66,13 @@ export async function readSessionLog(
   try {
     const data = await readJson(paths.state.sessionLog);
     return sessionLogSchema.parse(data);
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    // File not found is expected for new funds
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return null;
+    }
+    // Re-throw corrupted JSON or schema validation errors
+    throw err;
   }
 }
 
