@@ -337,16 +337,7 @@ async function wakeClaudeForQuestion(
   await ctx.reply(`⏳ Waking up Claude for fund '${fundName}'...`);
 
   try {
-    const config = await loadFundConfig(fundName);
-    const global = await loadGlobalConfig();
-    const { fundPaths } = await import("./paths.js");
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const execFileAsync = promisify(execFile);
-
-    const paths = fundPaths(fundName);
-    const claudePath = global.claude_path || "claude";
-    const model = config.claude.model || global.default_model || "sonnet";
+    const { runAgentQuery } = await import("./agent.js");
 
     const prompt = [
       `The user asked a question via Telegram about fund '${fundName}'.`,
@@ -358,24 +349,18 @@ async function wakeClaudeForQuestion(
       `Keep it under 4000 characters.`,
     ].join("\n");
 
-    // Ensure MCP settings are up to date
-    const { writeMcpSettings } = await import("./session.js");
-    await writeMcpSettings(fundName);
+    const result = await runAgentQuery({
+      fundName,
+      prompt,
+      maxTurns: 10,
+      timeoutMs: 5 * 60 * 1000,
+      maxBudgetUsd: 1.0,
+    });
 
-    const result = await execFileAsync(
-      claudePath,
-      [
-        "--print",
-        "--project-dir", paths.root,
-        "--model", model,
-        "--max-turns", "10",
-        prompt,
-      ],
-      { timeout: 5 * 60 * 1000, env: { ...process.env, ANTHROPIC_MODEL: model } },
-    );
-
-    const answer = result.stdout.trim();
-    if (answer.length > 4000) {
+    const answer = result.output.trim();
+    if (result.status !== "success") {
+      await ctx.reply(`Claude encountered an issue: ${result.error ?? result.status}`);
+    } else if (answer.length > 4000) {
       // Telegram message limit is ~4096 chars
       await ctx.reply(answer.slice(0, 3990) + "\n\n[truncated]");
     } else {

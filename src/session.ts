@@ -1,25 +1,16 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import { loadFundConfig } from "./fund.js";
-import { loadGlobalConfig } from "./config.js";
 import { writeSessionLog } from "./state.js";
-import { fundPaths } from "./paths.js";
-import { writeMcpSettings } from "./mcp-config.js";
+import { runAgentQuery } from "./agent.js";
 import {
   runSubAgents,
   getDefaultSubAgents,
   mergeSubAgentResults,
   saveSubAgentAnalysis,
 } from "./subagent.js";
-import type { SessionLog } from "./types.js";
-
-// Re-export so existing consumers (ask.ts, gateway.ts) keep working
-export { writeMcpSettings } from "./mcp-config.js";
-
-const execFileAsync = promisify(execFile);
+import type { SessionLogV2 } from "./types.js";
 
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
@@ -28,8 +19,6 @@ export async function runFundSession(
   options?: { focus?: string },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
-  const global = await loadGlobalConfig();
-  const paths = fundPaths(fundName);
 
   const sessionConfig = config.schedule.sessions[sessionType];
   const focus = options?.focus ?? sessionConfig?.focus;
@@ -38,9 +27,6 @@ export async function runFundSession(
       `Session type '${sessionType}' not found in fund '${fundName}'`,
     );
   }
-
-  // Ensure MCP servers are configured for this fund
-  await writeMcpSettings(fundName);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -60,31 +46,33 @@ export async function runFundSession(
     `7. Log all trades in state/trade_journal.sqlite`,
   ].join("\n");
 
-  const claudePath = global.claude_path || "claude";
-  const model = config.claude.model || global.default_model || "sonnet";
+  const model = config.claude.model || undefined;
   const timeout = (sessionConfig?.max_duration_minutes ?? 15) * 60 * 1000;
 
   const startedAt = new Date().toISOString();
 
-  const result = await execFileAsync(
-    claudePath,
-    [
-      "--print",
-      "--project-dir", paths.root,
-      "--model", model,
-      "--max-turns", "50",
-      prompt,
-    ],
-    { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
-  );
+  const result = await runAgentQuery({
+    fundName,
+    prompt,
+    model,
+    maxTurns: 50,
+    timeoutMs: timeout,
+  });
 
-  const log: SessionLog = {
+  const log: SessionLogV2 = {
     fund: fundName,
     session_type: sessionType,
     started_at: startedAt,
     ended_at: new Date().toISOString(),
     trades_executed: 0,
-    summary: result.stdout.slice(0, 500),
+    summary: result.output.slice(0, 500),
+    cost_usd: result.cost_usd,
+    tokens_in: sumTokens(result.usage, "inputTokens"),
+    tokens_out: sumTokens(result.usage, "outputTokens"),
+    model_used: Object.keys(result.usage)[0],
+    num_turns: result.num_turns,
+    session_id: result.session_id,
+    status: result.status,
   };
 
   await writeSessionLog(fundName, log);
@@ -101,8 +89,6 @@ export async function runFundSessionWithSubAgents(
   sessionType: string,
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
-  const global = await loadGlobalConfig();
-  const paths = fundPaths(fundName);
 
   const sessionConfig = config.schedule.sessions[sessionType];
   if (!sessionConfig) {
@@ -111,23 +97,21 @@ export async function runFundSessionWithSubAgents(
     );
   }
 
-  await writeMcpSettings(fundName);
-
   const today = new Date().toISOString().split("T")[0];
   const startedAt = new Date().toISOString();
 
-  // Phase 1: Run sub-agents in parallel
+  // Run sub-agents in parallel via Agent SDK
   const agents = getDefaultSubAgents(fundName);
   const results = await runSubAgents(fundName, agents, {
     timeoutMinutes: 8,
-    model: config.claude.model || global.default_model || "sonnet",
+    model: config.claude.model || undefined,
   });
 
   // Save sub-agent analysis
   const analysisPath = await saveSubAgentAnalysis(fundName, results, sessionType);
   const combinedAnalysis = mergeSubAgentResults(results);
 
-  // Phase 2: Run main decision-making session with sub-agent context
+  // Phase 2: Run main decision-making session with sub-agent context (via SDK)
   const prompt = [
     `You are running a ${sessionType} session for fund '${fundName}'.`,
     ``,
@@ -151,35 +135,45 @@ export async function runFundSessionWithSubAgents(
     `8. Log all trades in state/trade_journal.sqlite`,
   ].join("\n");
 
-  const claudePath = global.claude_path || "claude";
-  const model = config.claude.model || global.default_model || "sonnet";
+  const model = config.claude.model || undefined;
   const timeout = (sessionConfig.max_duration_minutes ?? 15) * 60 * 1000;
 
-  const result = await execFileAsync(
-    claudePath,
-    [
-      "--print",
-      "--project-dir", paths.root,
-      "--model", model,
-      "--max-turns", "50",
-      prompt,
-    ],
-    { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
-  );
+  const result = await runAgentQuery({
+    fundName,
+    prompt,
+    model,
+    maxTurns: 50,
+    timeoutMs: timeout,
+  });
 
   const successCount = results.filter((r) => r.status === "success").length;
 
-  const log: SessionLog = {
+  const log: SessionLogV2 = {
     fund: fundName,
     session_type: `${sessionType}_parallel`,
     started_at: startedAt,
     ended_at: new Date().toISOString(),
     trades_executed: 0,
     analysis_file: analysisPath,
-    summary: `Sub-agents: ${successCount}/${results.length} OK. ${result.stdout.slice(0, 300)}`,
+    summary: `Sub-agents: ${successCount}/${results.length} OK. ${result.output.slice(0, 300)}`,
+    cost_usd: result.cost_usd,
+    tokens_in: sumTokens(result.usage, "inputTokens"),
+    tokens_out: sumTokens(result.usage, "outputTokens"),
+    model_used: Object.keys(result.usage)[0],
+    num_turns: result.num_turns,
+    session_id: result.session_id,
+    status: result.status,
   };
 
   await writeSessionLog(fundName, log);
+}
+
+/** Sum a token field across all models in usage */
+function sumTokens(
+  usage: Record<string, { inputTokens: number; outputTokens: number }>,
+  field: "inputTokens" | "outputTokens",
+): number {
+  return Object.values(usage).reduce((sum, u) => sum + u[field], 0);
 }
 
 // ── CLI Commands ───────────────────────────────────────────────
