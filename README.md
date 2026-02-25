@@ -117,15 +117,6 @@ fundx template export <fund> <file> Export fund config as template
 fundx template import <file>        Create fund from template
 ```
 
-### Configuration
-
-```
-fundx config show                   View global configuration
-fundx config set <key> <value>      Update config value
-fundx config broker                 Configure broker connection
-fundx config telegram               Configure Telegram bot
-```
-
 ### Gateway (Telegram)
 
 ```

@@ -92,22 +92,26 @@ Each Claude Code session:
 
 ```
 src/
-  index.ts       # CLI entry point — wires all commands via Commander.js
-  types.ts       # Zod schemas + inferred TypeScript types (single source of truth)
-  paths.ts       # ~/.fundx path constants and per-fund path helpers
-  config.ts      # Global config read/write (~/.fundx/config.yaml)
-  state.ts       # Per-fund state file CRUD (portfolio, tracker, session log)
-  template.ts    # Per-fund CLAUDE.md generation from fund_config.yaml
-  init.ts        # `fundx init` command — workspace setup wizard
-  fund.ts        # `fundx fund *` commands + fund CRUD logic
-  status.ts      # `fundx status` command — dashboard
-  agent.ts       # Claude Agent SDK wrapper — single entry point for all AI queries
-  session.ts     # `fundx session run` + session launcher + sub-agent integration
-  daemon.ts      # `fundx start/stop` + node-cron scheduler + gateway startup
-  gateway.ts     # Telegram bot + quick commands + free question routing
-  ask.ts         # `fundx ask` command — question answering + cross-fund analysis
-  subagent.ts    # Sub-agent parallel execution (macro, technical, sentiment, risk)
-  embeddings.ts  # Trade journal FTS5 indexing + similarity search
+  index.ts            # CLI entry point — wires all commands via Commander.js
+  types.ts            # Zod schemas + inferred TypeScript types (single source of truth)
+  paths.ts            # ~/.fundx path constants and per-fund path helpers
+  config.ts           # Global config read/write (~/.fundx/config.yaml)
+  state.ts            # Per-fund state file CRUD (portfolio, tracker, session log)
+  template.ts         # Per-fund CLAUDE.md generation from fund_config.yaml
+  init.ts             # `fundx init` command — workspace setup wizard
+  fund.ts             # `fundx fund *` commands + fund CRUD logic
+  status.ts           # `fundx status` command — dashboard
+  agent.ts            # Claude Agent SDK wrapper — single entry point for all AI queries
+  session.ts          # `fundx session run` + session launcher + sub-agent integration
+  daemon.ts           # `fundx start/stop` + node-cron scheduler + gateway startup
+  gateway.ts          # Telegram bot + quick commands + free question routing
+  ask.ts              # `fundx ask` command — question answering + cross-fund analysis
+  subagent.ts         # Sub-agent parallel execution (macro, technical, sentiment, risk)
+  embeddings.ts       # Trade journal FTS5 indexing + similarity search
+  journal.ts          # Trade journal SQLite CRUD (open, insert, query, summary)
+  alpaca-helpers.ts   # Shared Alpaca API helpers (credentials, fetch, orders)
+  sync.ts             # Portfolio sync from Alpaca broker
+  stoploss.ts         # Stop-loss monitoring and execution
   live-trading.ts     # Live trading mode with safety checks + CLI
   broker-adapter.ts   # Multi-broker adapter (Alpaca, IBKR, Binance)
   templates.ts        # Fund templates (export/import/builtin) + CLI
@@ -116,6 +120,10 @@ src/
   reports.ts          # Auto-reports (daily/weekly/monthly) + CLI
   correlation.ts      # Cross-fund correlation monitoring + CLI
   montecarlo.ts       # Monte Carlo runway/portfolio projections + CLI
+  logs.ts             # `fundx logs` command
+  portfolio-cmd.ts    # `fundx portfolio` command
+  trades-cmd.ts       # `fundx trades` command
+  performance-cmd.ts  # `fundx performance` command
   mcp/
     broker-alpaca.ts    # MCP server: Alpaca broker integration
     market-data.ts      # MCP server: market data provider
@@ -131,7 +139,7 @@ src/
 
 ### Configuration
 
-- Global config: `~/.fundx/config.yaml` (broker credentials, Telegram token, Claude path)
+- Global config: `~/.fundx/config.yaml` (broker credentials, Telegram token, default model)
 - Per-fund config: `~/.fundx/funds/<name>/fund_config.yaml` (objective, risk, universe, schedule, AI personality)
 - Credentials must NEVER be stored in per-fund configs or committed to git
 - The `.gitignore` already covers `.env` files — maintain this pattern

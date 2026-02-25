@@ -1,48 +1,6 @@
-import { loadGlobalConfig } from "./config.js";
-import { loadFundConfig } from "./fund.js";
 import { readPortfolio, writePortfolio } from "./state.js";
+import { getAlpacaCredentials, alpacaGet } from "./alpaca-helpers.js";
 import type { Portfolio } from "./types.js";
-
-// ── Alpaca API helpers ────────────────────────────────────────
-
-const ALPACA_PAPER_URL = "https://paper-api.alpaca.markets";
-const ALPACA_LIVE_URL = "https://api.alpaca.markets";
-
-interface AlpacaCredentials {
-  apiKey: string;
-  secretKey: string;
-  baseUrl: string;
-}
-
-async function getCredentials(fundName: string): Promise<AlpacaCredentials> {
-  const globalConfig = await loadGlobalConfig();
-  const fundConfig = await loadFundConfig(fundName);
-
-  const apiKey = globalConfig.broker.api_key;
-  const secretKey = globalConfig.broker.secret_key;
-  if (!apiKey || !secretKey) {
-    throw new Error("Broker API credentials not configured. Run 'fundx init' or set them in ~/.fundx/config.yaml");
-  }
-
-  const mode = fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
-  const baseUrl = mode === "live" ? ALPACA_LIVE_URL : ALPACA_PAPER_URL;
-
-  return { apiKey, secretKey, baseUrl };
-}
-
-async function alpacaGet(creds: AlpacaCredentials, path: string): Promise<unknown> {
-  const resp = await fetch(`${creds.baseUrl}${path}`, {
-    headers: {
-      "APCA-API-KEY-ID": creds.apiKey,
-      "APCA-API-SECRET-KEY": creds.secretKey,
-    },
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Alpaca API error ${resp.status}: ${text}`);
-  }
-  return resp.json();
-}
 
 // ── Sync Logic ────────────────────────────────────────────────
 
@@ -68,7 +26,7 @@ interface AlpacaPositionResponse {
  * Fetches current account and positions, updates portfolio.json.
  */
 export async function syncPortfolio(fundName: string): Promise<Portfolio> {
-  const creds = await getCredentials(fundName);
+  const creds = await getAlpacaCredentials(fundName);
 
   const [account, positions] = await Promise.all([
     alpacaGet(creds, "/v2/account") as Promise<AlpacaAccountResponse>,
