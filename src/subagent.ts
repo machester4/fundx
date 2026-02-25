@@ -1,19 +1,13 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { loadFundConfig } from "./fund.js";
-import { loadGlobalConfig } from "./config.js";
 import { fundPaths } from "./paths.js";
-import { writeMcpSettings } from "./mcp-config.js";
+import { runAgentQuery } from "./agent.js";
 import type { SubAgentConfig, SubAgentResult } from "./types.js";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Sub-agent parallel execution system.
  *
- * Launches multiple Claude Code instances in parallel, each focused on a
+ * Launches multiple Claude Agent SDK queries in parallel, each focused on a
  * specific analysis domain (macro, technical, sentiment, risk). Results are
  * collected and merged into a combined analysis document.
  */
@@ -107,48 +101,42 @@ export function getDefaultSubAgents(fundName: string): SubAgentConfig[] {
 }
 
 /**
- * Run a single sub-agent (Claude Code instance) and return its result.
+ * Run a single sub-agent via the Agent SDK and return its result.
  */
 async function runSingleSubAgent(
   fundName: string,
   agent: SubAgentConfig,
-  claudePath: string,
-  model: string,
+  model: string | undefined,
   timeout: number,
 ): Promise<SubAgentResult> {
-  const paths = fundPaths(fundName);
   const startedAt = new Date().toISOString();
 
   try {
-    const result = await execFileAsync(
-      claudePath,
-      [
-        "--print",
-        "--project-dir", paths.root,
-        "--model", model,
-        "--max-turns", String(agent.max_turns),
-        agent.prompt,
-      ],
-      { timeout, env: { ...process.env, ANTHROPIC_MODEL: model } },
-    );
+    const result = await runAgentQuery({
+      fundName,
+      prompt: agent.prompt,
+      model: agent.model ?? model,
+      maxTurns: agent.max_turns,
+      timeoutMs: timeout,
+      maxBudgetUsd: 2.0,
+    });
 
     return {
       type: agent.type,
       name: agent.name,
       started_at: startedAt,
       ended_at: new Date().toISOString(),
-      status: "success",
-      output: result.stdout,
+      status: result.status === "success" ? "success" : "error",
+      output: result.output,
+      error: result.error,
     };
   } catch (err) {
-    const isTimeout =
-      err instanceof Error && "killed" in err && (err as { killed?: boolean }).killed;
     return {
       type: agent.type,
       name: agent.name,
       started_at: startedAt,
       ended_at: new Date().toISOString(),
-      status: isTimeout ? "timeout" : "error",
+      status: "error",
       output: "",
       error: err instanceof Error ? err.message : String(err),
     };
@@ -157,7 +145,7 @@ async function runSingleSubAgent(
 
 /**
  * Run multiple sub-agents in parallel and collect results.
- * Each agent runs as an independent Claude Code instance.
+ * Each agent runs as an independent Agent SDK query.
  */
 export async function runSubAgents(
   fundName: string,
@@ -167,23 +155,11 @@ export async function runSubAgents(
     model?: string;
   },
 ): Promise<SubAgentResult[]> {
-  const globalConfig = await loadGlobalConfig();
-  const fundConfig = await loadFundConfig(fundName);
-
-  // Ensure MCP servers are configured
-  await writeMcpSettings(fundName);
-
-  const claudePath = globalConfig.claude_path || "claude";
-  const model =
-    options?.model ??
-    fundConfig.claude.model ??
-    globalConfig.default_model ??
-    "sonnet";
   const timeout = (options?.timeoutMinutes ?? 10) * 60 * 1000;
 
   // Launch all sub-agents in parallel
   const promises = agents.map((agent) =>
-    runSingleSubAgent(fundName, agent, claudePath, agent.model ?? model, timeout),
+    runSingleSubAgent(fundName, agent, options?.model, timeout),
   );
 
   const results = await Promise.allSettled(promises);
@@ -285,4 +261,3 @@ export async function saveSubAgentAnalysis(
 
   return filePath;
 }
-
