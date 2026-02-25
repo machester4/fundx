@@ -1,4 +1,4 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, AbortError } from "@anthropic-ai/claude-agent-sdk";
 import type {
   SDKMessage,
   SDKResultMessage,
@@ -43,7 +43,7 @@ export interface AgentQueryResult {
   /** Session ID (can be used for resumption) */
   session_id: string;
   /** Outcome status */
-  status: "success" | "error_max_turns" | "error_max_budget" | "error";
+  status: "success" | "error_max_turns" | "error_max_budget" | "timeout" | "error";
   /** Error message if status is not "success" */
   error?: string;
 }
@@ -60,8 +60,7 @@ interface McpStdioConfig {
 /**
  * Build MCP server configuration for a fund.
  *
- * Replaces `writeMcpSettings()` from mcp-config.ts — returns config
- * programmatically instead of writing .claude/settings.json to disk.
+ * Returns MCP server config programmatically for the Agent SDK query.
  */
 export async function buildMcpServers(
   fundName: string,
@@ -120,15 +119,15 @@ export async function buildMcpServers(
 /**
  * Run a Claude Agent SDK query scoped to a fund.
  *
- * This is the single function that replaces all `execFileAsync(claude, [...])`
- * calls across session.ts, subagent.ts, ask.ts, and gateway.ts.
+ * Single entry point for all autonomous Claude invocations across
+ * session.ts, subagent.ts, ask.ts, and gateway.ts.
  *
  * Key behaviors:
  * - Loads fund config + global config for model/MCP resolution
  * - Uses Claude Code preset system prompt + per-fund CLAUDE.md via settingSources
- * - Bypasses permissions for autonomous execution (matches --print CLI behavior)
+ * - Bypasses permissions for autonomous execution
  * - Tracks cost, tokens, and session ID in the result
- * - Supports timeout via AbortController
+ * - Supports timeout via AbortController (returns "timeout" status)
  */
 export async function runAgentQuery(
   options: AgentQueryOptions,
@@ -209,8 +208,13 @@ export async function runAgentQuery(
       }
     }
   } catch (err) {
-    status = "error";
-    error = err instanceof Error ? err.message : String(err);
+    if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+      status = "timeout";
+      error = "Query timed out";
+    } else {
+      status = "error";
+      error = err instanceof Error ? err.message : String(err);
+    }
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }

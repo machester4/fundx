@@ -59,7 +59,6 @@ export const initCommand = new Command("init")
       : undefined;
 
     const config: GlobalConfig = {
-      claude_path: "claude",
       default_model: defaultModel,
       timezone,
       broker: {

@@ -12,9 +12,6 @@ import {
 } from "./subagent.js";
 import type { SessionLogV2 } from "./types.js";
 
-// Re-export so existing consumers (gateway.ts) keep working until Phase 3
-export { writeMcpSettings } from "./mcp-config.js";
-
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
   fundName: string,

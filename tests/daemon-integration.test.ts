@@ -62,7 +62,6 @@ vi.mock("../src/stoploss.js", () => ({
 
 vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn().mockResolvedValue({
-    claude_path: "claude",
     default_model: "sonnet",
     timezone: "America/New_York",
     broker: { provider: "alpaca", api_key: "k", secret_key: "s", mode: "paper" },

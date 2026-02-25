@@ -126,7 +126,7 @@ async function runSingleSubAgent(
       name: agent.name,
       started_at: startedAt,
       ended_at: new Date().toISOString(),
-      status: result.status === "success" ? "success" : "error",
+      status: result.status === "success" ? "success" : result.status === "timeout" ? "timeout" : "error",
       output: result.output,
       error: result.error,
     };
