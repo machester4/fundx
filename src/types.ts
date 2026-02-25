@@ -160,7 +160,6 @@ export type Schedule = z.infer<typeof scheduleSchema>;
 // ── Global Config Schema ───────────────────────────────────────
 
 export const globalConfigSchema = z.object({
-  claude_path: z.string().default("claude"),
   default_model: z.string().default("sonnet"),
   max_budget_usd: z.number().positive().optional(),
   timezone: z.string().default("UTC"),

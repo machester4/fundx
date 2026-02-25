@@ -122,7 +122,6 @@ describe("E2E: init → create fund → run session", () => {
 
   it("Step 1: Initialize workspace with global config", async () => {
     const globalConfig: GlobalConfig = globalConfigSchema.parse({
-      claude_path: "claude",
       default_model: "sonnet",
       timezone: "America/New_York",
       broker: {
@@ -137,7 +136,6 @@ describe("E2E: init → create fund → run session", () => {
 
     // Verify config was written
     const loaded = await loadGlobalConfig();
-    expect(loaded.claude_path).toBe("claude");
     expect(loaded.default_model).toBe("sonnet");
     expect(loaded.timezone).toBe("America/New_York");
     expect(loaded.broker.provider).toBe("alpaca");
@@ -295,7 +293,6 @@ describe("E2E: init → create fund → run session", () => {
   it("Full flow: init → create → run session → verify state", async () => {
     // 1. Init workspace
     const globalConfig = globalConfigSchema.parse({
-      claude_path: "claude",
       default_model: "sonnet",
       timezone: "America/New_York",
       broker: { provider: "alpaca", mode: "paper" },
