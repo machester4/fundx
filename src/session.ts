@@ -103,7 +103,7 @@ export async function runFundSessionWithSubAgents(
   const today = new Date().toISOString().split("T")[0];
   const startedAt = new Date().toISOString();
 
-  // Phase 1: Run sub-agents in parallel (still uses child_process until Phase 2)
+  // Run sub-agents in parallel via Agent SDK
   const agents = getDefaultSubAgents(fundName);
   const results = await runSubAgents(fundName, agents, {
     timeoutMinutes: 8,
