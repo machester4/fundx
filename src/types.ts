@@ -254,110 +254,6 @@ export const tradeRecordSchema = z.object({
 
 export type TradeRecord = z.infer<typeof tradeRecordSchema>;
 
-export const sessionRecordSchema = z.object({
-  id: z.number().optional(),
-  timestamp: z.string(),
-  fund: z.string(),
-  session_type: z.string(),
-  duration_seconds: z.number().optional(),
-  trades_executed: z.number().default(0),
-  analysis_file: z.string().optional(),
-  summary: z.string().optional(),
-  claude_model: z.string().optional(),
-});
-
-export type SessionRecord = z.infer<typeof sessionRecordSchema>;
-
-// ── Alpaca API Schemas ────────────────────────────────────────
-
-export const alpacaAccountSchema = z.object({
-  id: z.string(),
-  account_number: z.string(),
-  status: z.string(),
-  currency: z.string(),
-  cash: z.string(),
-  portfolio_value: z.string(),
-  buying_power: z.string(),
-  equity: z.string(),
-  last_equity: z.string(),
-  long_market_value: z.string(),
-  short_market_value: z.string(),
-  daytrade_count: z.number(),
-  pattern_day_trader: z.boolean(),
-});
-
-export type AlpacaAccount = z.infer<typeof alpacaAccountSchema>;
-
-export const alpacaPositionSchema = z.object({
-  asset_id: z.string(),
-  symbol: z.string(),
-  exchange: z.string(),
-  asset_class: z.string(),
-  avg_entry_price: z.string(),
-  qty: z.string(),
-  side: z.string(),
-  market_value: z.string(),
-  cost_basis: z.string(),
-  unrealized_pl: z.string(),
-  unrealized_plpc: z.string(),
-  current_price: z.string(),
-  lastday_price: z.string(),
-  change_today: z.string(),
-});
-
-export type AlpacaPosition = z.infer<typeof alpacaPositionSchema>;
-
-export const alpacaOrderSchema = z.object({
-  id: z.string(),
-  client_order_id: z.string(),
-  created_at: z.string(),
-  updated_at: z.string().optional(),
-  submitted_at: z.string().optional(),
-  filled_at: z.string().nullable().optional(),
-  expired_at: z.string().nullable().optional(),
-  canceled_at: z.string().nullable().optional(),
-  asset_id: z.string(),
-  symbol: z.string(),
-  asset_class: z.string(),
-  qty: z.string().nullable().optional(),
-  filled_qty: z.string(),
-  type: z.string(),
-  side: z.string(),
-  time_in_force: z.string(),
-  limit_price: z.string().nullable().optional(),
-  stop_price: z.string().nullable().optional(),
-  filled_avg_price: z.string().nullable().optional(),
-  status: z.string(),
-  order_class: z.string().optional(),
-});
-
-export type AlpacaOrder = z.infer<typeof alpacaOrderSchema>;
-
-export const alpacaBarSchema = z.object({
-  t: z.string(),
-  o: z.number(),
-  h: z.number(),
-  l: z.number(),
-  c: z.number(),
-  v: z.number(),
-  n: z.number().optional(),
-  vw: z.number().optional(),
-});
-
-export type AlpacaBar = z.infer<typeof alpacaBarSchema>;
-
-export const alpacaQuoteSchema = z.object({
-  t: z.string().optional(),
-  ap: z.number(),
-  as: z.number(),
-  bp: z.number(),
-  bs: z.number(),
-  ax: z.string().optional(),
-  bx: z.string().optional(),
-});
-
-export type AlpacaQuote = z.infer<typeof alpacaQuoteSchema>;
-
 // ── Telegram Notification Schemas ─────────────────────────────
 
 export const notificationPrioritySchema = z.enum(["low", "normal", "critical"]);
@@ -480,18 +376,6 @@ export const brokerCapabilitiesSchema = z.object({
 
 export type BrokerCapabilities = z.infer<typeof brokerCapabilitiesSchema>;
 
-export const brokerAdapterConfigSchema = z.object({
-  provider: z.string(),
-  display_name: z.string(),
-  capabilities: brokerCapabilitiesSchema,
-  api_base_url: z.string().optional(),
-  paper_url: z.string().optional(),
-  live_url: z.string().optional(),
-  credentials: z.record(z.string(), z.string()).default({}),
-});
-
-export type BrokerAdapterConfig = z.infer<typeof brokerAdapterConfigSchema>;
-
 // ── Phase 5: Correlation Schema ──────────────────────────────
 
 export const correlationEntrySchema = z.object({
@@ -540,21 +424,6 @@ export const monteCarloResultSchema = z.object({
 
 export type MonteCarloResult = z.infer<typeof monteCarloResultSchema>;
 
-// ── Phase 5: Auto-Report Schema ──────────────────────────────
-
-export const autoReportConfigSchema = z.object({
-  daily: z.boolean().default(true),
-  weekly: z.boolean().default(true),
-  monthly: z.boolean().default(true),
-  daily_time: z.string().default("18:30"),
-  weekly_day: z.enum(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]).default("FRI"),
-  weekly_time: z.string().default("19:00"),
-  monthly_day: z.number().min(1).max(28).default(1),
-  monthly_time: z.string().default("19:00"),
-});
-
-export type AutoReportConfig = z.infer<typeof autoReportConfigSchema>;
-
 // ── Phase 6: Agent SDK Schemas ──────────────────────────────
 
 /** Extended session log with SDK cost/token metadata */
@@ -572,20 +441,3 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
 
-/** Structured signal output for sub-agents (replaces regex parsing) */
-export const agentSignalSchema = z.object({
-  signal: z.enum(["bullish", "neutral", "bearish"]),
-  confidence: z.enum(["low", "medium", "high"]),
-  key_factors: z.array(z.string()).max(5),
-  summary: z.string(),
-});
-
-export type AgentSignal = z.infer<typeof agentSignalSchema>;
-
-/** Extended sub-agent result with cost tracking and typed signal */
-export const subAgentResultV2Schema = subAgentResultSchema.extend({
-  cost_usd: z.number().optional(),
-  signal: agentSignalSchema.optional(),
-});
-
-export type SubAgentResultV2 = z.infer<typeof subAgentResultV2Schema>;
