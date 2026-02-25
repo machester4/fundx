@@ -162,6 +162,7 @@ export type Schedule = z.infer<typeof scheduleSchema>;
 export const globalConfigSchema = z.object({
   claude_path: z.string().default("claude"),
   default_model: z.string().default("sonnet"),
+  max_budget_usd: z.number().positive().optional(),
   timezone: z.string().default("UTC"),
   broker: z
     .object({
@@ -554,3 +555,38 @@ export const autoReportConfigSchema = z.object({
 });
 
 export type AutoReportConfig = z.infer<typeof autoReportConfigSchema>;
+
+// ── Phase 6: Agent SDK Schemas ──────────────────────────────
+
+/** Extended session log with SDK cost/token metadata */
+export const sessionLogV2Schema = sessionLogSchema.extend({
+  cost_usd: z.number().optional(),
+  tokens_in: z.number().optional(),
+  tokens_out: z.number().optional(),
+  model_used: z.string().optional(),
+  num_turns: z.number().optional(),
+  session_id: z.string().optional(),
+  status: z
+    .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout"])
+    .optional(),
+});
+
+export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
+
+/** Structured signal output for sub-agents (replaces regex parsing) */
+export const agentSignalSchema = z.object({
+  signal: z.enum(["bullish", "neutral", "bearish"]),
+  confidence: z.enum(["low", "medium", "high"]),
+  key_factors: z.array(z.string()).max(5),
+  summary: z.string(),
+});
+
+export type AgentSignal = z.infer<typeof agentSignalSchema>;
+
+/** Extended sub-agent result with cost tracking and typed signal */
+export const subAgentResultV2Schema = subAgentResultSchema.extend({
+  cost_usd: z.number().optional(),
+  signal: agentSignalSchema.optional(),
+});
+
+export type SubAgentResultV2 = z.infer<typeof subAgentResultV2Schema>;
