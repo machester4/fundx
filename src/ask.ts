@@ -1,17 +1,11 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import { loadFundConfig, listFundNames } from "./fund.js";
-import { loadGlobalConfig } from "./config.js";
 import { readPortfolio, readTracker } from "./state.js";
-import { fundPaths } from "./paths.js";
-import { writeMcpSettings } from "./session.js";
+import { runAgentQuery } from "./agent.js";
 import { openJournal, getTradeSummary } from "./journal.js";
 import { searchTrades, getTradeContextSummary } from "./embeddings.js";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * `fundx ask` — Ask questions about your funds.
@@ -107,12 +101,12 @@ async function buildFundContext(fundName: string): Promise<string> {
 /** Search trade history for relevant trades */
 function searchTradeHistory(
   fundName: string,
-  query: string,
+  queryText: string,
 ): string {
   try {
     const db = openJournal(fundName);
     try {
-      const results = searchTrades(db, query, fundName, 10);
+      const results = searchTrades(db, queryText, fundName, 10);
       if (results.length === 0) return "";
 
       const lines: string[] = [`### Relevant Trades from ${fundName}\n`];
@@ -140,10 +134,6 @@ async function runAsk(
   question: string,
   options: AskOptions,
 ): Promise<void> {
-  const globalConfig = await loadGlobalConfig();
-  const claudePath = globalConfig.claude_path || "claude";
-  const model = options.model ?? globalConfig.default_model ?? "sonnet";
-
   const allFunds = await listFundNames();
   if (allFunds.length === 0) {
     console.log(
@@ -204,24 +194,20 @@ async function runAsk(
     `If you need more data, use the MCP market-data tools.`,
   ].join("\n");
 
-  // Use the first fund's project dir (or a temp one for cross-fund)
-  const projectDir = fundPaths(targetFunds[0]).root;
-  await writeMcpSettings(targetFunds[0]);
-
-  const result = await execFileAsync(
-    claudePath,
-    [
-      "--print",
-      "--project-dir", projectDir,
-      "--model", model,
-      "--max-turns", "30",
-      prompt,
-    ],
-    { timeout: 5 * 60 * 1000, env: { ...process.env, ANTHROPIC_MODEL: model } },
-  );
+  const result = await runAgentQuery({
+    fundName: targetFunds[0],
+    prompt,
+    model: options.model,
+    maxTurns: 30,
+    timeoutMs: 5 * 60 * 1000,
+    maxBudgetUsd: 2.0,
+  });
 
   console.log();
-  console.log(result.stdout);
+  console.log(result.output);
+  console.log(
+    chalk.dim(`\n  Cost: $${result.cost_usd.toFixed(4)} | Turns: ${result.num_turns}`),
+  );
 }
 
 // ── CLI Command ───────────────────────────────────────────────
