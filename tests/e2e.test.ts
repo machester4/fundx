@@ -4,9 +4,9 @@ import { homedir } from "node:os";
 
 /**
  * End-to-end integration test for the core flow:
- * init workspace → create fund → verify state → run session (mocked Claude)
+ * init workspace → create fund → verify state → run session (mocked SDK)
  *
- * We mock the filesystem and child_process to avoid side effects,
+ * We mock the filesystem and Agent SDK to avoid side effects,
  * but exercise the real business logic end-to-end.
  */
 
@@ -82,20 +82,21 @@ vi.mock("node:fs", () => ({
   }),
 }));
 
-vi.mock("node:child_process", () => ({
-  execFile: vi.fn(
-    (
-      _cmd: string,
-      _args: string[],
-      _opts: unknown,
-      cb: (err: Error | null, result: { stdout: string; stderr: string }) => void,
-    ) => {
-      cb(null, {
-        stdout: "Session completed. Analyzed market conditions. No trades executed.",
-        stderr: "",
-      });
-    },
-  ),
+// Mock the Agent SDK wrapper instead of child_process
+vi.mock("../src/agent.js", () => ({
+  runAgentQuery: vi.fn(async () => ({
+    output: "Session completed. Analyzed market conditions. No trades executed.",
+    cost_usd: 0.0123,
+    duration_ms: 5000,
+    num_turns: 3,
+    usage: { "claude-sonnet-4-6": { inputTokens: 1000, outputTokens: 500, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, webSearchRequests: 0, costUSD: 0.0123, contextWindow: 200000, maxOutputTokens: 16384 } },
+    session_id: "test-session-id",
+    status: "success",
+  })),
+  buildMcpServers: vi.fn(async () => ({
+    "broker-alpaca": { command: "node", args: ["broker-alpaca.js"], env: {} },
+    "market-data": { command: "node", args: ["market-data.js"], env: {} },
+  })),
 }));
 
 // Import after mocks are set up
@@ -336,7 +337,7 @@ describe("E2E: init → create fund → run session", () => {
     const names = await listFundNames();
     expect(names).toContain("growth-fund");
 
-    // 4. Actually run a session (uses mocked child_process.execFile)
+    // 4. Run a session (uses mocked Agent SDK runAgentQuery)
     await runFundSession("growth-fund", "pre_market");
 
     // 5. Verify session log was written by runFundSession
@@ -361,12 +362,5 @@ describe("E2E: init → create fund → run session", () => {
     const loaded = await loadFundConfig("growth-fund");
     expect(loaded.fund.display_name).toBe("Growth Fund");
     expect(loaded.objective.type).toBe("growth");
-
-    // 8. Verify MCP settings were written
-    const settingsPath = `${FUNDS_DIR}/growth-fund/.claude/settings.json`;
-    expect(fileSystem.has(settingsPath)).toBe(true);
-    const settings = JSON.parse(fileSystem.get(settingsPath)!);
-    expect(settings.mcpServers).toHaveProperty("broker-alpaca");
-    expect(settings.mcpServers).toHaveProperty("market-data");
   });
 });
