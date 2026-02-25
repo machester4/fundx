@@ -69,7 +69,7 @@ Each Claude Code session:
 | State DB     | SQLite (better-sqlite3)                 |
 | Daemon       | node-cron                               |
 | Telegram     | grammy (Phase 3)                        |
-| AI Engine    | Claude Code (CLI via child_process)     |
+| AI Engine    | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP Servers  | TypeScript (Phase 2+)                   |
 | Broker       | Alpaca API (Phase 2)                    |
 | Build        | tsup (prod) / tsx (dev)                 |
@@ -101,7 +101,8 @@ src/
   init.ts        # `fundx init` command — workspace setup wizard
   fund.ts        # `fundx fund *` commands + fund CRUD logic
   status.ts      # `fundx status` command — dashboard
-  session.ts     # `fundx session run` + Claude Code launcher + sub-agent integration
+  agent.ts       # Claude Agent SDK wrapper — single entry point for all AI queries
+  session.ts     # `fundx session run` + session launcher + sub-agent integration
   daemon.ts      # `fundx start/stop` + node-cron scheduler + gateway startup
   gateway.ts     # Telegram bot + quick commands + free question routing
   ask.ts         # `fundx ask` command — question answering + cross-fund analysis
