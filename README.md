@@ -1,13 +1,13 @@
 # FundX — Autonomous AI Fund Manager
 
-> **CLI-first, goal-oriented, multi-fund autonomous investment platform powered by Claude Code.**
+> **CLI-first, goal-oriented, multi-fund autonomous investment platform powered by the Claude Agent SDK.**
 
-FundX lets you define investment funds with **real-life financial objectives** and delegates analysis, decision-making, and trade execution to Claude Code running autonomously via scheduled sessions.
+FundX lets you define investment funds with **real-life financial objectives** and delegates analysis, decision-making, and trade execution to Claude running autonomously via scheduled sessions.
 
 ## What Makes FundX Different
 
 - **Goal-oriented, not return-oriented.** You say "I have $30k, I spend $2k/month, give me 18 months of runway" — not "beat the S&P."
-- **Claude Code as artisan.** Each session, Claude invents analysis tools, writes scripts, searches the web, and makes decisions — not limited to pre-defined pipelines.
+- **Claude as artisan.** Each session, Claude invents analysis tools, writes scripts, searches the web, and makes decisions — not limited to pre-defined pipelines.
 - **Multi-fund architecture.** Run a conservative runway fund, an aggressive growth fund, and a BTC accumulation fund simultaneously, each with its own AI personality.
 - **Bidirectional Telegram.** Get trade alerts AND wake Claude anytime to ask questions about positions or past analyses.
 - **Paper first, live later.** Every fund starts in paper mode. Live trading requires explicit confirmation and safety checks.
@@ -15,7 +15,7 @@ FundX lets you define investment funds with **real-life financial objectives** a
 ## Prerequisites
 
 - **Node.js** >= 20
-- **Claude Code** CLI installed and configured
+- **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
 - **pnpm** (recommended) or npm
 - **Alpaca** account for paper/live trading (optional for setup)
 - **Telegram** bot token for notifications (optional)
@@ -144,12 +144,12 @@ fundx live status <fund>            View live trading status
 ## Architecture
 
 ```
-CLI (fundx) --> Daemon/Scheduler --> Claude Code Session --> MCP Servers
+CLI (fundx) --> Daemon/Scheduler --> Claude Agent SDK Session --> MCP Servers
                      |                      |
                Telegram Gateway      Persistent State (per fund)
 ```
 
-Each Claude Code session:
+Each Claude session:
 1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
 2. Reads persistent state (portfolio, journal, past analyses)
 3. Creates and executes analysis scripts as needed
@@ -173,8 +173,7 @@ Each Claude Code session:
 │       │                           # trade_journal.sqlite, session_log.json
 │       ├── analysis/               # Session analysis archive
 │       ├── scripts/                # Reusable scripts Claude created
-│       ├── reports/                # daily/, weekly/, monthly/
-│       └── .claude/                # Claude Code per-fund config
+│       └── reports/                # daily/, weekly/, monthly/
 ├── shared/
 │   ├── mcp-servers/                # MCP server configs
 │   └── templates/                  # Fund templates
@@ -203,7 +202,7 @@ FundX supports multiple brokers via a unified adapter:
 
 ### Global Config (`~/.fundx/config.yaml`)
 
-Created by `fundx init`. Stores broker credentials, Telegram token, Claude Code path, and default settings. Credentials are **never** stored in per-fund configs.
+Created by `fundx init`. Stores broker credentials, Telegram token, and default settings. Credentials are **never** stored in per-fund configs.
 
 ### Fund Config (`fund_config.yaml`)
 
@@ -236,7 +235,7 @@ See the [full schema example](https://github.com/machester4/fundx#fund-configura
 
 ### Free Questions (wakes Claude)
 
-Any non-command message wakes Claude Code with full fund context:
+Any non-command message wakes Claude with full fund context:
 
 ```
 You: "why did you sell GDXJ yesterday?"
@@ -260,7 +259,7 @@ Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and ru
 | State DB | SQLite (better-sqlite3) |
 | Daemon | node-cron |
 | Telegram | grammy |
-| AI Engine | Claude Code (CLI) |
+| AI Engine | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP | @modelcontextprotocol/sdk |
 | Broker | Alpaca API |
 | Build | tsup (prod) / tsx (dev) |
