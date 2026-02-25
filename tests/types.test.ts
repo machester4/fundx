@@ -84,7 +84,6 @@ describe("fundConfigSchema", () => {
 describe("globalConfigSchema", () => {
   it("applies sensible defaults", () => {
     const result = globalConfigSchema.parse({});
-    expect(result.claude_path).toBe("claude");
     expect(result.default_model).toBe("sonnet");
     expect(result.timezone).toBe("UTC");
     expect(result.broker.provider).toBe("manual");
@@ -93,7 +92,6 @@ describe("globalConfigSchema", () => {
 
   it("parses a full config", () => {
     const result = globalConfigSchema.parse({
-      claude_path: "/usr/local/bin/claude",
       default_model: "opus",
       timezone: "America/New_York",
       broker: {
@@ -107,7 +105,6 @@ describe("globalConfigSchema", () => {
         chat_id: "456",
       },
     });
-    expect(result.claude_path).toBe("/usr/local/bin/claude");
     expect(result.default_model).toBe("opus");
     expect(result.broker.api_key).toBe("test-key");
     expect(result.telegram.bot_token).toBe("123:ABC");
