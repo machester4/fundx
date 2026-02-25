@@ -133,10 +133,18 @@ describe("readSessionLog", () => {
   });
 
   it("returns null when file does not exist", async () => {
-    mockedReadFile.mockRejectedValue(new Error("ENOENT"));
+    const err = new Error("ENOENT: no such file or directory") as NodeJS.ErrnoException;
+    err.code = "ENOENT";
+    mockedReadFile.mockRejectedValue(err);
 
     const result = await readSessionLog(FUND);
     expect(result).toBeNull();
+  });
+
+  it("throws on corrupted JSON", async () => {
+    mockedReadFile.mockResolvedValue("not valid json {{{");
+
+    await expect(readSessionLog(FUND)).rejects.toThrow();
   });
 });
 

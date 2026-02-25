@@ -8,6 +8,7 @@ export function openJournal(fundName: string): Database.Database {
   const paths = fundPaths(fundName);
   const db = new Database(paths.state.journal);
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
   ensureSchema(db);
   ensureEmbeddingSchema(db);

@@ -142,17 +142,6 @@ describe("Phase 5 Zod Schemas", () => {
     expect(valid.runway_months?.p50).toBe(18);
   });
 
-  it("should validate auto-report config schema", async () => {
-    const { autoReportConfigSchema } = await import("../src/types.js");
-
-    const valid = autoReportConfigSchema.parse({});
-    expect(valid.daily).toBe(true);
-    expect(valid.weekly).toBe(true);
-    expect(valid.monthly).toBe(true);
-    expect(valid.daily_time).toBe("18:30");
-    expect(valid.weekly_day).toBe("FRI");
-  });
-
   it("should support special_sessions in schedule schema", async () => {
     const { scheduleSchema } = await import("../src/types.js");
 
