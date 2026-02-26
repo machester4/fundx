@@ -16,7 +16,7 @@ FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform
 - **Session**: A Claude Code invocation scoped to a single fund. Sessions run on a schedule (pre-market, mid-session, post-market) or on-demand via CLI/Telegram.
 - **Daemon/Scheduler**: Background process that checks schedules and launches Claude Code sessions for each active fund.
 - **Telegram Gateway**: Always-on bot for notifications (trade alerts, digests) and bidirectional interaction (user questions wake Claude).
-- **MCP Servers**: Broker integrations (Alpaca, IBKR, Binance), market data, news/sentiment, and Telegram notifications.
+- **MCP Servers**: Broker integrations (Alpaca), market data, news/sentiment, and Telegram notifications. IBKR and Binance adapters are planned.
 
 ### High-Level Flow
 
@@ -113,7 +113,7 @@ src/
   sync.ts             # Portfolio sync from Alpaca broker
   stoploss.ts         # Stop-loss monitoring and execution
   live-trading.ts     # Live trading mode with safety checks + CLI
-  broker-adapter.ts   # Multi-broker adapter (Alpaca, IBKR, Binance)
+  broker-adapter.ts   # Broker adapter interface + Alpaca implementation (IBKR/Binance planned)
   templates.ts        # Fund templates (export/import/builtin) + CLI
   special-sessions.ts # Event-triggered sessions (FOMC, OpEx, etc.) + CLI
   chart.ts            # Terminal-based performance charts + CLI
@@ -222,7 +222,7 @@ Development follows 6 phases. When implementing, follow this order:
 
 ### Phase 5 — Advanced — COMPLETE
 - [x] Live trading mode with safety checks and double confirmation (`live-trading.ts`)
-- [x] Multi-broker adapter system: Alpaca, IBKR, Binance (`broker-adapter.ts`)
+- [x] Broker adapter interface + Alpaca implementation (`broker-adapter.ts`); IBKR/Binance planned
 - [x] Fund templates: built-in (runway, growth, accumulation, income), export/import (`templates.ts`)
 - [x] `fundx fund clone` — clone existing fund configuration
 - [x] Special sessions: FOMC, OpEx, CPI, NFP, Earnings Season triggers (`special-sessions.ts`)
