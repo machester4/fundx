@@ -3,6 +3,7 @@ import type {
   SDKMessage,
   SDKResultMessage,
   ModelUsage,
+  AgentDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./fund.js";
@@ -26,6 +27,8 @@ export interface AgentQueryOptions {
   timeoutMs?: number;
   /** Callback for each SDK message (streaming progress, logging, etc.) */
   onMessage?: (message: SDKMessage) => void;
+  /** Sub-agent definitions available via the Task tool */
+  agents?: Record<string, AgentDefinition>;
 }
 
 /** Result from a Claude Agent SDK query */
@@ -174,6 +177,7 @@ export async function runAgentQuery(
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         abortController,
+        agents: options.agents,
       },
     })) {
       // Forward to optional callback

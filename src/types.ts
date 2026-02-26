@@ -275,6 +275,7 @@ export const subAgentTypeSchema = z.enum([
   "macro",
   "technical",
   "sentiment",
+  "news",
   "risk",
   "custom",
 ]);
@@ -440,4 +441,3 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
 });
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
-
