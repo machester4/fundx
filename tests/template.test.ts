@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(() => false),
 }));
 
 import { writeFile } from "node:fs/promises";
@@ -105,5 +110,29 @@ describe("generateFundClaudeMd", () => {
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
     expect(content).toContain("SPY, QQQ");
+  });
+
+  it("includes Advanced Analysis Skills section", async () => {
+    const config = makeConfig();
+    await generateFundClaudeMd(config);
+
+    const content = mockedWriteFile.mock.calls[0][1] as string;
+    expect(content).toContain("## Advanced Analysis Skills");
+    expect(content).toContain("Investment Debate");
+    expect(content).toContain("Risk Assessment Matrix");
+    expect(content).toContain("at your discretion");
+  });
+
+  it("places skills section between Decision Framework and Session Protocol", async () => {
+    const config = makeConfig();
+    await generateFundClaudeMd(config);
+
+    const content = mockedWriteFile.mock.calls[0][1] as string;
+    const frameworkIdx = content.indexOf("## Decision Framework");
+    const skillsIdx = content.indexOf("## Advanced Analysis Skills");
+    const protocolIdx = content.indexOf("## Session Protocol");
+
+    expect(frameworkIdx).toBeLessThan(skillsIdx);
+    expect(skillsIdx).toBeLessThan(protocolIdx);
   });
 });

@@ -9,14 +9,20 @@ import {
   getDefaultSubAgents,
   mergeSubAgentResults,
   saveSubAgentAnalysis,
+  buildAnalystAgents,
 } from "./subagent.js";
 import type { SessionLogV2 } from "./types.js";
+
+/** Default max turns per session query */
+const DEFAULT_MAX_TURNS = 50;
+/** Default session timeout in minutes when not configured */
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
 
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
   fundName: string,
   sessionType: string,
-  options?: { focus?: string },
+  options?: { focus?: string; useDebateSkills?: boolean },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
 
@@ -29,12 +35,22 @@ export async function runFundSession(
   }
 
   const today = new Date().toISOString().split("T")[0];
+  const agents = buildAnalystAgents(fundName);
 
   const prompt = [
     `You are running a ${sessionType} session for fund '${fundName}'.`,
     ``,
     `Focus: ${focus}`,
     ``,
+    ...(options?.useDebateSkills
+      ? [
+          `This session should prioritize thorough analysis. Before any trading decisions,`,
+          `apply your Investment Debate and Risk Assessment skills from your CLAUDE.md.`,
+          `Use your analyst sub-agents (via the Task tool) to gather data from multiple`,
+          `perspectives before making decisions.`,
+          ``,
+        ]
+      : []),
     `Start by reading your state files, then proceed with analysis`,
     `and actions as appropriate. Remember to:`,
     `1. Update state files after any changes`,
@@ -47,7 +63,7 @@ export async function runFundSession(
   ].join("\n");
 
   const model = config.claude.model || undefined;
-  const timeout = (sessionConfig?.max_duration_minutes ?? 15) * 60 * 1000;
+  const timeout = (sessionConfig?.max_duration_minutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
 
   const startedAt = new Date().toISOString();
 
@@ -55,8 +71,9 @@ export async function runFundSession(
     fundName,
     prompt,
     model,
-    maxTurns: 50,
+    maxTurns: DEFAULT_MAX_TURNS,
     timeoutMs: timeout,
+    agents,
   });
 
   const log: SessionLogV2 = {
@@ -136,13 +153,13 @@ export async function runFundSessionWithSubAgents(
   ].join("\n");
 
   const model = config.claude.model || undefined;
-  const timeout = (sessionConfig.max_duration_minutes ?? 15) * 60 * 1000;
+  const timeout = (sessionConfig.max_duration_minutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
 
   const result = await runAgentQuery({
     fundName,
     prompt,
     model,
-    maxTurns: 50,
+    maxTurns: DEFAULT_MAX_TURNS,
     timeoutMs: timeout,
   });
 
@@ -187,10 +204,15 @@ sessionCommand
   .description("Manually trigger a session")
   .argument("<fund>", "Fund name")
   .argument("<type>", "Session type (pre_market, mid_session, post_market)")
-  .option("-p, --parallel", "Use sub-agent parallel analysis")
-  .action(async (fund: string, type: string, opts: { parallel?: boolean }) => {
+  .option("-p, --parallel", "Use sub-agent parallel analysis (forced pre-gathering)")
+  .option("-d, --debate", "Prioritize thorough analysis using debate and risk skills")
+  .action(async (fund: string, type: string, opts: {
+    parallel?: boolean;
+    debate?: boolean;
+  }) => {
     const useParallel = opts.parallel ?? false;
-    const mode = useParallel ? "parallel" : "standard";
+    const useDebate = opts.debate ?? false;
+    const mode = useParallel ? "parallel" : useDebate ? "debate" : "standard";
     const spinner = ora(
       `Running ${type} session for '${fund}' (${mode})...`,
     ).start();
@@ -202,7 +224,7 @@ sessionCommand
           `Parallel session complete for '${fund}'.`,
         );
       } else {
-        await runFundSession(fund, type);
+        await runFundSession(fund, type, { useDebateSkills: useDebate });
         spinner.succeed(`Session complete for '${fund}'.`);
       }
     } catch (err) {
