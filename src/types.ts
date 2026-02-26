@@ -441,23 +441,3 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
 });
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
-
-// ── TradingAgents Debate Schemas (adapted from arXiv:2412.20138) ──
-
-/** Signal extracted from analyst reports */
-export const analystSignalSchema = z.enum(["bullish", "neutral", "bearish"]);
-export type AnalystSignal = z.infer<typeof analystSignalSchema>;
-
-/** Structured analyst report produced by each analyst agent */
-export const analystReportSchema = z.object({
-  analyst_type: subAgentTypeSchema,
-  analyst_name: z.string(),
-  signal: analystSignalSchema,
-  confidence: z.number().min(0).max(1),
-  summary: z.string(),
-  key_findings: z.array(z.string()),
-  raw_output: z.string(),
-});
-export type AnalystReport = z.infer<typeof analystReportSchema>;
-
-

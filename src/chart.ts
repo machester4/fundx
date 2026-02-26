@@ -223,8 +223,9 @@ chartCommand
         const tradesByDate = new Map<string, TradeRecord[]>();
         for (const t of trades) {
           const date = t.timestamp.split("T")[0];
-          if (!tradesByDate.has(date)) tradesByDate.set(date, []);
-          tradesByDate.get(date)!.push(t);
+          const group = tradesByDate.get(date) ?? [];
+          if (!tradesByDate.has(date)) tradesByDate.set(date, group);
+          group.push(t);
         }
 
         console.log(
@@ -236,7 +237,7 @@ chartCommand
         // Show trade volume sparkline
         const sortedDates = [...tradesByDate.keys()].sort();
         const volumes = sortedDates.map(
-          (d) => tradesByDate.get(d)!.length,
+          (d) => (tradesByDate.get(d) ?? []).length,
         );
 
         console.log(`  Activity: ${renderSparkline(volumes)}`);

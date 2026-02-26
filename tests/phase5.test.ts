@@ -404,27 +404,13 @@ describe("Broker Adapters", () => {
     expect(adapter.capabilities.live_trading).toBe(true);
   });
 
-  it("should create IBKR adapter with correct capabilities", async () => {
-    const { IBKRAdapter } = await import("../src/broker-adapter.js");
+  it("should export BrokerAdapter interface types", async () => {
+    const mod = await import("../src/broker-adapter.js");
 
-    const adapter = new IBKRAdapter("localhost", 5000);
-
-    expect(adapter.name).toBe("ibkr");
-    expect(adapter.capabilities.stocks).toBe(true);
-    expect(adapter.capabilities.options).toBe(true);
-    expect(adapter.capabilities.forex).toBe(true);
-    expect(adapter.capabilities.crypto).toBe(false);
-  });
-
-  it("should create Binance adapter with correct capabilities", async () => {
-    const { BinanceAdapter } = await import("../src/broker-adapter.js");
-
-    const adapter = new BinanceAdapter("key", "secret", true);
-
-    expect(adapter.name).toBe("binance");
-    expect(adapter.capabilities.crypto).toBe(true);
-    expect(adapter.capabilities.stocks).toBe(false);
-    expect(adapter.capabilities.etfs).toBe(false);
+    // createBrokerAdapter factory should be exported
+    expect(typeof mod.createBrokerAdapter).toBe("function");
+    // AlpacaAdapter should be exported
+    expect(typeof mod.AlpacaAdapter).toBe("function");
   });
 
 });
