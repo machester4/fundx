@@ -125,7 +125,7 @@ function searchTradeHistory(
       db.close();
     }
   } catch {
-    return "";
+    return ""; // Journal may not exist yet
   }
 }
 

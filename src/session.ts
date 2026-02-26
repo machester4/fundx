@@ -13,6 +13,11 @@ import {
 } from "./subagent.js";
 import type { SessionLogV2 } from "./types.js";
 
+/** Default max turns per session query */
+const DEFAULT_MAX_TURNS = 50;
+/** Default session timeout in minutes when not configured */
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
+
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
   fundName: string,
@@ -58,7 +63,7 @@ export async function runFundSession(
   ].join("\n");
 
   const model = config.claude.model || undefined;
-  const timeout = (sessionConfig?.max_duration_minutes ?? 15) * 60 * 1000;
+  const timeout = (sessionConfig?.max_duration_minutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
 
   const startedAt = new Date().toISOString();
 
@@ -66,7 +71,7 @@ export async function runFundSession(
     fundName,
     prompt,
     model,
-    maxTurns: 50,
+    maxTurns: DEFAULT_MAX_TURNS,
     timeoutMs: timeout,
     agents,
   });
@@ -148,13 +153,13 @@ export async function runFundSessionWithSubAgents(
   ].join("\n");
 
   const model = config.claude.model || undefined;
-  const timeout = (sessionConfig.max_duration_minutes ?? 15) * 60 * 1000;
+  const timeout = (sessionConfig.max_duration_minutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
 
   const result = await runAgentQuery({
     fundName,
     prompt,
     model,
-    maxTurns: 50,
+    maxTurns: DEFAULT_MAX_TURNS,
     timeoutMs: timeout,
   });
 

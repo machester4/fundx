@@ -10,6 +10,9 @@ import { openJournal, getTradeSummary } from "./journal.js";
 import { fundPaths, WORKSPACE } from "./paths.js";
 import type { LiveTradingConfirmation } from "./types.js";
 
+/** Minimum paper trades required before allowing live mode */
+const MIN_PAPER_TRADES = 5;
+
 // ── Safety Checks ────────────────────────────────────────────
 
 interface SafetyCheckResult {
@@ -84,10 +87,9 @@ export async function runSafetyChecks(
     const db = openJournal(fundName);
     try {
       const summary = getTradeSummary(db, fundName);
-      const minTrades = 5;
       checks.push({
-        name: `Minimum trade history (>=${minTrades})`,
-        passed: summary.total_trades >= minTrades,
+        name: `Minimum trade history (>=${MIN_PAPER_TRADES})`,
+        passed: summary.total_trades >= MIN_PAPER_TRADES,
         detail: `${summary.total_trades} closed trades recorded`,
       });
     } finally {
@@ -95,7 +97,7 @@ export async function runSafetyChecks(
     }
   } catch {
     checks.push({
-      name: "Minimum trade history (>=5)",
+      name: `Minimum trade history (>=${MIN_PAPER_TRADES})`,
       passed: false,
       detail: "No trade journal found",
     });

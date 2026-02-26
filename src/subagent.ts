@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { fundPaths } from "./paths.js";
 import { runAgentQuery } from "./agent.js";
-import type { SubAgentConfig, SubAgentResult, AnalystReport } from "./types.js";
+import type { SubAgentConfig, SubAgentResult } from "./types.js";
 
 /**
  * Sub-agent parallel execution system.
@@ -421,78 +421,3 @@ export function buildAnalystAgents(
   };
 }
 
-// ── Analyst Report Parsing (moved from debate.ts) ─────────────
-
-/**
- * Parse structured analyst reports from sub-agent raw outputs.
- * Extracts signal, confidence, and key findings from markdown output.
- */
-export function parseAnalystReports(results: SubAgentResult[]): AnalystReport[] {
-  return results
-    .filter((r) => r.status === "success")
-    .map((r) => {
-      const signalMatch = r.output.match(
-        /(?:MACRO_SIGNAL|TECHNICAL_SIGNAL|SENTIMENT_SIGNAL|NEWS_SIGNAL|RISK_LEVEL):\s*(\w+)/i,
-      );
-      const rawSignal = signalMatch?.[1]?.toLowerCase() ?? "neutral";
-      const signal =
-        rawSignal === "bullish" || rawSignal === "bearish" ? rawSignal : "neutral";
-
-      const confidenceMatch = r.output.match(/CONFIDENCE:\s*([\d.]+)/i);
-      const confidence = confidenceMatch
-        ? Math.min(1, Math.max(0, parseFloat(confidenceMatch[1])))
-        : 0.5;
-
-      const findingsMatch = r.output.match(
-        /KEY_FINDINGS:\s*\n((?:[-*]\s+.+\n?)+)/i,
-      );
-      const keyFindings = findingsMatch
-        ? findingsMatch[1]
-            .split("\n")
-            .map((l) => l.replace(/^[-*]\s+/, "").trim())
-            .filter(Boolean)
-        : [];
-
-      const summaryMatch = r.output.match(/SUMMARY:\s*(.+?)(?:\n\n|\n[A-Z_]+:)/s);
-      const summary = summaryMatch?.[1]?.trim() ?? r.output.slice(0, 500);
-
-      return {
-        analyst_type: r.type,
-        analyst_name: r.name,
-        signal: signal as "bullish" | "neutral" | "bearish",
-        confidence,
-        summary,
-        key_findings: keyFindings,
-        raw_output: r.output,
-      };
-    });
-}
-
-/**
- * Format analyst reports as a structured context string for prompts.
- */
-export function formatAnalystReportsForPrompt(reports: AnalystReport[]): string {
-  const sections: string[] = ["## Analyst Team Reports\n"];
-
-  for (const r of reports) {
-    sections.push(`### ${r.analyst_name} (${r.analyst_type})`);
-    sections.push(`Signal: **${r.signal}** (confidence: ${(r.confidence * 100).toFixed(0)}%)`);
-    sections.push(`Summary: ${r.summary}`);
-    if (r.key_findings.length > 0) {
-      sections.push("Key findings:");
-      for (const f of r.key_findings) {
-        sections.push(`- ${f}`);
-      }
-    }
-    sections.push("");
-  }
-
-  // Signal summary
-  const signals = reports.map((r) => `${r.analyst_name}: ${r.signal}`);
-  sections.push("### Signal Summary");
-  for (const s of signals) {
-    sections.push(`- ${s}`);
-  }
-
-  return sections.join("\n");
-}

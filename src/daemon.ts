@@ -12,6 +12,17 @@ import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from
 import { syncPortfolio } from "./sync.js";
 import { checkStopLosses, executeStopLosses } from "./stoploss.js";
 
+// ── Schedule Constants ────────────────────────────────────────
+
+const DAILY_REPORT_TIME = "18:30";
+const WEEKLY_REPORT_TIME = "19:00";
+const MONTHLY_REPORT_TIME = "19:00";
+const PORTFOLIO_SYNC_TIME = "09:30";
+const MARKET_OPEN_HOUR = 9;
+const MARKET_OPEN_MINUTE = 30;
+const MARKET_CLOSE_HOUR = 16;
+const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
+
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
@@ -85,36 +96,37 @@ async function startDaemon(): Promise<void> {
           });
         }
 
-        // Auto-reports: daily at 18:30, weekly on Fri, monthly on 1st
-        if (currentTime === "18:30") {
+        // Auto-reports
+        if (currentTime === DAILY_REPORT_TIME) {
           generateDailyReport(name).catch(async (err) => {
             await log(`Daily report error (${name}): ${err}`);
           });
         }
-        if (currentDay === "FRI" && currentTime === "19:00") {
+        if (currentDay === "FRI" && currentTime === WEEKLY_REPORT_TIME) {
           generateWeeklyReport(name).catch(async (err) => {
             await log(`Weekly report error (${name}): ${err}`);
           });
         }
-        if (now.getDate() === 1 && currentTime === "19:00") {
+        if (now.getDate() === 1 && currentTime === MONTHLY_REPORT_TIME) {
           generateMonthlyReport(name).catch(async (err) => {
             await log(`Monthly report error (${name}): ${err}`);
           });
         }
 
-        // Portfolio sync: once daily at market open (09:30)
-        if (currentTime === "09:30") {
+        // Portfolio sync at market open
+        if (currentTime === PORTFOLIO_SYNC_TIME) {
           syncPortfolio(name).catch(async (err) => {
             await log(`Portfolio sync error (${name}): ${err}`);
           });
         }
 
-        // Stop-loss monitoring: every 5 minutes during market hours (09:30–16:00)
+        // Stop-loss monitoring during market hours
         const hour = now.getHours();
         const minute = now.getMinutes();
         const duringMarket =
-          (hour > 9 || (hour === 9 && minute >= 30)) && hour < 16;
-        if (duringMarket && minute % 5 === 0) {
+          (hour > MARKET_OPEN_HOUR || (hour === MARKET_OPEN_HOUR && minute >= MARKET_OPEN_MINUTE)) &&
+          hour < MARKET_CLOSE_HOUR;
+        if (duringMarket && minute % STOPLOSS_CHECK_INTERVAL_MINUTES === 0) {
           checkStopLosses(name)
             .then(async (triggered) => {
               if (triggered.length > 0) {
