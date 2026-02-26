@@ -181,13 +181,13 @@ Each Claude session:
 
 ### Multi-Broker Support
 
-FundX supports multiple brokers via a unified adapter:
+FundX uses a broker adapter interface. Currently Alpaca is implemented; additional brokers are planned:
 
 | Broker | Asset Types | Status |
 |--------|-------------|--------|
-| Alpaca | Stocks, ETFs | Implemented |
-| Interactive Brokers | International markets | Adapter ready |
-| Binance | Crypto | Adapter ready |
+| Alpaca | Stocks, ETFs, Crypto | Implemented |
+| Interactive Brokers | International markets | Planned |
+| Binance | Crypto | Planned |
 
 ## Configuration
 
