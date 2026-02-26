@@ -76,6 +76,26 @@ export function getDefaultSubAgents(fundName: string): SubAgentConfig[] {
       max_turns: 15,
     },
     {
+      type: "news",
+      name: "News Analyst",
+      prompt: [
+        `You are the news analysis sub-agent for fund '${fundName}'.`,
+        ``,
+        `Your job is to analyze recent news, world events, and macroeconomic developments relevant to this fund.`,
+        `Focus on:`,
+        `- Breaking news affecting holdings or watchlist companies`,
+        `- Major world events (geopolitical, regulatory, policy changes)`,
+        `- Industry and sector-specific developments`,
+        `- Insider transactions and institutional activity`,
+        `- Upcoming catalysts (earnings, FDA approvals, product launches)`,
+        ``,
+        `Use the market-data MCP tools (get_news, get_market_movers) to gather current data.`,
+        `Output a concise news analysis in markdown format with impact assessments.`,
+        `End with a NEWS_SIGNAL: bullish | neutral | bearish`,
+      ].join("\n"),
+      max_turns: 15,
+    },
+    {
       type: "risk",
       name: "Risk Manager",
       prompt: [
@@ -229,7 +249,7 @@ export function mergeSubAgentResults(results: SubAgentResult[]): string {
   for (const r of results) {
     if (r.status !== "success") continue;
     const signalMatch = r.output.match(
-      /(?:MACRO_SIGNAL|TECHNICAL_SIGNAL|SENTIMENT_SIGNAL|RISK_LEVEL):\s*(\w+)/gi,
+      /(?:MACRO_SIGNAL|TECHNICAL_SIGNAL|SENTIMENT_SIGNAL|NEWS_SIGNAL|RISK_LEVEL):\s*(\w+)/gi,
     );
     if (signalMatch) {
       for (const sig of signalMatch) {

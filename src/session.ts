@@ -10,7 +10,11 @@ import {
   mergeSubAgentResults,
   saveSubAgentAnalysis,
 } from "./subagent.js";
-import type { SessionLogV2 } from "./types.js";
+import {
+  runTradingAgentsPipeline,
+  savePipelineResult,
+} from "./debate.js";
+import type { SessionLogV2, DebatePipelineConfig } from "./types.js";
 
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
@@ -168,6 +172,62 @@ export async function runFundSessionWithSubAgents(
   await writeSessionLog(fundName, log);
 }
 
+/**
+ * Launch a fund session using the TradingAgents debate pipeline.
+ *
+ * Full 5-stage pipeline from arXiv:2412.20138:
+ *   1. Analyst Team (parallel) — macro, technical, sentiment, news, risk
+ *   2. Investment Debate — bull vs bear researcher dialectical debate
+ *   3. Trader Agent — synthesizes debate into BUY/HOLD/SELL proposal
+ *   4. Risk Management Debate — aggressive/conservative/neutral 3-way
+ *   5. Fund Manager — final approval + trade execution
+ */
+export async function runFundSessionWithDebate(
+  fundName: string,
+  sessionType: string,
+  debateConfig?: Partial<DebatePipelineConfig>,
+): Promise<void> {
+  const config = await loadFundConfig(fundName);
+
+  const sessionConfig = config.schedule.sessions[sessionType];
+  if (!sessionConfig) {
+    throw new Error(
+      `Session type '${sessionType}' not found in fund '${fundName}'`,
+    );
+  }
+
+  const startedAt = new Date().toISOString();
+
+  const result = await runTradingAgentsPipeline(fundName, debateConfig, {
+    model: config.claude.model || undefined,
+  });
+
+  const reportPath = await savePipelineResult(fundName, result, sessionType);
+
+  const fm = result.fund_manager_decision;
+  const summary = [
+    `Pipeline: ${result.analyst_reports.length} analysts → `,
+    `debate(${result.investment_debate.prevailing_perspective}) → `,
+    `trader(${result.trader_decision.action}) → `,
+    `risk(${result.risk_debate.approved ? "approved" : "adjusted"}) → `,
+    `manager(${fm.approved ? "APPROVED" : "REJECTED"} ${fm.final_action} ${fm.final_symbols.join(",")})`,
+  ].join("");
+
+  const log: SessionLogV2 = {
+    fund: fundName,
+    session_type: `${sessionType}_debate`,
+    started_at: startedAt,
+    ended_at: new Date().toISOString(),
+    trades_executed: 0,
+    analysis_file: reportPath,
+    summary: summary.slice(0, 500),
+    cost_usd: result.total_cost_usd,
+    status: "success",
+  };
+
+  await writeSessionLog(fundName, log);
+}
+
 /** Sum a token field across all models in usage */
 function sumTokens(
   usage: Record<string, { inputTokens: number; outputTokens: number }>,
@@ -188,14 +248,36 @@ sessionCommand
   .argument("<fund>", "Fund name")
   .argument("<type>", "Session type (pre_market, mid_session, post_market)")
   .option("-p, --parallel", "Use sub-agent parallel analysis")
-  .action(async (fund: string, type: string, opts: { parallel?: boolean }) => {
+  .option("-d, --debate", "Use TradingAgents debate pipeline (bull/bear debate + risk debate)")
+  .option("--debate-rounds <n>", "Max investment debate rounds (default: 2)")
+  .option("--risk-rounds <n>", "Max risk debate rounds (default: 2)")
+  .action(async (fund: string, type: string, opts: {
+    parallel?: boolean;
+    debate?: boolean;
+    debateRounds?: string;
+    riskRounds?: string;
+  }) => {
+    const useDebate = opts.debate ?? false;
     const useParallel = opts.parallel ?? false;
-    const mode = useParallel ? "parallel" : "standard";
+    const mode = useDebate ? "debate" : useParallel ? "parallel" : "standard";
     const spinner = ora(
       `Running ${type} session for '${fund}' (${mode})...`,
     ).start();
     try {
-      if (useParallel) {
+      if (useDebate) {
+        const debateConfig: Partial<DebatePipelineConfig> = {};
+        if (opts.debateRounds) {
+          debateConfig.max_debate_rounds = parseInt(opts.debateRounds, 10);
+        }
+        if (opts.riskRounds) {
+          debateConfig.max_risk_debate_rounds = parseInt(opts.riskRounds, 10);
+        }
+        spinner.text = `Running TradingAgents debate pipeline for '${fund}'...`;
+        await runFundSessionWithDebate(fund, type, debateConfig);
+        spinner.succeed(
+          `Debate pipeline session complete for '${fund}'.`,
+        );
+      } else if (useParallel) {
         spinner.text = `Running sub-agent analysis for '${fund}'...`;
         await runFundSessionWithSubAgents(fund, type);
         spinner.succeed(

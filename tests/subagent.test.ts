@@ -6,14 +6,15 @@ import {
 import type { SubAgentResult } from "../src/types.js";
 
 describe("getDefaultSubAgents", () => {
-  it("returns four default analysis agents", () => {
+  it("returns five default analysis agents", () => {
     const agents = getDefaultSubAgents("test-fund");
-    expect(agents).toHaveLength(4);
+    expect(agents).toHaveLength(5);
 
     const types = agents.map((a) => a.type);
     expect(types).toContain("macro");
     expect(types).toContain("technical");
     expect(types).toContain("sentiment");
+    expect(types).toContain("news");
     expect(types).toContain("risk");
   });
 

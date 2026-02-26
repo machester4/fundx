@@ -10,6 +10,8 @@ import { tradesCommand } from "./trades-cmd.js";
 import { performanceCommand } from "./performance-cmd.js";
 import { gatewayCommand } from "./gateway.js";
 import { askCommand } from "./ask.js";
+// TradingAgents debate pipeline
+import { debateCommand } from "./debate.js";
 // Phase 5 imports
 import { liveCommand } from "./live-trading.js";
 import { templateCommand } from "./templates.js";
@@ -36,6 +38,7 @@ program.addCommand(tradesCommand);
 program.addCommand(performanceCommand);
 program.addCommand(gatewayCommand);
 program.addCommand(askCommand);
+program.addCommand(debateCommand);
 // Phase 5 commands
 program.addCommand(liveCommand);
 program.addCommand(templateCommand);
