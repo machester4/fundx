@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { FundConfig } from "./types.js";
 import { fundPaths } from "./paths.js";
+import { getSkillsSummaryForTemplate } from "./skills.js";
 
 /** Generate the per-fund CLAUDE.md from its config */
 export async function generateFundClaudeMd(config: FundConfig): Promise<void> {
@@ -43,6 +44,8 @@ ${c.risk.custom_rules.map((r) => `- ${r}`).join("\n")}
 
 ## Decision Framework
 ${c.claude.decision_framework}
+
+${getSkillsSummaryForTemplate()}
 
 ## Session Protocol
 1. ALWAYS start by reading your current state files
