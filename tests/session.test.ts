@@ -40,6 +40,10 @@ vi.mock("../src/subagent.js", () => ({
     { type: "macro", name: "Macro Analyst", prompt: "test macro", max_turns: 10 },
     { type: "technical", name: "Technical Analyst", prompt: "test tech", max_turns: 10 },
   ]),
+  buildAnalystAgents: vi.fn(() => ({
+    "macro-analyst": { description: "Macro", prompt: "test", model: "haiku" },
+    "technical-analyst": { description: "Technical", prompt: "test", model: "haiku" },
+  })),
   runSubAgents: (...args: unknown[]) => mockRunSubAgents(...args),
   mergeSubAgentResults: vi.fn(() => "# Combined Analysis\nMACRO_SIGNAL: bullish"),
   saveSubAgentAnalysis: (...args: unknown[]) => mockSaveSubAgentAnalysis(...args),
@@ -302,5 +306,35 @@ describe("runFundSessionWithSubAgents", () => {
 
     const [, log] = mockWriteSessionLog.mock.calls[0];
     expect(log.summary).toContain("Sub-agents: 1/2 OK");
+  });
+});
+
+// ── AgentDefinition integration ───────────────────────────────
+
+describe("runFundSession with agents", () => {
+  it("passes agents to runAgentQuery", async () => {
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.agents).toBeDefined();
+    expect(opts.agents["macro-analyst"]).toBeDefined();
+    expect(opts.agents["technical-analyst"]).toBeDefined();
+  });
+
+  it("adds debate skills prompt when useDebateSkills is true", async () => {
+    await runFundSession("test-fund", "pre_market", { useDebateSkills: true });
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("Investment Debate");
+    expect(opts.prompt).toContain("Risk Assessment");
+    expect(opts.prompt).toContain("thorough analysis");
+  });
+
+  it("does not add debate skills prompt by default", async () => {
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).not.toContain("Investment Debate");
+    expect(opts.prompt).not.toContain("thorough analysis");
   });
 });
