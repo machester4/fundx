@@ -6,8 +6,11 @@ import { getHistoryData } from "./chart.service.js";
 import { getPerformanceData } from "./performance.service.js";
 import { computeCorrelationMatrix } from "./correlation.service.js";
 import { checkSpecialSessions, KNOWN_EVENTS } from "./special-sessions.service.js";
+import { loadGlobalConfig } from "../config.js";
+import { ALPACA_PAPER_URL } from "../alpaca-helpers.js";
 import { DAEMON_PID } from "../paths.js";
-import type { FundConfig } from "../types.js";
+import { getMarketDataProvider } from "./market.service.js";
+import type { FundConfig, ServiceStatus, NextCronInfo } from "../types.js";
 
 export interface FundStatusData {
   name: string;
@@ -141,6 +144,114 @@ export interface DashboardData {
   fundExtras: Map<string, FundExtras>;
   alerts: DashboardAlerts;
   daemonRunning: boolean;
+  services: ServiceStatus;
+  nextCron: NextCronInfo | null;
+}
+
+/** Check if Telegram is configured */
+async function checkTelegramStatus(): Promise<boolean> {
+  try {
+    const config = await loadGlobalConfig();
+    return !!(config.telegram.enabled && config.telegram.bot_token && config.telegram.chat_id);
+  } catch {
+    return false;
+  }
+}
+
+/** Check if the active market data provider is reachable */
+async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "alpaca" | "none" }> {
+  const provider = await getMarketDataProvider();
+
+  if (provider === "fmp") {
+    try {
+      const config = await loadGlobalConfig();
+      const apiKey = config.market_data?.fmp_api_key;
+      if (!apiKey) return { ok: false, provider };
+      const resp = await fetch(
+        `https://financialmodelingprep.com/api/v3/is-the-market-open?apikey=${apiKey}`,
+        { signal: AbortSignal.timeout(3000) },
+      );
+      return { ok: resp.ok, provider };
+    } catch {
+      return { ok: false, provider };
+    }
+  }
+
+  if (provider === "alpaca") {
+    try {
+      const config = await loadGlobalConfig();
+      if (!config.broker.api_key || !config.broker.secret_key) return { ok: false, provider };
+      const resp = await fetch(`${ALPACA_PAPER_URL}/v2/account`, {
+        headers: {
+          "APCA-API-KEY-ID": config.broker.api_key,
+          "APCA-API-SECRET-KEY": config.broker.secret_key,
+        },
+        signal: AbortSignal.timeout(3000),
+      });
+      return { ok: resp.ok, provider };
+    } catch {
+      return { ok: false, provider };
+    }
+  }
+
+  return { ok: false, provider: "none" };
+}
+
+/** Get the next scheduled cron session across all funds */
+async function getNextCron(): Promise<NextCronInfo | null> {
+  try {
+    const names = await listFundNames();
+    const now = new Date();
+    let nearest: NextCronInfo | null = null;
+
+    for (const name of names) {
+      try {
+        const config = await loadFundConfig(name);
+        if (config.fund.status !== "active") continue;
+
+        for (const [sessionType, session] of Object.entries(config.schedule.sessions)) {
+          if (!session.enabled) continue;
+
+          // Parse HH:MM time
+          const [hours, minutes] = session.time.split(":").map(Number);
+          if (isNaN(hours) || isNaN(minutes)) continue;
+
+          const sessionTime = new Date(now);
+          sessionTime.setHours(hours, minutes, 0, 0);
+
+          // If time already passed today, try tomorrow
+          if (sessionTime <= now) {
+            sessionTime.setDate(sessionTime.getDate() + 1);
+          }
+
+          const minutesUntil = Math.round((sessionTime.getTime() - now.getTime()) / 60_000);
+
+          if (!nearest || minutesUntil < nearest.minutesUntil) {
+            nearest = {
+              fundName: name,
+              sessionType,
+              time: session.time,
+              minutesUntil,
+            };
+          }
+        }
+      } catch { /* skip */ }
+    }
+
+    return nearest;
+  } catch {
+    return null;
+  }
+}
+
+/** Get service statuses for the dashboard */
+export async function getServiceStatuses(): Promise<ServiceStatus> {
+  const [daemon, telegram, marketStatus] = await Promise.all([
+    getDaemonStatus().then((d) => d.running),
+    checkTelegramStatus(),
+    checkMarketDataStatus(),
+  ]);
+  return { daemon, telegram, marketData: marketStatus.ok, marketDataProvider: marketStatus.provider };
 }
 
 /** Aggregate all dashboard data in a single call */
@@ -252,12 +363,18 @@ export async function getDashboardData(): Promise<DashboardData> {
     }
   } catch { /* skip */ }
 
-  const daemon = await getDaemonStatus();
+  const [daemon, services, nextCron] = await Promise.all([
+    getDaemonStatus(),
+    getServiceStatuses(),
+    getNextCron(),
+  ]);
 
   return {
     funds,
     fundExtras,
     alerts,
     daemonRunning: daemon.running,
+    services,
+    nextCron,
   };
 }

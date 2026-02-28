@@ -42,6 +42,9 @@ export async function initWorkspace(params: InitWorkspaceParams): Promise<void> 
       chat_id: params.chatId,
       enabled: !!params.botToken,
     },
+    market_data: {
+      provider: "fmp",
+    },
   };
 
   await mkdir(WORKSPACE, { recursive: true });

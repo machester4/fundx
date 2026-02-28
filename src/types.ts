@@ -178,6 +178,12 @@ export const globalConfigSchema = z.object({
       enabled: z.boolean().default(false),
     })
     .default({}),
+  market_data: z
+    .object({
+      provider: z.enum(["fmp", "alpaca"]).default("fmp"),
+      fmp_api_key: z.string().optional(),
+    })
+    .default({}),
 });
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
@@ -424,6 +430,57 @@ export const monteCarloResultSchema = z.object({
 });
 
 export type MonteCarloResult = z.infer<typeof monteCarloResultSchema>;
+
+// ── Dashboard Market Data Schemas ────────────────────────────
+
+export const marketIndexSnapshotSchema = z.object({
+  symbol: z.string(),
+  name: z.string(),
+  price: z.number(),
+  change: z.number(),
+  changePct: z.number(),
+  sparklineValues: z.array(z.number()).default([]),
+});
+
+export type MarketIndexSnapshot = z.infer<typeof marketIndexSnapshotSchema>;
+
+export const newsHeadlineSchema = z.object({
+  id: z.string(),
+  headline: z.string(),
+  source: z.string(),
+  timestamp: z.string(),
+  symbols: z.array(z.string()).default([]),
+  url: z.string().optional(),
+});
+
+export type NewsHeadline = z.infer<typeof newsHeadlineSchema>;
+
+export const dashboardMarketDataSchema = z.object({
+  indices: z.array(marketIndexSnapshotSchema).default([]),
+  news: z.array(newsHeadlineSchema).default([]),
+  marketOpen: z.boolean().default(false),
+  fetchedAt: z.string(),
+});
+
+export type DashboardMarketData = z.infer<typeof dashboardMarketDataSchema>;
+
+export const serviceStatusSchema = z.object({
+  daemon: z.boolean().default(false),
+  telegram: z.boolean().default(false),
+  marketData: z.boolean().default(false),
+  marketDataProvider: z.enum(["fmp", "alpaca", "none"]).default("none"),
+});
+
+export type ServiceStatus = z.infer<typeof serviceStatusSchema>;
+
+export const nextCronInfoSchema = z.object({
+  fundName: z.string(),
+  sessionType: z.string(),
+  time: z.string(),
+  minutesUntil: z.number(),
+});
+
+export type NextCronInfo = z.infer<typeof nextCronInfoSchema>;
 
 // ── Phase 6: Agent SDK Schemas ──────────────────────────────
 

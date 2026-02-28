@@ -1,260 +1,215 @@
-import React, { useState, useCallback } from "react";
-import { Box, Text, useInput, useApp } from "ink";
-import { Spinner } from "@inkjs/ui";
+import React, { useState, useEffect } from "react";
+import { Box, Text, useApp } from "ink";
+import { Spinner, Select } from "@inkjs/ui";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
+import { useInterval } from "../hooks/useInterval.js";
 import { getDashboardData } from "../services/status.service.js";
-import { HeaderBar } from "../components/HeaderBar.js";
-import { KeyboardHint } from "../components/KeyboardHint.js";
-import { FundCard } from "../components/FundCard.js";
-import { AlertsPanel } from "../components/AlertsPanel.js";
-import { FundDetailView } from "../components/FundDetailView.js";
+import { getDashboardMarketData } from "../services/market.service.js";
+import { resolveChatFund } from "../services/chat.service.js";
+import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
+import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
+import { NewsPanel } from "../components/NewsPanel.js";
+import { MarketIndicesPanel } from "../components/MarketIndicesPanel.js";
+import { DashboardFooter } from "../components/DashboardFooter.js";
 import { ChatView } from "../components/ChatView.js";
 
 export const description = "FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK";
 
-type View = "dashboard" | "detail" | "chat";
+const MARKET_REFRESH_MS = 60_000;
+const PANEL_HEIGHT = 5;
 
-const CARD_HEIGHT = 8;
-const HEADER_HEIGHT = 1;
-const FOOTER_HEIGHT = 1;
-const ALERTS_HEIGHT = 6;
+type Phase =
+  | { type: "resolving" }
+  | { type: "no-funds" }
+  | { type: "selecting-fund"; funds: string[] }
+  | { type: "ready"; fundName: string };
 
 export default function Index() {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
-  const [view, setView] = useState<View>("dashboard");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [selectedFund, setSelectedFund] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [phase, setPhase] = useState<Phase>({ type: "resolving" });
+  const [marketRefreshKey, setMarketRefreshKey] = useState(0);
 
-  const { data, isLoading, error } = useAsyncAction(
-    () => getDashboardData(),
-    [refreshKey],
-  );
-
-  const handleRefresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
+  // Resolve fund on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { fundName, allFunds } = await resolveChatFund();
+        if (!fundName) {
+          setPhase({ type: "selecting-fund", funds: allFunds });
+        } else {
+          setPhase({ type: "ready", fundName });
+        }
+      } catch {
+        setPhase({ type: "no-funds" });
+      }
+    })();
   }, []);
 
-  // Keyboard handling
-  useInput((input, key) => {
-    if (view === "dashboard") {
-      if (key.upArrow && data) {
-        setSelectedIndex((i) => Math.max(0, i - 1));
-      }
-      if (key.downArrow && data) {
-        setSelectedIndex((i) => Math.min((data.funds.length || 1) - 1, i + 1));
-      }
-      if (key.return && data && data.funds.length > 0) {
-        setSelectedFund(data.funds[selectedIndex].name);
-        setView("detail");
-      }
-      if (input === "c" && !key.ctrl && data && data.funds.length > 0) {
-        setSelectedFund(data.funds[selectedIndex].name);
-        setView("chat");
-      }
-      if (input === "r" && !key.ctrl) {
-        handleRefresh();
-      }
-      if (input === "q" && !key.ctrl) {
-        exit();
-      }
-    }
-    if (view === "detail" && key.escape) {
-      setView("dashboard");
-      setSelectedFund(null);
-    }
-  });
+  // Dashboard data (panels)
+  const dashboard = useAsyncAction(() => getDashboardData(), []);
+  const market = useAsyncAction(() => getDashboardMarketData(), [marketRefreshKey]);
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <Box flexDirection="column" width={columns} height={rows}>
-        <HeaderBar daemonRunning={false} width={columns} currentView="Loading" />
-        <Box flexGrow={1} justifyContent="center" alignItems="center">
-          <Spinner label="Loading dashboard..." />
+  // Auto-refresh market data every 60s
+  useInterval(() => setMarketRefreshKey((k) => k + 1), MARKET_REFRESH_MS);
+
+  // ── Derived panel data ──────────────────────────────────────
+
+  const data = dashboard.data;
+  const marketData = market.data;
+  const hasCredentials = marketData ? (marketData.indices.length > 0 || marketData.news.length > 0) : false;
+
+  const services = data?.services ?? { daemon: false, telegram: false, marketData: false, marketDataProvider: "none" as const };
+  const nextCron = data?.nextCron ?? null;
+  const funds = data?.funds ?? [];
+  const fundExtras = data?.fundExtras ?? new Map();
+  const indices = marketData?.indices ?? [];
+  const news = marketData?.news ?? [];
+  const marketOpen = marketData?.marketOpen ?? false;
+  const isShort = rows < 20;
+
+  const innerWidth = columns - 2; // inside outer border
+  const halfInner = Math.floor(innerWidth / 2);
+  const newsItems = Math.max(1, Math.floor((PANEL_HEIGHT - 2) * 0.6));
+
+  // Active fund name (available once resolved)
+  const activeFundName = phase.type === "ready" ? phase.fundName : undefined;
+
+  // ── Panels block (reused in all states) ─────────────────────
+
+  const panelsBlock = (
+    <>
+      {/* Top row: System Status | Fund Detail */}
+      <Box>
+        <SystemStatusPanel
+          width={halfInner}
+          height={PANEL_HEIGHT}
+          services={services}
+          nextCron={nextCron}
+        />
+        <FundsOverviewPanel
+          funds={funds}
+          fundExtras={fundExtras}
+          activeFund={activeFundName}
+          width={innerWidth - halfInner}
+          height={PANEL_HEIGHT}
+        />
+      </Box>
+
+      {/* Middle row: News | Markets (hidden on short terminals) */}
+      {!isShort && (
+        <Box>
+          <NewsPanel
+            headlines={news.slice(0, newsItems)}
+            width={halfInner}
+            height={PANEL_HEIGHT}
+            hasCredentials={hasCredentials || services.marketData}
+          />
+          <MarketIndicesPanel
+            indices={indices}
+            width={innerWidth - halfInner}
+            height={PANEL_HEIGHT}
+            hasCredentials={hasCredentials || services.marketData}
+          />
         </Box>
-      </Box>
-    );
-  }
+      )}
+    </>
+  );
 
-  // Error state
-  if (error) {
+  const footerBlock = (
+    <DashboardFooter
+      hints={[
+        { key: "r", label: "" },
+        { key: "q", label: "" },
+      ]}
+      model="claude-sonnet"
+      marketOpen={marketOpen}
+      width={columns}
+    />
+  );
+
+  // ── Resolving state ─────────────────────────────────────────
+
+  if (phase.type === "resolving") {
     return (
       <Box flexDirection="column" width={columns} height={rows}>
-        <HeaderBar daemonRunning={false} width={columns} />
-        <Box flexGrow={1} justifyContent="center" alignItems="center">
-          <Text color="red">Error: {error.message}</Text>
+        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
+          {panelsBlock}
+          <Box flexGrow={1} justifyContent="center" alignItems="center">
+            <Spinner label="Resolving fund..." />
+          </Box>
         </Box>
+        {footerBlock}
       </Box>
     );
   }
 
-  // No funds
-  if (!data || data.funds.length === 0) {
+  // ── No funds state ──────────────────────────────────────────
+
+  if (phase.type === "no-funds") {
     return (
       <Box flexDirection="column" width={columns} height={rows}>
-        <HeaderBar daemonRunning={data?.daemonRunning ?? false} width={columns} />
-        <Box flexGrow={1} justifyContent="center" alignItems="center">
-          <Text dimColor>No funds yet. Run &apos;fundx fund create&apos; to get started.</Text>
+        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
+          {panelsBlock}
+          <Box flexGrow={1} justifyContent="center" alignItems="center" flexDirection="column" gap={1}>
+            <Text>No funds found.</Text>
+            <Text dimColor>Run <Text color="cyan">fundx fund create</Text> to get started.</Text>
+          </Box>
         </Box>
+        {footerBlock}
       </Box>
     );
   }
 
-  // Chat view
-  if (view === "chat" && selectedFund) {
+  // ── Fund selection state ────────────────────────────────────
+
+  if (phase.type === "selecting-fund") {
     return (
       <Box flexDirection="column" width={columns} height={rows}>
-        <HeaderBar
-          daemonRunning={data.daemonRunning}
-          width={columns}
-          currentView="Chat"
-        />
-        <ChatView
-          fundName={selectedFund}
-          width={columns}
-          height={rows - HEADER_HEIGHT - FOOTER_HEIGHT}
-          onExit={() => {
-            setView("dashboard");
-            setSelectedFund(null);
-          }}
-          options={{ readonly: false }}
-        />
-        <KeyboardHint
-          hints={[
-            { key: "Esc", label: "Back" },
-            { key: "Ctrl+C", label: "Cancel" },
-          ]}
-        />
+        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
+          {panelsBlock}
+          <Box flexGrow={1} flexDirection="column" paddingX={2} paddingY={1}>
+            <Text bold>Select a fund:</Text>
+            <Select
+              options={phase.funds.map((f) => ({ label: f, value: f }))}
+              onChange={(value) => setPhase({ type: "ready", fundName: value })}
+            />
+          </Box>
+        </Box>
+        {footerBlock}
       </Box>
     );
   }
 
-  // Detail view
-  if (view === "detail" && selectedFund) {
-    return (
-      <Box flexDirection="column" width={columns} height={rows}>
-        <HeaderBar
-          daemonRunning={data.daemonRunning}
-          width={columns}
-          currentView="Detail"
-        />
-        <FundDetailView
-          fundName={selectedFund}
-          width={columns}
-          height={rows - HEADER_HEIGHT - FOOTER_HEIGHT}
-        />
-        <KeyboardHint
-          hints={[
-            { key: "Esc", label: "Back" },
-          ]}
-        />
-      </Box>
-    );
-  }
+  // ── REPL (main state) ───────────────────────────────────────
 
-  // Dashboard view
-  const contentHeight = rows - HEADER_HEIGHT - FOOTER_HEIGHT - ALERTS_HEIGHT;
-  const visibleCards = Math.max(1, Math.floor(contentHeight / CARD_HEIGHT));
-  const useGrid = columns > 120;
-  const cardWidth = useGrid ? Math.floor((columns - 2) / 2) : columns;
-
-  // Scroll offset — in grid mode each row holds 2 funds
-  const visibleSlots = useGrid ? visibleCards * 2 : visibleCards;
-  let scrollOffset = 0;
-  if (selectedIndex >= visibleSlots) {
-    scrollOffset = useGrid
-      ? (Math.floor(selectedIndex / 2) - visibleCards + 1) * 2
-      : selectedIndex - visibleCards + 1;
-  }
-
-  const visibleFunds = useGrid
-    ? data.funds.slice(scrollOffset, scrollOffset + visibleCards * 2)
-    : data.funds.slice(scrollOffset, scrollOffset + visibleCards);
+  const panelsHeight = isShort ? PANEL_HEIGHT : PANEL_HEIGHT * 2;
+  const footerHeight = 1;
+  const outerBorderHeight = 2; // top + bottom border
+  const chatHeight = Math.max(5, rows - panelsHeight - footerHeight - outerBorderHeight);
 
   return (
     <Box flexDirection="column" width={columns} height={rows}>
-      {/* Header */}
-      <HeaderBar
-        daemonRunning={data.daemonRunning}
-        width={columns}
-        currentView="Dashboard"
-      />
+      {/* Outer border */}
+      <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
+        {panelsBlock}
 
-      {/* Fund cards */}
-      <Box flexDirection="column" flexGrow={1}>
-        {useGrid ? (
-          // Two-column grid
-          <>
-            {Array.from({ length: Math.ceil(visibleFunds.length / 2) }, (_, rowIdx) => {
-              const left = visibleFunds[rowIdx * 2];
-              const right = visibleFunds[rowIdx * 2 + 1];
-              const leftIdx = scrollOffset + rowIdx * 2;
-              const rightIdx = scrollOffset + rowIdx * 2 + 1;
-              return (
-                <Box key={rowIdx}>
-                  {left && (
-                    <FundCard
-                      fund={left}
-                      extras={data.fundExtras.get(left.name) ?? emptyExtras()}
-                      isSelected={leftIdx === selectedIndex}
-                      width={cardWidth}
-                    />
-                  )}
-                  {right && (
-                    <FundCard
-                      fund={right}
-                      extras={data.fundExtras.get(right.name) ?? emptyExtras()}
-                      isSelected={rightIdx === selectedIndex}
-                      width={cardWidth}
-                    />
-                  )}
-                </Box>
-              );
-            })}
-          </>
-        ) : (
-          // Single column
-          visibleFunds.map((fund, i) => (
-            <FundCard
-              key={fund.name}
-              fund={fund}
-              extras={data.fundExtras.get(fund.name) ?? emptyExtras()}
-              isSelected={scrollOffset + i === selectedIndex}
-              width={cardWidth}
-            />
-          ))
-        )}
+        {/* Chat REPL — always active */}
+        <ChatView
+          key={phase.fundName}
+          fundName={phase.fundName}
+          width={innerWidth}
+          height={chatHeight}
+          mode="inline"
+          onExit={() => exit()}
+          onSwitchFund={(name) => setPhase({ type: "ready", fundName: name })}
+          options={{ readonly: false }}
+        />
       </Box>
 
-      {/* Alerts */}
-      <AlertsPanel alerts={data.alerts} width={columns} maxLines={3} />
-
-      {/* Footer */}
-      <KeyboardHint
-        hints={[
-          { key: "↑↓", label: "Navigate" },
-          { key: "↵", label: "Details" },
-          { key: "c", label: "Chat" },
-          { key: "r", label: "Refresh" },
-          { key: "q", label: "Quit" },
-        ]}
-        right={`${data.funds.length} fund${data.funds.length !== 1 ? "s" : ""}`}
-      />
+      {/* Footer (outside border) */}
+      {footerBlock}
     </Box>
   );
-}
-
-function emptyExtras() {
-  return {
-    sparklineValues: [],
-    topHoldings: [],
-    objectiveType: "unknown",
-    objectiveLabel: "Unknown",
-    nextSession: null,
-    lastSessionAgo: null,
-    tradesInLastSession: 0,
-  };
 }

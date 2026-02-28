@@ -36,7 +36,7 @@ Each Claude Code session:
 7. Updates persistent state and generates reports
 8. Sends notifications via Telegram
 
-### Planned Directory Structure
+### Directory Structure
 
 ```
 ~/.fundx/                          # Workspace root
@@ -71,6 +71,7 @@ Each Claude Code session:
 | Telegram     | grammy (Phase 3)                        |
 | AI Engine    | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP Servers  | TypeScript (Phase 2+)                   |
+| Market Data  | FMP (primary) / Alpaca Data API (fallback) |
 | Broker       | Alpaca API (Phase 2)                    |
 | Build        | tsup (prod) / tsx (dev)                 |
 | Test         | Vitest                                  |
@@ -87,6 +88,14 @@ Each Claude Code session:
 - Use `node:path` and `node:fs/promises` (node: protocol prefix)
 - Prefer `interface` over `type` for object shapes; use `type` for unions and intersections
 - Use `async/await` throughout — no raw Promise chains or callbacks
+
+### CLI Architecture Conventions
+
+- **Build & distribution:** TypeScript compiled with tsup (not webpack). The `bin` field in `package.json` points to the compiled entry point. Publish to npm, users install with `npm i -g fundx`
+- **Persistent config:** Global settings (API keys, preferred model, market data provider) live in `~/.fundx/config.yaml` via YAML + Zod validation. Never store secrets in per-fund configs
+- **Error handling:** Use an `ErrorBoundary` at the app level (Ink components) to catch and display formatted errors instead of crashing with raw stack traces. Services should throw typed errors, commands should catch and render with `<ErrorMessage>`
+- **Graceful exit:** Capture `SIGINT`/`SIGTERM` to clean up resources (cancel in-flight requests, save state) before exiting. The daemon already does this in `daemon.service.ts` — follow the same pattern for any long-running process
+- **State machine + streaming hook:** The highest-impact pattern. Commands that interact with Claude use a `Phase` state machine (e.g., `resolving → selecting → ready`) for UI flow, and `useStreaming` for Agent SDK responses with buffer + cancel. These two together make the React mental model map naturally to interactive CLI states. See `commands/index.tsx` (phase machine) and `hooks/useStreaming.ts` (streaming hook) as reference implementations
 
 ### Source Structure
 
@@ -128,8 +137,9 @@ src/
     portfolio.service.ts     # Portfolio display data
     trades.service.ts   # Trade history queries
     performance.service.ts   # Performance metrics aggregation
+    market.service.ts   # Market data (FMP primary, Alpaca fallback)
   commands/             # Pastel commands (React/Ink components, file-based routing)
-    index.tsx           # Default command (dashboard)
+    index.tsx           # Default command (fullscreen TUI dashboard + chat REPL)
     init.tsx            # fundx init
     status.tsx          # fundx status
     start.tsx           # fundx start
@@ -164,12 +174,29 @@ src/
     BarChart.tsx        # Horizontal bar chart with Unicode blocks
     Sparkline.tsx       # Inline sparkline
     MarkdownView.tsx    # Terminal markdown renderer
+    Panel.tsx           # General bordered panel wrapper
+    KeyboardHint.tsx    # Keyboard shortcut hint display
+    HeaderBar.tsx       # Header bar with title
+    FundCard.tsx        # Fund summary card
+    AlertsPanel.tsx     # Dashboard alerts panel
+    FundDetailView.tsx  # Expanded fund detail view
+    ChatMessage.tsx     # Chat message bubble
+    StreamingIndicator.tsx # Streaming response indicator
+    FundContextBar.tsx  # Active fund context bar
+    ChatView.tsx        # Chat REPL view (inline + fullscreen)
+    NewsPanel.tsx       # News headlines panel
+    DashboardFooter.tsx # Dashboard footer with hints
+    FundsOverviewPanel.tsx # Funds overview panel
+    SystemStatusPanel.tsx  # Service status panel (daemon, telegram, market data)
+    MarketIndicesPanel.tsx # Market indices with price, change%, sparklines
   hooks/                # Custom React hooks
     useAsyncAction.ts   # Run async fn, track { data, isLoading, error, retry }
     useStreaming.ts     # Agent SDK streaming with buffer + cancel
     useFundData.ts      # Load fund config + portfolio + tracker
     useAllFunds.ts      # List all fund names
     useDaemonStatus.ts  # Check if daemon is running
+    useInterval.ts      # Periodic callback (polling/refresh)
+    useTerminalSize.ts  # Terminal columns/rows tracking
   context/              # React contexts
     AppContext.tsx       # Global config, error handling
   mcp/
@@ -189,8 +216,9 @@ src/
 
 ### Configuration
 
-- Global config: `~/.fundx/config.yaml` (broker credentials, Telegram token, default model)
+- Global config: `~/.fundx/config.yaml` (broker credentials, Telegram token, market data provider, default model)
 - Per-fund config: `~/.fundx/funds/<name>/fund_config.yaml` (objective, risk, universe, schedule, AI personality)
+- Market data: `market_data.provider` (`fmp` or `alpaca`) + `market_data.fmp_api_key` in global config
 - Credentials must NEVER be stored in per-fund configs or committed to git
 - The `.gitignore` already covers `.env` files — maintain this pattern
 
