@@ -17,3 +17,4 @@ export * from "./logs.service.js";
 export * from "./portfolio.service.js";
 export * from "./trades.service.js";
 export * from "./performance.service.js";
+export * from "./market.service.js";

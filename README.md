@@ -18,6 +18,7 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
 - **pnpm** (recommended) or npm
 - **Alpaca** account for paper/live trading (optional for setup)
+- **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (optional, falls back to Alpaca)
 - **Telegram** bot token for notifications (optional)
 
 ## Installation
@@ -43,8 +44,8 @@ fundx init
 # 2. Create your first fund
 fundx fund create
 
-# 3. Check status
-fundx status
+# 3. Open the dashboard (fullscreen TUI with integrated chat)
+fundx
 
 # 4. Run a manual session
 fundx session run <fund-name> pre_market
@@ -68,8 +69,10 @@ fundx start
 ### Core Commands
 
 ```
+fundx                               Fullscreen TUI dashboard with chat REPL
 fundx init                          Initialize FundX workspace (~/.fundx/)
-fundx status                        Dashboard of all funds and services
+fundx status                        Quick status of all funds and services
+fundx chat                          Interactive chat REPL (standalone)
 fundx start [fund|all]              Start daemon scheduler
 fundx stop [fund|all]               Stop daemon
 fundx logs [fund] [-f|--follow]     View logs
@@ -154,7 +157,7 @@ Each Claude session:
 
 ```
 ~/.fundx/
-├── config.yaml                     # Global config (broker keys, Telegram token)
+├── config.yaml                     # Global config (broker keys, market data, Telegram token)
 ├── daemon.pid / daemon.log         # Daemon state
 ├── funds/
 │   └── <fund-name>/
@@ -176,7 +179,7 @@ Each Claude session:
 | Server | Purpose |
 |--------|---------|
 | `broker-alpaca` | Trade execution, positions, account info |
-| `market-data` | Price data, OHLCV bars, quotes (Yahoo Finance) |
+| `market-data` | Price data, OHLCV bars, quotes |
 | `telegram-notify` | Send notifications to Telegram |
 
 ### Multi-Broker Support
@@ -189,11 +192,29 @@ FundX uses a broker adapter interface. Currently Alpaca is implemented; addition
 | Interactive Brokers | International markets | Planned |
 | Binance | Crypto | Planned |
 
+### Market Data Providers
+
+Dashboard indices (S&P 500, NASDAQ, VIX), news headlines, and market hours come from a configurable market data provider:
+
+| Provider | Data | Status |
+|----------|------|--------|
+| FMP (Financial Modeling Prep) | Real index symbols (^GSPC, ^IXIC, ^VIX), news, market hours | Default, free tier (250 req/day) |
+| Alpaca Data API | ETF proxies (SPY, QQQ, VIXY), news, market clock | Fallback (uses broker credentials) |
+
+FMP is preferred because it provides actual index data instead of ETF proxies, and doesn't require brokerage credentials. If no FMP key is configured, the dashboard falls back to Alpaca data (if broker credentials are set), or shows empty panels gracefully.
+
 ## Configuration
 
 ### Global Config (`~/.fundx/config.yaml`)
 
-Created by `fundx init`. Stores broker credentials, Telegram token, and default settings. Credentials are **never** stored in per-fund configs.
+Created by `fundx init`. Stores broker credentials, market data provider, Telegram token, and default settings. Credentials are **never** stored in per-fund configs.
+
+```yaml
+# Market data provider (optional — dashboard indices, news, market hours)
+market_data:
+  provider: fmp           # "fmp" (default) or "alpaca"
+  fmp_api_key: YOUR_KEY   # Free tier: 250 req/day at financialmodelingprep.com
+```
 
 ### Fund Config (`fund_config.yaml`)
 
@@ -252,6 +273,7 @@ Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and ru
 | Telegram | grammy |
 | AI Engine | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP | @modelcontextprotocol/sdk |
+| Market Data | FMP (primary) / Alpaca Data API (fallback) |
 | Broker | Alpaca API |
 | Build | tsup (prod) / tsx (dev) |
 | Test | Vitest |

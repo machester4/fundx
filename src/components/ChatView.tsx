@@ -8,6 +8,7 @@ import {
   buildCompactContext,
   loadChatWelcomeData,
 } from "../services/chat.service.js";
+import { listFundNames } from "../services/fund.service.js";
 import { getPortfolioDisplay } from "../services/portfolio.service.js";
 import { getTradesDisplay } from "../services/trades.service.js";
 import { useStreaming } from "../hooks/useStreaming.js";
@@ -33,7 +34,9 @@ interface ChatViewProps {
   width: number;
   height: number;
   onExit?: () => void;
+  onSwitchFund?: (fundName: string) => void;
   options: { model?: string; readonly: boolean; maxBudget?: string };
+  mode?: "standalone" | "inline";
 }
 
 interface ChatMsg {
@@ -45,7 +48,8 @@ interface ChatMsg {
   turns?: number;
 }
 
-export function ChatView({ fundName, width, height, onExit, options }: ChatViewProps) {
+export function ChatView({ fundName, width, height, onExit, onSwitchFund, options, mode = "standalone" }: ChatViewProps) {
+  const isInline = mode === "inline";
   const [phase, setPhase] = useState<"loading" | "ready" | "streaming" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [welcomeData, setWelcomeData] = useState<ChatWelcomeData | null>(null);
@@ -137,7 +141,7 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
       return;
     }
     if (trimmed === "/help") {
-      addMessage("system", "**Chat Commands**\n- `/help` — Show this help\n- `/cost` — Show session cost\n- `/clear` — Reset conversation\n- `/portfolio` — Show portfolio\n- `/trades` — Show recent trades\n- `/fund` — Switch fund\n- `/q` — Exit chat");
+      addMessage("system", "**Chat Commands**\n- `/help` — Show this help\n- `/cost` — Show session cost\n- `/clear` — Reset conversation\n- `/portfolio` — Show portfolio\n- `/trades` — Show recent trades\n- `/fund` — List funds\n- `/fund <name>` — Switch to fund\n- `/q` — Exit");
       return;
     }
     if (trimmed === "/cost") {
@@ -179,10 +183,43 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
       return;
     }
 
+    // /fund — list or switch
+    if (trimmed === "/fund" || trimmed.startsWith("/fund ")) {
+      const arg = trimmed.slice(5).trim();
+      try {
+        const allFunds = await listFundNames();
+        if (!arg) {
+          // List available funds
+          const lines = [`**Funds** (current: ${fundName})`];
+          for (const f of allFunds) {
+            const marker = f === fundName ? " ← active" : "";
+            lines.push(`  ${f}${marker}`);
+          }
+          lines.push("", "Switch with `/fund <name>`");
+          addMessage("system", lines.join("\n"));
+        } else {
+          // Switch to specified fund
+          const match = allFunds.find((f) => f.toLowerCase() === arg.toLowerCase());
+          if (!match) {
+            addMessage("system", `Fund '${arg}' not found. Available: ${allFunds.join(", ")}`);
+          } else if (match === fundName) {
+            addMessage("system", `Already on fund '${match}'`);
+          } else if (onSwitchFund) {
+            onSwitchFund(match);
+          } else {
+            addMessage("system", "Fund switching not available in this mode");
+          }
+        }
+      } catch {
+        addMessage("system", "Could not list funds");
+      }
+      return;
+    }
+
     // Regular message
     addMessage("you", trimmed);
     await sendMessage(trimmed);
-  }, [addMessage, costTracker, fundName, onExit, sendMessage]);
+  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage]);
 
   // Reset scroll to bottom when new messages arrive or streaming updates
   useEffect(() => {
@@ -193,8 +230,8 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
 
   // Calculate available height for messages area
   // Bottom section: context bar (3 lines) + cost (1 line if present) + input (1 line)
-  const contextBarHeight = welcomeData ? 4 : 0; // border + 2 lines + border
-  const costBarHeight = costTracker.messages > 0 ? 1 : 0;
+  const contextBarHeight = !isInline && welcomeData ? 4 : 0; // border + 2 lines + border
+  const costBarHeight = !isInline && costTracker.messages > 0 ? 1 : 0;
   const inputHeight = 1;
   const bottomHeight = contextBarHeight + costBarHeight + inputHeight;
   const messagesAreaHeight = Math.max(3, height - bottomHeight);
@@ -241,15 +278,23 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
 
   const isScrolledUp = scrollOffset > 0;
 
-  // Keyboard: Esc to go back, Page Up/Down to scroll
+  // Keyboard: Esc to go back (standalone only), arrows + PageUp/Down to scroll
   useInput((input, key) => {
-    if (key.escape && phase !== "streaming") {
+    if (!isInline && key.escape && phase !== "streaming") {
       onExit?.();
     }
     if (input === "c" && key.ctrl && streaming.isStreaming) {
       streaming.cancel();
       setPhase("ready");
     }
+    // Arrow keys: scroll 1 line at a time
+    if (key.upArrow) {
+      setScrollOffset((prev) => prev + 1);
+    }
+    if (key.downArrow) {
+      setScrollOffset((prev) => Math.max(0, prev - 1));
+    }
+    // PageUp/Down: scroll by ~1/3 screen
     const scrollStep = Math.max(3, Math.floor(height / 3));
     if (key.pageUp) {
       setScrollOffset((prev) => prev + scrollStep);
@@ -276,7 +321,7 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
     <Box flexDirection="column" width={width} height={height}>
       {/* Messages area — fills available space */}
       <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-        {messages.length === 0 && !isStreaming && (
+        {!isInline && messages.length === 0 && !isStreaming && (
           <Box marginY={1} paddingX={1}>
             <Text dimColor>
               Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
@@ -316,13 +361,13 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
         )}
       </Box>
 
-      {/* === Bottom pinned section === */}
+      {/* === Bottom pinned section (standalone only) === */}
 
       {/* Context bar — always visible at bottom */}
-      {welcomeData && <FundContextBar welcome={welcomeData} />}
+      {!isInline && welcomeData && <FundContextBar welcome={welcomeData} />}
 
       {/* Cost summary */}
-      {costTracker.messages > 0 && (
+      {!isInline && costTracker.messages > 0 && (
         <Box paddingX={1}>
           <Text dimColor>
             ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns
@@ -332,13 +377,23 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
 
       {/* Input */}
       {!isStreaming && (
-        <Box paddingX={1}>
-          <Text color="green">❯ </Text>
-          <TextInput
-            placeholder="Message... (/help for commands)"
-            onSubmit={handleSubmit}
-          />
-        </Box>
+        isInline ? (
+          <Box borderStyle="round" borderDimColor paddingX={1}>
+            <Text color="green">{"> "}</Text>
+            <TextInput
+              placeholder="Message... (/help for commands)"
+              onSubmit={handleSubmit}
+            />
+          </Box>
+        ) : (
+          <Box paddingX={1}>
+            <Text color="green">{"❯ "}</Text>
+            <TextInput
+              placeholder="Message... (/help for commands)"
+              onSubmit={handleSubmit}
+            />
+          </Box>
+        )
       )}
     </Box>
   );
