@@ -98,14 +98,22 @@ export async function buildMcpServers(
     globalConfig.telegram.chat_id &&
     fundConfig.notifications.telegram.enabled
   ) {
+    const tg = fundConfig.notifications.telegram;
+    const qh = fundConfig.notifications.quiet_hours;
     const telegramEnv: Record<string, string> = {
       TELEGRAM_BOT_TOKEN: globalConfig.telegram.bot_token,
       TELEGRAM_CHAT_ID: globalConfig.telegram.chat_id,
+      NOTIFY_TRADE_ALERTS: String(tg.trade_alerts),
+      NOTIFY_STOP_LOSS_ALERTS: String(tg.stop_loss_alerts),
+      NOTIFY_DAILY_DIGEST: String(tg.daily_digest),
+      NOTIFY_WEEKLY_DIGEST: String(tg.weekly_digest),
+      NOTIFY_MILESTONE_ALERTS: String(tg.milestone_alerts),
+      NOTIFY_DRAWDOWN_ALERTS: String(tg.drawdown_alerts),
     };
-    if (fundConfig.notifications.quiet_hours.enabled) {
-      telegramEnv.QUIET_HOURS_START =
-        fundConfig.notifications.quiet_hours.start;
-      telegramEnv.QUIET_HOURS_END = fundConfig.notifications.quiet_hours.end;
+    if (qh.enabled) {
+      telegramEnv.QUIET_HOURS_START = qh.start;
+      telegramEnv.QUIET_HOURS_END = qh.end;
+      telegramEnv.QUIET_HOURS_ALLOW_CRITICAL = String(qh.allow_critical);
     }
     servers["telegram-notify"] = {
       command: "node",
