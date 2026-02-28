@@ -79,6 +79,11 @@ export async function buildMcpServers(
   brokerEnv.ALPACA_MODE =
     fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
 
+  const marketDataEnv: Record<string, string> = { ...brokerEnv };
+  if (globalConfig.market_data?.fmp_api_key) {
+    marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
+  }
+
   const servers: Record<string, McpStdioConfig> = {
     "broker-alpaca": {
       command: "node",
@@ -88,7 +93,7 @@ export async function buildMcpServers(
     "market-data": {
       command: "node",
       args: [MCP_SERVERS.marketData],
-      env: brokerEnv,
+      env: marketDataEnv,
     },
   };
 

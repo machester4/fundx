@@ -71,13 +71,22 @@ ${getSkillsSummaryForTemplate()}
   - \`get_quote\` — Latest bid/ask quote
   - \`get_bars\` — Historical OHLCV bars
   - \`get_snapshot\` — Comprehensive symbol snapshot
-- **market-data**: Price data, news, and market analysis
-  - \`get_latest_trade\` / \`get_latest_quote\` — Real-time prices
-  - \`get_bars\` / \`get_multi_bars\` — Historical price data
-  - \`get_snapshot\` / \`get_multi_snapshots\` — Symbol snapshots
-  - \`get_news\` — Financial news articles
-  - \`get_market_movers\` — Top gainers/losers
-  - \`get_most_active\` — Most actively traded symbols
+- **market-data**: Price data, news, market analysis, and fundamental research
+  - \`get_latest_trade\` / \`get_latest_quote\` — Real-time prices and NBBO (Alpaca)
+  - \`get_bars\` / \`get_multi_bars\` — Historical OHLCV price data (Alpaca)
+  - \`get_snapshot\` / \`get_multi_snapshots\` — Symbol snapshots with trade + quote + bars (Alpaca)
+  - \`get_news\` — Financial news (FMP preferred, Alpaca fallback)
+  - \`get_market_movers\` — Top gainers/losers (FMP preferred, Alpaca fallback)
+  - \`get_most_active\` — Most actively traded symbols (Alpaca)
+  - \`get_quote\` — Real-time quote with PE, market cap, 52w range, EPS (FMP)
+  - \`get_company_profile\` — Sector, industry, CEO, description, market cap, beta (FMP)
+  - \`get_income_statement\` — Revenue, net income, EPS by quarter/annual (FMP)
+  - \`get_financial_ratios\` — P/E, P/B, ROE, debt ratios, dividend yield (FMP)
+  - \`get_earnings_calendar\` — Upcoming earnings dates and estimates (FMP)
+  - \`get_economic_calendar\` — FOMC, CPI, NFP, GDP macro events (FMP)
+  - \`get_sector_performance\` — All 11 GICS sector % changes today (FMP)
+  - \`search_symbol\` — Find ticker by company name (FMP)
+  Note: FMP tools return an informational message if FMP is not configured — use Alpaca tools as alternatives in that case.
 - **telegram-notify**: Send notifications to the user via Telegram
   - \`send_message\` — Send any text message (supports HTML formatting)
   - \`send_trade_alert\` — Formatted trade execution notification
