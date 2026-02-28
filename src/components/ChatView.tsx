@@ -228,11 +228,13 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
   const isStreaming = phase === "streaming";
 
-  // Calculate available height for messages area
-  // Bottom section: context bar (3 lines) + cost (1 line if present) + input (1 line)
+  // Calculate available height for messages area.
+  // In inline mode the input box uses borderStyle="round" → 3 rows (top border + content + bottom border).
+  // In standalone mode the input has no border → 1 row.
+  // While streaming the input is hidden → 0 rows.
   const contextBarHeight = !isInline && welcomeData ? 4 : 0; // border + 2 lines + border
   const costBarHeight = !isInline && costTracker.messages > 0 ? 1 : 0;
-  const inputHeight = 1;
+  const inputHeight = isStreaming ? 0 : isInline ? 3 : 1;
   const bottomHeight = contextBarHeight + costBarHeight + inputHeight;
   const messagesAreaHeight = Math.max(3, height - bottomHeight);
 
@@ -266,9 +268,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       }
     }
 
+    // Always include the most recent message even if it exceeds availableLines,
+    // so it is never silently dropped when the response is long.
     for (let i = skipEndIdx - 1; i >= 0; i--) {
       const needed = msgLines[i].lines;
-      if (usedLines + needed > availableLines) break;
+      if (i < skipEndIdx - 1 && usedLines + needed > availableLines) break;
       usedLines += needed;
       startIdx = i;
     }

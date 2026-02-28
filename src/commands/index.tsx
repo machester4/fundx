@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Text, useApp } from "ink";
 import { Spinner, Select } from "@inkjs/ui";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
@@ -90,6 +90,11 @@ export default function Index() {
 
   // Active fund name (available once resolved)
   const activeFundName = phase.type === "ready" ? phase.fundName : undefined;
+
+  // Stable references so ChatView's internal callbacks aren't recreated on every dashboard refresh.
+  const handleExit = useCallback(() => exit(), [exit]);
+  const handleSwitchFund = useCallback((name: string) => setPhase({ type: "ready", fundName: name }), []);
+  const chatOptions = useMemo(() => ({ readonly: false }), []);
 
   // ── Panels block (reused in all states) ─────────────────────
 
@@ -228,9 +233,9 @@ export default function Index() {
           width={innerWidth}
           height={chatHeight}
           mode="inline"
-          onExit={() => exit()}
-          onSwitchFund={(name) => setPhase({ type: "ready", fundName: name })}
-          options={{ readonly: false }}
+          onExit={handleExit}
+          onSwitchFund={handleSwitchFund}
+          options={chatOptions}
         />
       </Box>
 
