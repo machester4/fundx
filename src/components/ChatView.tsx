@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import { Spinner, TextInput } from "@inkjs/ui";
 import {
@@ -16,6 +16,17 @@ import { StreamingIndicator } from "./StreamingIndicator.js";
 import { FundContextBar } from "./FundContextBar.js";
 import { MarkdownView } from "./MarkdownView.js";
 import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
+
+/** Estimate how many terminal lines a message will occupy. */
+function estimateMessageLines(msg: { sender: string; content: string }, width: number): number {
+  const contentWidth = Math.max(width - 2, 20); // paddingX=1 each side
+  let lines = 1; // sender header line
+  for (const line of msg.content.split("\n")) {
+    lines += Math.max(1, Math.ceil((line.length || 1) / contentWidth));
+  }
+  lines += 1; // marginBottom
+  return lines;
+}
 
 interface ChatViewProps {
   fundName: string;
@@ -45,6 +56,7 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
   const [model, setModel] = useState("sonnet");
   const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[]; env: Record<string, string> }>>({});
+  const [scrollOffset, setScrollOffset] = useState(0); // 0 = pinned to bottom
   const streaming = useStreaming();
 
   const addMessage = useCallback((sender: ChatMsg["sender"], content: string, cost?: number, turns?: number) => {
@@ -172,7 +184,64 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
     await sendMessage(trimmed);
   }, [addMessage, costTracker, fundName, onExit, sendMessage]);
 
-  // Keyboard: Esc to go back
+  // Reset scroll to bottom when new messages arrive or streaming updates
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [messages.length, streaming.buffer]);
+
+  const isStreaming = phase === "streaming";
+
+  // Calculate available height for messages area
+  // Bottom section: context bar (3 lines) + cost (1 line if present) + input (1 line)
+  const contextBarHeight = welcomeData ? 4 : 0; // border + 2 lines + border
+  const costBarHeight = costTracker.messages > 0 ? 1 : 0;
+  const inputHeight = 1;
+  const bottomHeight = contextBarHeight + costBarHeight + inputHeight;
+  const messagesAreaHeight = Math.max(3, height - bottomHeight);
+
+  // Build visible messages with scroll support
+  const visibleMessages = useMemo(() => {
+    const msgLines = messages.map((msg) => ({
+      msg,
+      lines: estimateMessageLines(msg, width),
+    }));
+
+    let streamingLines = 0;
+    if (isStreaming) {
+      if (streaming.buffer) {
+        streamingLines = 2 + streaming.buffer.split("\n").length;
+      } else {
+        streamingLines = 1;
+      }
+    }
+
+    const availableLines = messagesAreaHeight - streamingLines;
+    let usedLines = 0;
+    let startIdx = messages.length;
+
+    // Apply scroll offset (skip messages from the bottom)
+    let skippedLines = 0;
+    let skipEndIdx = messages.length;
+    if (scrollOffset > 0) {
+      for (let i = msgLines.length - 1; i >= 0 && skippedLines < scrollOffset; i--) {
+        skippedLines += msgLines[i].lines;
+        skipEndIdx = i;
+      }
+    }
+
+    for (let i = skipEndIdx - 1; i >= 0; i--) {
+      const needed = msgLines[i].lines;
+      if (usedLines + needed > availableLines) break;
+      usedLines += needed;
+      startIdx = i;
+    }
+
+    return messages.slice(startIdx, skipEndIdx);
+  }, [messages, width, messagesAreaHeight, isStreaming, streaming.buffer, scrollOffset]);
+
+  const isScrolledUp = scrollOffset > 0;
+
+  // Keyboard: Esc to go back, Page Up/Down to scroll
   useInput((input, key) => {
     if (key.escape && phase !== "streaming") {
       onExit?.();
@@ -180,6 +249,13 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
     if (input === "c" && key.ctrl && streaming.isStreaming) {
       streaming.cancel();
       setPhase("ready");
+    }
+    const scrollStep = Math.max(3, Math.floor(height / 3));
+    if (key.pageUp) {
+      setScrollOffset((prev) => prev + scrollStep);
+    }
+    if (key.pageDown) {
+      setScrollOffset((prev) => Math.max(0, prev - scrollStep));
     }
   });
 
@@ -196,14 +272,9 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
     );
   }
 
-  const isStreaming = phase === "streaming";
-
   return (
     <Box flexDirection="column" width={width} height={height}>
-      {/* Context bar */}
-      {welcomeData && <FundContextBar welcome={welcomeData} />}
-
-      {/* Messages */}
+      {/* Messages area — fills available space */}
       <Box flexDirection="column" flexGrow={1} overflowY="hidden">
         {messages.length === 0 && !isStreaming && (
           <Box marginY={1} paddingX={1}>
@@ -212,7 +283,7 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
             </Text>
           </Box>
         )}
-        {messages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <Box key={msg.id} paddingX={1}>
             <ChatMessage
               sender={msg.sender}
@@ -223,7 +294,7 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
             />
           </Box>
         ))}
-        {isStreaming && (
+        {isStreaming && !isScrolledUp && (
           <Box paddingX={1} flexDirection="column">
             {streaming.buffer ? (
               <Box flexDirection="column">
@@ -238,7 +309,17 @@ export function ChatView({ fundName, width, height, onExit, options }: ChatViewP
             )}
           </Box>
         )}
+        {isScrolledUp && (
+          <Box paddingX={1}>
+            <Text dimColor italic>↑ Scrolled up — PgDn to go back ↓</Text>
+          </Box>
+        )}
       </Box>
+
+      {/* === Bottom pinned section === */}
+
+      {/* Context bar — always visible at bottom */}
+      {welcomeData && <FundContextBar welcome={welcomeData} />}
 
       {/* Cost summary */}
       {costTracker.messages > 0 && (
