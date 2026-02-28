@@ -1,5 +1,6 @@
 import { writeFile, readFile, appendFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { DAEMON_PID, DAEMON_LOG } from "../paths.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
@@ -39,6 +40,17 @@ export async function isDaemonRunning(): Promise<boolean> {
     await unlink(DAEMON_PID).catch(() => {});
     return false;
   }
+}
+
+/** Spawn a detached background daemon process (auto-start from dashboard) */
+export async function forkDaemon(): Promise<void> {
+  if (await isDaemonRunning()) return;
+  const child = spawn(
+    process.execPath,
+    [...process.execArgv, process.argv[1]!, "--_daemon-mode"],
+    { detached: true, stdio: "ignore" },
+  );
+  child.unref();
 }
 
 /** Start the scheduler daemon */

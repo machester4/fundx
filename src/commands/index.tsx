@@ -7,6 +7,7 @@ import { useInterval } from "../hooks/useInterval.js";
 import { getDashboardData } from "../services/status.service.js";
 import { getDashboardMarketData } from "../services/market.service.js";
 import { resolveChatFund } from "../services/chat.service.js";
+import { forkDaemon } from "../services/daemon.service.js";
 import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
 import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
 import { NewsPanel } from "../components/NewsPanel.js";
@@ -17,6 +18,7 @@ import { ChatView } from "../components/ChatView.js";
 export const description = "FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK";
 
 const MARKET_REFRESH_MS = 60_000;
+const DASHBOARD_REFRESH_MS = 30_000;
 const PANEL_HEIGHT = 5;
 
 type Phase =
@@ -29,7 +31,13 @@ export default function Index() {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
   const [phase, setPhase] = useState<Phase>({ type: "resolving" });
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [marketRefreshKey, setMarketRefreshKey] = useState(0);
+
+  // Auto-start daemon in background if not running
+  useEffect(() => {
+    forkDaemon().catch(() => {});
+  }, []);
 
   // Resolve fund on mount
   useEffect(() => {
@@ -48,9 +56,11 @@ export default function Index() {
   }, []);
 
   // Dashboard data (panels)
-  const dashboard = useAsyncAction(() => getDashboardData(), []);
+  const dashboard = useAsyncAction(() => getDashboardData(), [dashboardRefreshKey]);
   const market = useAsyncAction(() => getDashboardMarketData(), [marketRefreshKey]);
 
+  // Auto-refresh dashboard (daemon, funds, cron) every 30s
+  useInterval(() => setDashboardRefreshKey((k) => k + 1), DASHBOARD_REFRESH_MS);
   // Auto-refresh market data every 60s
   useInterval(() => setMarketRefreshKey((k) => k + 1), MARKET_REFRESH_MS);
 
