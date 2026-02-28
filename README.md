@@ -135,10 +135,63 @@ fundx live status <fund>            View live trading status
 
 ## Architecture
 
-```
-CLI (fundx) --> Daemon/Scheduler --> Claude Agent SDK Session --> MCP Servers
-                     |                      |
-               Telegram Gateway      Persistent State (per fund)
+```mermaid
+graph TB
+    subgraph UI["User Interface"]
+        CLI["fundx CLI\nInk + Pastel"]
+        TG_IN["Telegram\ngrammy"]
+    end
+
+    subgraph Daemon["Daemon — node-cron"]
+        SCHED["Scheduler\npre_market · mid_session · post_market"]
+    end
+
+    subgraph Session["Claude Agent SDK Session"]
+        CLAUDE["Claude\nclaude-opus-4-5"]
+        subgraph SubAgents["Analyst Sub-Agents — Task tool"]
+            SA1["Macro"]
+            SA2["Technical"]
+            SA3["Sentiment"]
+            SA4["Risk"]
+            SA5["News"]
+        end
+    end
+
+    subgraph MCP["MCP Servers"]
+        MCP1["broker-alpaca\ntrade execution · positions"]
+        MCP2["market-data\nprices · OHLCV · quotes"]
+        MCP3["telegram-notify\nalerts · digests · milestones"]
+    end
+
+    subgraph State["Persistent State  ~/.fundx/funds/name/"]
+        ST1["fund_config.yaml\nCLAUDE.md"]
+        ST2["portfolio.json\nobjective_tracker.json"]
+        ST3["trade_journal.sqlite\nFTS5 + embeddings"]
+        ST4["analysis/  reports/  scripts/"]
+    end
+
+    subgraph Ext["External Services"]
+        EXT1["Alpaca API\npaper / live trading"]
+        EXT2["FMP · Alpaca Data\nmarket data · news"]
+        EXT3["Telegram API"]
+    end
+
+    CLI -->|"run session / ask / chat"| Session
+    CLI -->|"start / stop"| Daemon
+    Daemon -->|"scheduled trigger"| Session
+    TG_IN -->|"free question / command"| Session
+
+    Session <-->|"read constitution\nwrite state + reports"| State
+    CLAUDE --> SubAgents
+
+    Session -->|"execute trades"| MCP1
+    Session -->|"fetch prices"| MCP2
+    Session -->|"send alerts"| MCP3
+
+    MCP1 --> EXT1
+    MCP2 --> EXT2
+    MCP3 --> EXT3
+    EXT3 -->|"notifications"| TG_In2["Telegram\n(user)"]
 ```
 
 Each Claude session:
