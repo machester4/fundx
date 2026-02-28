@@ -281,7 +281,125 @@ Each fund is fully defined by its config. Key sections:
 - **notifications** — Telegram alerts, quiet hours, priority overrides
 - **claude** — Model, personality, decision framework
 
-See the [full schema example](https://github.com/machester4/fundx#fund-configuration-schema) in the design document.
+### Fund Configuration Schema
+
+```yaml
+fund:
+  name: my-runway-fund            # Unique identifier (slug)
+  display_name: My Runway Fund    # Human-readable name
+  description: "18-month living expense runway"
+  created: "2025-01-01T00:00:00Z"
+  status: active                  # active | paused | closed
+
+capital:
+  initial: 30000
+  currency: USD
+
+# Objective — pick one type:
+objective:
+  # runway: sustain monthly expenses for N months
+  type: runway
+  target_months: 18
+  monthly_burn: 2000
+  min_reserve_months: 3
+
+  # growth: multiply capital by a target
+  # type: growth
+  # target_multiple: 2
+  # target_amount: 60000
+  # timeframe_months: 24
+
+  # accumulation: acquire a target amount of an asset
+  # type: accumulation
+  # target_asset: BTC
+  # target_amount: 1
+  # deadline: "2027-01-01"
+
+  # income: generate passive monthly income
+  # type: income
+  # target_monthly_income: 500
+  # income_assets: [JEPI, SCHD]
+
+  # custom: free-form objective
+  # type: custom
+  # description: "Outperform the S&P 500 with less volatility"
+  # success_criteria: "Sharpe ratio > 1.5 over 12 months"
+
+risk:
+  profile: moderate               # conservative | moderate | aggressive | custom
+  max_drawdown_pct: 15            # Max portfolio drawdown before pause
+  max_position_pct: 25            # Max single position size (% of portfolio)
+  max_leverage: 1                 # 1 = no leverage
+  stop_loss_pct: 8                # Per-position stop-loss
+  max_daily_loss_pct: 5           # Daily loss limit before halting
+  correlation_limit: 0.8          # Max allowed correlation between positions
+  custom_rules:
+    - "Never hold more than 2 gold-related ETFs simultaneously"
+
+universe:
+  allowed:
+    - type: etf
+      sectors: [gold, bonds, commodities]
+    - type: stock
+      tickers: [AAPL, MSFT, GOOG]
+    - type: crypto
+      tickers: [BTC, ETH]
+  forbidden:
+    - type: stock
+      sectors: [gambling, tobacco]
+    - type: etf
+      tickers: [SQQQ, TQQQ]   # Leveraged ETFs
+
+schedule:
+  timezone: America/New_York
+  trading_days: [MON, TUE, WED, THU, FRI]
+  sessions:
+    pre_market:
+      time: "08:00"
+      enabled: true
+      focus: "Review overnight news, set watchlist, plan the day"
+      max_duration_minutes: 20
+    mid_session:
+      time: "12:00"
+      enabled: true
+      focus: "Check positions, react to intraday moves"
+      max_duration_minutes: 15
+    post_market:
+      time: "16:30"
+      enabled: true
+      focus: "Review trades, update journal, plan tomorrow"
+      max_duration_minutes: 20
+  special_sessions:
+    - trigger: FOMC
+      time: "13:45"
+      focus: "Prepare for Fed announcement volatility"
+      enabled: true
+      max_duration_minutes: 30
+
+broker:
+  provider: alpaca                # alpaca | ibkr | binance | manual
+  mode: paper                     # paper | live
+
+notifications:
+  telegram:
+    enabled: true
+    trade_alerts: true
+    stop_loss_alerts: true
+    daily_digest: true
+    weekly_digest: true
+    milestone_alerts: true
+    drawdown_alerts: true
+  quiet_hours:
+    enabled: true
+    start: "23:00"
+    end: "07:00"
+    allow_critical: true          # Stop-loss alerts bypass quiet hours
+
+claude:
+  model: sonnet                   # sonnet | opus | haiku
+  personality: "Cautious and data-driven. Prioritizes capital preservation over returns."
+  decision_framework: "Always ask: does this move the runway needle? If not, skip it."
+```
 
 ## Telegram Integration
 
