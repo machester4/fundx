@@ -96,8 +96,6 @@ fundx fund clone <source> <name>    Clone fund configuration
 fundx ask <fund> "<question>"       Wake Claude to answer about a fund
 fundx ask --cross "<question>"      Cross-fund analysis
 fundx session run <fund> <type>     Trigger a session (pre_market/mid_session/post_market)
-fundx session agents <fund>         Run sub-agent analysis (macro/technical/sentiment/risk)
-fundx session run <fund> --parallel Run session with parallel sub-agents
 ```
 
 ### Portfolio & Performance
@@ -147,7 +145,7 @@ Each Claude session:
 1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
 2. Reads persistent state (portfolio, journal, past analyses)
 3. Creates and executes analysis scripts as needed
-4. Optionally launches sub-agents in parallel (macro, technical, sentiment, risk)
+4. Optionally invokes analyst sub-agents via the Task tool (macro, technical, sentiment, risk, news)
 5. Makes decisions within fund constraints
 6. Executes trades via MCP broker server
 7. Updates state and generates reports
