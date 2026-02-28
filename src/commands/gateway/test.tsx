@@ -11,12 +11,15 @@ export default function GatewayTest() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    sendTelegramNotification("Test message from FundX CLI. If you see this, Telegram is configured correctly!")
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await sendTelegramNotification("Test message from FundX CLI. If you see this, Telegram is configured correctly!");
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "sending") return <Spinner label="Sending test message..." />;

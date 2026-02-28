@@ -27,16 +27,20 @@ export default function MonteCarloRun({ args: [fundName], options: opts }: Props
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    runFundMonteCarlo(fundName, {
-      simulations: opts.simulations,
-      horizonMonths: opts.horizon,
-      seed: opts.seed,
-    })
-      .then((r) => { setResult(r); setIsRunning(false); })
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        const r = await runFundMonteCarlo(fundName, {
+          simulations: opts.simulations,
+          horizonMonths: opts.horizon,
+          seed: opts.seed,
+        });
+        setResult(r);
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
+      } finally {
         setIsRunning(false);
-      });
+      }
+    })();
   }, []);
 
   if (isRunning) return <Spinner label={`Running ${opts.simulations.toLocaleString()} simulations...`} />;

@@ -54,12 +54,15 @@ export default function TemplateBuiltin({ args: [templateName] }: Props) {
           const updated = { ...data, capital };
           setData(updated);
           setStep("creating");
-          createFromBuiltinTemplate(templateName, updated.fundName, updated.displayName, capital)
-            .then((name) => { setResult(name); setStep("done"); })
-            .catch((err: unknown) => {
+          (async () => {
+            try {
+              const name = await createFromBuiltinTemplate(templateName, updated.fundName, updated.displayName, capital);
+              setResult(name);
+            } catch (err: unknown) {
               setError(err instanceof Error ? err.message : String(err));
-              setStep("done");
-            });
+            }
+            setStep("done");
+          })();
         }} />
       </WizardStep>
     );

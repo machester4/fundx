@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { loadFundConfig, saveFundConfig } from "./fund.service.js";
+import { loadFundConfig, saveFundConfig, listFundNames } from "./fund.service.js";
 import { readPortfolio, readTracker } from "../state.js";
 import { openJournal, getTradeSummary } from "../journal.js";
 import { fundPaths, WORKSPACE } from "../paths.js";
@@ -147,13 +147,16 @@ export async function switchTradingMode(
   const logFile = join(logDir, "mode_changes.jsonl");
   const logLine = JSON.stringify(confirmation) + "\n";
 
+  const tmpFile = join(logDir, `.tmp_mode_changes_${Date.now()}.jsonl`);
   try {
     const existing = existsSync(logFile)
       ? await readFile(logFile, "utf-8")
       : "";
-    await writeFile(logFile, existing + logLine, "utf-8");
+    await writeFile(tmpFile, existing + logLine, "utf-8");
+    await rename(tmpFile, logFile);
   } catch {
-    await writeFile(logFile, logLine, "utf-8");
+    await writeFile(tmpFile, logLine, "utf-8");
+    await rename(tmpFile, logFile);
   }
 
   return confirmation;
@@ -169,7 +172,6 @@ export interface TradingModeStatus {
 
 /** Get trading mode status for all funds */
 export async function getTradingModeStatuses(): Promise<TradingModeStatus[]> {
-  const { listFundNames } = await import("./fund.service.js");
   const names = await listFundNames();
   const results: TradingModeStatus[] = [];
 

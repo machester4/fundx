@@ -24,12 +24,16 @@ export default function TemplateImport({ args: [file], options: opts }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    importFundTemplate(file, opts.name)
-      .then((name) => { setFundName(name); setStatus("done"); })
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        const name = await importFundTemplate(file, opts.name);
+        setFundName(name);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Importing template..." />;

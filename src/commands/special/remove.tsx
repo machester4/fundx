@@ -20,12 +20,15 @@ export default function SpecialRemove({ args: [fund, indexStr] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    removeSpecialSession(fund, parseInt(indexStr, 10))
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await removeSpecialSession(fund, parseInt(indexStr, 10));
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Removing special session..." />;

@@ -33,10 +33,10 @@ export async function getTradesDisplay(
   const config = await loadFundConfig(fundName);
   const db = openJournal(fundName);
 
-  let trades: TradeRecord[];
-  let label: string;
-
   try {
+    let trades: TradeRecord[];
+    let label: string;
+
     if (filters?.today) {
       const today = new Date().toISOString().split("T")[0];
       trades = getTradesByDate(db, fundName, today);
@@ -52,23 +52,23 @@ export async function getTradesDisplay(
       trades = getRecentTrades(db, fundName, limit);
       label = `Last ${limit} trades`;
     }
+
+    return {
+      fundDisplayName: config.fund.display_name,
+      label,
+      trades: trades.map((t) => ({
+        timestamp: t.timestamp,
+        side: t.side,
+        symbol: t.symbol,
+        quantity: t.quantity,
+        price: t.price,
+        totalValue: t.total_value,
+        orderType: t.order_type,
+        pnl: t.pnl ?? null,
+        reasoning: t.reasoning,
+      })),
+    };
   } finally {
     db.close();
   }
-
-  return {
-    fundDisplayName: config.fund.display_name,
-    label,
-    trades: trades.map((t) => ({
-      timestamp: t.timestamp,
-      side: t.side,
-      symbol: t.symbol,
-      quantity: t.quantity,
-      price: t.price,
-      totalValue: t.total_value,
-      orderType: t.order_type,
-      pnl: t.pnl ?? null,
-      reasoning: t.reasoning,
-    })),
-  };
 }

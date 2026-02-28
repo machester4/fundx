@@ -11,15 +11,16 @@ export default function Stop() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    stopDaemon()
-      .then((r) => {
+    (async () => {
+      try {
+        const r = await stopDaemon();
         setResult(r);
         setStatus("done");
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "stopping") return <Spinner label="Stopping daemon..." />;

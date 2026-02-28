@@ -20,12 +20,16 @@ export default function ReportMonthly({ args: [fundName] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    generateMonthlyReport(fundName)
-      .then((p) => { setPath(p); setStatus("done"); })
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        const p = await generateMonthlyReport(fundName);
+        setPath(p);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Generating monthly report..." />;

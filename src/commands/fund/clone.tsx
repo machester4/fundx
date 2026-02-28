@@ -20,12 +20,15 @@ export default function FundClone({ args: [source, target] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    cloneFund(source, target)
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await cloneFund(source, target);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label={`Cloning '${source}' to '${target}'...`} />;

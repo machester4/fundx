@@ -118,22 +118,24 @@ export default function FundCreate() {
                     ? { type: "income", target_monthly_income: 500 }
                     : { type: "custom", description: "Custom objective" };
 
-            createFund({
-              name: updated.name,
-              displayName: updated.displayName,
-              description: updated.description,
-              objectiveType: updated.objectiveType,
-              initialCapital: updated.capital,
-              objective,
-              riskProfile: updated.riskProfile,
-              tickers: updated.tickers,
-              brokerMode: updated.brokerMode,
-            })
-              .then(() => setStep("done"))
-              .catch((err: unknown) => {
+            (async () => {
+              try {
+                await createFund({
+                  name: updated.name,
+                  displayName: updated.displayName,
+                  description: updated.description,
+                  objectiveType: updated.objectiveType,
+                  initialCapital: updated.capital,
+                  objective,
+                  riskProfile: updated.riskProfile,
+                  tickers: updated.tickers,
+                  brokerMode: updated.brokerMode,
+                });
+              } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : String(err));
-                setStep("done");
-              });
+              }
+              setStep("done");
+            })();
           }}
         />
       </WizardStep>

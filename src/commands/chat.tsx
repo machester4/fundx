@@ -39,6 +39,7 @@ type Phase =
 export default function Chat({ options: opts }: Props) {
   const { exit } = useApp();
   const [phase, setPhase] = useState<Phase>({ type: "resolving" });
+  const [welcomeData, setWelcomeData] = useState<ChatWelcomeData | null>(null);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [turnCount, setTurnCount] = useState(0);
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
@@ -70,6 +71,7 @@ export default function Chat({ options: opts }: Props) {
     const welcome = await loadChatWelcomeData(fundName, resolvedModel, opts.readonly);
     setModel(resolvedModel);
     setMcpServers(servers);
+    setWelcomeData(welcome);
     setPhase({ type: "idle", fundName, welcome });
   };
 
@@ -95,11 +97,11 @@ export default function Chat({ options: opts }: Props) {
         messages: t.messages + 1,
       }));
       setResponses((r) => [...r, { text: result.responseText, cost: result.cost_usd, turns: result.num_turns }]);
-      setPhase({ type: "idle", fundName, welcome: (phase as { welcome: ChatWelcomeData }).welcome });
+      setPhase({ type: "idle", fundName, welcome: welcomeData! });
     } catch (err: unknown) {
       setPhase({ type: "error", message: err instanceof Error ? err.message : String(err) });
     }
-  }, [turnCount, sessionId, model, mcpServers, opts, streaming, phase]);
+  }, [turnCount, sessionId, model, mcpServers, opts, streaming, welcomeData]);
 
   // Ctrl+C handler
   useInput((input, key) => {

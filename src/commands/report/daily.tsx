@@ -20,12 +20,16 @@ export default function ReportDaily({ args: [fundName] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    generateDailyReport(fundName)
-      .then((p) => { setPath(p); setStatus("done"); })
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        const p = await generateDailyReport(fundName);
+        setPath(p);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Generating daily report..." />;

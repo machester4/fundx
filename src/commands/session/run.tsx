@@ -26,16 +26,19 @@ export default function SessionRun({ args: [fund, type], options: opts }: Props)
   const mode = opts.parallel ? "parallel" : opts.debate ? "debate" : "standard";
 
   useEffect(() => {
-    const run = opts.parallel
-      ? runFundSessionWithSubAgents(fund, type)
-      : runFundSession(fund, type, { useDebateSkills: opts.debate });
-
-    run
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        if (opts.parallel) {
+          await runFundSessionWithSubAgents(fund, type);
+        } else {
+          await runFundSession(fund, type, { useDebateSkills: opts.debate });
+        }
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label={`Running ${type} session for '${fund}' (${mode})...`} />;

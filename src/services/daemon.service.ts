@@ -22,7 +22,7 @@ const MARKET_CLOSE_HOUR = 16;
 const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
 
 /** Append a timestamped line to the daemon log file */
-export async function log(message: string): Promise<void> {
+async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
   console.log(message);
   await appendFile(DAEMON_LOG, line, "utf-8").catch(() => {});
@@ -117,18 +117,19 @@ export async function startDaemon(): Promise<void> {
           (hour > MARKET_OPEN_HOUR || (hour === MARKET_OPEN_HOUR && minute >= MARKET_OPEN_MINUTE)) &&
           hour < MARKET_CLOSE_HOUR;
         if (duringMarket && minute % STOPLOSS_CHECK_INTERVAL_MINUTES === 0) {
-          checkStopLosses(name)
-            .then(async (triggered) => {
+          void (async () => {
+            try {
+              const triggered = await checkStopLosses(name);
               if (triggered.length > 0) {
                 await log(
                   `Stop-loss triggered for '${name}': ${triggered.map((t) => t.symbol).join(", ")}`,
                 );
-                return executeStopLosses(name, triggered);
+                await executeStopLosses(name, triggered);
               }
-            })
-            .catch(async (err) => {
+            } catch (err) {
               await log(`Stop-loss check error (${name}): ${err}`);
-            });
+            }
+          })();
         }
       } catch (err) {
         await log(`Error checking fund '${name}': ${err}`);

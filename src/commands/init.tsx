@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import { TextInput, Select } from "@inkjs/ui";
 import { workspaceExists, initWorkspace, getWorkspacePath } from "../services/init.service.js";
@@ -22,12 +22,17 @@ export default function Init() {
   });
   const [error, setError] = useState<string | null>(null);
 
+  // Auto-advance from check to timezone on mount
+  useEffect(() => {
+    if (step === "check" && !workspaceExists()) {
+      setStep("timezone");
+    }
+  }, []);
+
   if (step === "check") {
     if (workspaceExists()) {
       return <Text color="yellow">Workspace already exists at {getWorkspacePath()}</Text>;
     }
-    // Auto-advance
-    setTimeout(() => setStep("timezone"), 0);
     return <Text bold>FundX — Workspace Setup</Text>;
   }
 
@@ -126,11 +131,12 @@ export default function Init() {
         <TextInput
           placeholder="Enter bot token or press Enter to skip..."
           onSubmit={(value) => {
-            setData((d) => ({ ...d, botToken: value }));
+            const updated = { ...data, botToken: value };
+            setData(updated);
             if (value) {
               setStep("chatId");
             } else {
-              doInit(data, setStep, setError);
+              doInit(updated, setStep, setError);
             }
           }}
         />
@@ -161,18 +167,20 @@ function doInit(
   setStep: (s: Step) => void,
   setError: (e: string | null) => void,
 ) {
-  initWorkspace({
-    timezone: data.timezone,
-    defaultModel: data.defaultModel,
-    brokerProvider: data.brokerProvider,
-    apiKey: data.apiKey || undefined,
-    secretKey: data.secretKey || undefined,
-    botToken: data.botToken || undefined,
-    chatId: data.chatId || undefined,
-  })
-    .then(() => setStep("done"))
-    .catch((err: unknown) => {
+  (async () => {
+    try {
+      await initWorkspace({
+        timezone: data.timezone,
+        defaultModel: data.defaultModel,
+        brokerProvider: data.brokerProvider,
+        apiKey: data.apiKey || undefined,
+        secretKey: data.secretKey || undefined,
+        botToken: data.botToken || undefined,
+        chatId: data.chatId || undefined,
+      });
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
-      setStep("done");
-    });
+    }
+    setStep("done");
+  })();
 }
