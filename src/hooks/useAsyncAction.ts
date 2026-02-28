@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface AsyncState<T> {
   data: T | null;
@@ -22,29 +22,35 @@ export function useAsyncAction<T>(
 
   const retry = useCallback(() => setRetryCount((c) => c + 1), []);
 
+  // Serialize deps to a stable string key so useEffect has a fixed-length dep array
+  const depsKey = JSON.stringify(deps);
+  const fnRef = useRef(fn);
+  fnRef.current = fn;
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
-    fn()
-      .then((result) => {
+    (async () => {
+      try {
+        const result = await fnRef.current();
         if (!cancelled) {
           setData(result);
           setIsLoading(false);
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err : new Error(String(err)));
           setIsLoading(false);
         }
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [retryCount, ...deps]);
+  }, [retryCount, depsKey]);
 
   return { data, isLoading, error, retry };
 }

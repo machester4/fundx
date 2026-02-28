@@ -19,12 +19,15 @@ export default function LiveDisable({ args: [fundName] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    switchTradingMode(fundName, "paper")
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await switchTradingMode(fundName, "paper");
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Switching to paper mode..." />;

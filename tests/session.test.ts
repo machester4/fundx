@@ -49,10 +49,6 @@ vi.mock("../src/subagent.js", () => ({
   saveSubAgentAnalysis: (...args: unknown[]) => mockSaveSubAgentAnalysis(...args),
 }));
 
-vi.mock("../src/mcp-config.js", () => ({
-  writeMcpSettings: vi.fn(),
-}));
-
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),

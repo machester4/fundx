@@ -20,12 +20,16 @@ export default function ReportWeekly({ args: [fundName] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    generateWeeklyReport(fundName)
-      .then((p) => { setPath(p); setStatus("done"); })
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        const p = await generateWeeklyReport(fundName);
+        setPath(p);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Generating weekly report..." />;

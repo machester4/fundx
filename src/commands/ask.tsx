@@ -27,15 +27,21 @@ export default function Ask({ args: [question], options: opts }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    runAskQuery(question, {
-      fund: opts.fund,
-      all: opts.all,
-      search: opts.search,
-      model: opts.model,
-    })
-      .then((res) => setResult(res))
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setIsLoading(false));
+    (async () => {
+      try {
+        const res = await runAskQuery(question, {
+          fund: opts.fund,
+          all: opts.all,
+          search: opts.search,
+          model: opts.model,
+        });
+        setResult(res);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, []);
 
   if (isLoading) return <Spinner label="Thinking..." />;

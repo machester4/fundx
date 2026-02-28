@@ -22,16 +22,17 @@ export default function LiveEnable({ args: [fundName] }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    runSafetyChecks(fundName)
-      .then((result) => {
+    (async () => {
+      try {
+        const result = await runSafetyChecks(fundName);
         setChecks(result.checks);
         setAllPassed(result.passed);
         setPhase("results");
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setPhase("error");
-      });
+      }
+    })();
   }, []);
 
   if (phase === "checking") return <Spinner label="Running safety checks..." />;
@@ -54,12 +55,15 @@ export default function LiveEnable({ args: [fundName] }: Props) {
             <ConfirmInput
               onConfirm={() => {
                 setPhase("switching");
-                switchTradingMode(fundName, "live")
-                  .then(() => setPhase("done"))
-                  .catch((err: unknown) => {
+                (async () => {
+                  try {
+                    await switchTradingMode(fundName, "live");
+                    setPhase("done");
+                  } catch (err: unknown) {
                     setError(err instanceof Error ? err.message : String(err));
                     setPhase("error");
-                  });
+                  }
+                })();
               }}
               onCancel={() => exit()}
             />

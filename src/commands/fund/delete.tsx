@@ -32,12 +32,14 @@ export default function FundDelete({ args: [name] }: Props) {
         <ConfirmInput
           onConfirm={() => {
             setConfirmed(true);
-            deleteFund(name)
-              .then(() => setDone(true))
-              .catch((err: unknown) => {
+            (async () => {
+              try {
+                await deleteFund(name);
+              } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : String(err));
-                setDone(true);
-              });
+              }
+              setDone(true);
+            })();
           }}
           onCancel={() => exit()}
         />

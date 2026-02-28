@@ -54,13 +54,6 @@ vi.mock("../src/config.js", () => ({
   }),
 }));
 
-vi.mock("@inquirer/prompts", () => ({
-  input: vi.fn(),
-  select: vi.fn(),
-  number: vi.fn(),
-  confirm: vi.fn(),
-}));
-
 import { loadFundConfig, saveFundConfig, listFundNames } from "../src/services/fund.service.js";
 
 beforeEach(() => {

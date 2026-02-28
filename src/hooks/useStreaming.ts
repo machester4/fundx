@@ -82,11 +82,15 @@ export function useStreaming(): UseStreamingReturn {
           },
         });
 
-        setState((s) => ({ ...s, isStreaming: false, result }));
+        if (!cancelledRef.current) {
+          setState((s) => ({ ...s, isStreaming: false, result }));
+        }
         return result;
       } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
-        setState((s) => ({ ...s, isStreaming: false, error }));
+        if (!cancelledRef.current) {
+          setState((s) => ({ ...s, isStreaming: false, error }));
+        }
         throw error;
       }
     },

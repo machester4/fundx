@@ -245,7 +245,7 @@ Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and ru
 | Component | Technology |
 |-----------|-----------|
 | Language | TypeScript (Node.js 20+, ESM) |
-| CLI | Commander.js + @inquirer/prompts + chalk |
+| CLI | Ink (React for CLI) + Pastel (file-based routing) + @inkjs/ui |
 | Config | YAML (js-yaml) + Zod validation |
 | State DB | SQLite (better-sqlite3) |
 | Daemon | node-cron |

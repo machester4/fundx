@@ -10,12 +10,15 @@ export default function GatewayStart() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    startGateway()
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await startGateway();
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "starting") return <Spinner label="Starting Telegram gateway..." />;

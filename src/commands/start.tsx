@@ -10,12 +10,15 @@ export default function Start() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    startDaemon()
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await startDaemon();
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "starting") return <Spinner label="Starting daemon..." />;

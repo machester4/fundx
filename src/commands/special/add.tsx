@@ -22,12 +22,15 @@ export default function SpecialAdd({ args: [fund, trigger, time, focus] }: Props
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    addSpecialSession(fund, trigger, time, focus)
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
+    (async () => {
+      try {
+        await addSpecialSession(fund, trigger, time, focus);
+        setStatus("done");
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
         setStatus("error");
-      });
+      }
+    })();
   }, []);
 
   if (status === "running") return <Spinner label="Adding special session..." />;
