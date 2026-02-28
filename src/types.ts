@@ -180,7 +180,7 @@ export const globalConfigSchema = z.object({
     .default({}),
   market_data: z
     .object({
-      provider: z.enum(["fmp", "alpaca"]).default("fmp"),
+      provider: z.enum(["fmp", "alpaca", "yfinance"]).default("fmp"),
       fmp_api_key: z.string().optional(),
     })
     .default({}),
@@ -442,7 +442,7 @@ export const serviceStatusSchema = z.object({
   daemon: z.boolean().default(false),
   telegram: z.boolean().default(false),
   marketData: z.boolean().default(false),
-  marketDataProvider: z.enum(["fmp", "alpaca", "none"]).default("none"),
+  marketDataProvider: z.enum(["fmp", "alpaca", "yfinance", "none"]).default("none"),
 });
 
 export type ServiceStatus = z.infer<typeof serviceStatusSchema>;

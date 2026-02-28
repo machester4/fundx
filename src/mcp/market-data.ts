@@ -1,10 +1,17 @@
+import YahooFinance from "yahoo-finance2";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+const yf = new YahooFinance();
+
 // ── Alpaca Data API client ────────────────────────────────────
 
 const ALPACA_DATA_URL = "https://data.alpaca.markets";
+
+function hasAlpacaKeys(): boolean {
+  return !!(process.env.ALPACA_API_KEY && process.env.ALPACA_SECRET_KEY);
+}
 
 function getHeaders(): Record<string, string> {
   const apiKey = process.env.ALPACA_API_KEY;
@@ -16,6 +23,16 @@ function getHeaders(): Record<string, string> {
     "APCA-API-KEY-ID": apiKey,
     "APCA-API-SECRET-KEY": secretKey,
   };
+}
+
+// ── Yahoo Finance interval mapping ────────────────────────────
+
+// yf.historical() only supports daily/weekly/monthly intervals.
+// Intraday timeframes are clamped to "1d" since historical() has no intraday support.
+function toYahooHistoricalInterval(tf: string): "1d" | "1wk" | "1mo" {
+  if (tf === "1Week") return "1wk";
+  if (tf === "1Month") return "1mo";
+  return "1d";
 }
 
 async function dataRequest(path: string): Promise<unknown> {
@@ -65,9 +82,13 @@ const server = new McpServer(
 
 server.tool(
   "get_latest_trade",
-  "Get the latest trade for a symbol (last executed trade price and size)",
+  "Get the latest trade for a symbol (last executed trade price and size). Falls back to Yahoo Finance quote when Alpaca is not configured.",
   { symbol: z.string().describe("Ticker symbol (e.g. AAPL, GDX)") },
   async ({ symbol }) => {
+    if (!hasAlpacaKeys()) {
+      const data = await yf.quote(symbol);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
     const data = await dataRequest(
       `/v2/stocks/${encodeURIComponent(symbol)}/trades/latest`,
     );
@@ -80,6 +101,10 @@ server.tool(
   "Get the latest NBBO quote for a symbol (best bid/ask)",
   { symbol: z.string().describe("Ticker symbol") },
   async ({ symbol }) => {
+    if (!hasAlpacaKeys()) {
+      const data = await yf.quote(symbol);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
     const data = await dataRequest(
       `/v2/stocks/${encodeURIComponent(symbol)}/quotes/latest`,
     );
@@ -99,6 +124,15 @@ server.tool(
     sort: z.enum(["asc", "desc"]).default("asc").describe("Sort order by timestamp"),
   },
   async ({ symbol, timeframe, start, end, limit, sort }) => {
+    if (!hasAlpacaKeys()) {
+      const bars = await yf.historical(symbol, {
+        period1: start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
+        period2: end ? new Date(end) : new Date(),
+        interval: toYahooHistoricalInterval(timeframe),
+      });
+      const sorted = sort === "desc" ? [...bars].reverse() : bars;
+      return { content: [{ type: "text", text: JSON.stringify(sorted.slice(0, limit), null, 2) }] };
+    }
     const params = new URLSearchParams({
       timeframe,
       limit: String(limit),
@@ -119,6 +153,10 @@ server.tool(
   "Get a comprehensive snapshot of a symbol: latest trade, latest quote, minute bar, daily bar, and previous daily bar",
   { symbol: z.string().describe("Ticker symbol") },
   async ({ symbol }) => {
+    if (!hasAlpacaKeys()) {
+      const data = await yf.quote(symbol);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
     const data = await dataRequest(
       `/v2/stocks/${encodeURIComponent(symbol)}/snapshot`,
     );
@@ -128,7 +166,7 @@ server.tool(
 
 server.tool(
   "get_multi_bars",
-  "Get historical bars for multiple symbols at once",
+  "Get historical bars for multiple symbols at once. Falls back to Yahoo Finance when Alpaca is not configured.",
   {
     symbols: z.string().describe("Comma-separated ticker symbols (e.g. AAPL,MSFT,GDX)"),
     timeframe: z.string().default("1Day").describe("Bar timeframe"),
@@ -137,6 +175,19 @@ server.tool(
     limit: z.number().positive().max(10000).default(100).describe("Max bars per symbol"),
   },
   async ({ symbols, timeframe, start, end, limit }) => {
+    if (!hasAlpacaKeys()) {
+      const symbolList = symbols.split(",").map((s) => s.trim());
+      const period1 = start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+      const period2 = end ? new Date(end) : new Date();
+      const interval = toYahooHistoricalInterval(timeframe);
+      const results: Record<string, unknown[]> = {};
+      await Promise.all(
+        symbolList.map(async (sym) => {
+          results[sym] = await yf.historical(sym, { period1, period2, interval });
+        }),
+      );
+      return { content: [{ type: "text", text: JSON.stringify({ bars: results }, null, 2) }] };
+    }
     const params = new URLSearchParams({
       symbols,
       timeframe,
@@ -152,11 +203,16 @@ server.tool(
 
 server.tool(
   "get_multi_snapshots",
-  "Get snapshots for multiple symbols at once",
+  "Get snapshots for multiple symbols at once. Falls back to Yahoo Finance when Alpaca is not configured.",
   {
     symbols: z.string().describe("Comma-separated ticker symbols (e.g. GDX,GDXJ,SLV,GLD)"),
   },
   async ({ symbols }) => {
+    if (!hasAlpacaKeys()) {
+      const symbolList = symbols.split(",").map((s) => s.trim());
+      const data = await yf.quote(symbolList, { return: "array" });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
     const params = new URLSearchParams({ symbols });
     const data = await dataRequest(`/v2/stocks/snapshots?${params.toString()}`);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -181,6 +237,14 @@ server.tool(
         losers: Array.isArray(losers) ? losers.slice(0, top) : losers,
       };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+    if (!hasAlpacaKeys()) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: "get_market_movers: Requires FMP_API_KEY or Alpaca credentials. Set market_data.fmp_api_key in ~/.fundx/config.yaml for FMP access.",
+        }],
+      };
     }
     const params = new URLSearchParams({ top: String(top) });
     const data = await dataRequest(
@@ -209,16 +273,17 @@ server.tool(
       const data = await fmpRequest(`/stock_news?${params.toString()}`);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
-    const params = new URLSearchParams({
-      limit: String(limit),
-      sort,
-    });
-    if (symbols) params.set("symbols", symbols);
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
-
-    const data = await dataRequest(`/v1beta1/news?${params.toString()}`);
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    if (hasAlpacaKeys()) {
+      const params = new URLSearchParams({ limit: String(limit), sort });
+      if (symbols) params.set("symbols", symbols);
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      const data = await dataRequest(`/v1beta1/news?${params.toString()}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+    const query = symbols ? symbols.split(",")[0] : "stock market";
+    const result = await yf.search(query, { newsCount: limit });
+    return { content: [{ type: "text", text: JSON.stringify(result.news ?? [], null, 2) }] };
   },
 );
 
@@ -230,6 +295,14 @@ server.tool(
     top: z.number().positive().max(100).default(20).describe("Number of results"),
   },
   async ({ by, top }) => {
+    if (!hasAlpacaKeys()) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: "get_most_active: Requires Alpaca credentials. Set broker.api_key and broker.secret_key in ~/.fundx/config.yaml.",
+        }],
+      };
+    }
     const params = new URLSearchParams({
       by,
       top: String(top),
@@ -245,26 +318,37 @@ server.tool(
 
 server.tool(
   "get_quote",
-  "Get real-time quote with PE ratio, market cap, 52-week range, EPS, and next earnings date (FMP)",
+  "Get real-time quote with PE ratio, market cap, 52-week range, EPS, and next earnings date (FMP, falls back to Yahoo Finance)",
   {
     symbols: z.string().describe("Comma-separated ticker symbols (e.g. AAPL,MSFT)"),
   },
   async ({ symbols }) => {
-    if (!getFmpApiKey()) return fmpNotConfigured("get_quote");
-    const data = await fmpRequest(`/quote/${symbols}`);
+    if (getFmpApiKey()) {
+      const data = await fmpRequest(`/quote/${symbols}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+    const symbolList = symbols.split(",").map((s) => s.trim());
+    const data = symbolList.length === 1
+      ? await yf.quote(symbolList[0])
+      : await yf.quote(symbolList, { return: "array" });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 
 server.tool(
   "get_company_profile",
-  "Get company profile: sector, industry, CEO, description, market cap, beta, exchange (FMP)",
+  "Get company profile: sector, industry, CEO, description, market cap, beta, exchange (FMP, falls back to Yahoo Finance)",
   {
     symbol: z.string().describe("Ticker symbol (e.g. AAPL)"),
   },
   async ({ symbol }) => {
-    if (!getFmpApiKey()) return fmpNotConfigured("get_company_profile");
-    const data = await fmpRequest(`/profile/${encodeURIComponent(symbol)}`);
+    if (getFmpApiKey()) {
+      const data = await fmpRequest(`/profile/${encodeURIComponent(symbol)}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
+    const data = await yf.quoteSummary(symbol, {
+      modules: ["assetProfile", "summaryDetail"],
+    });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
@@ -362,6 +446,19 @@ server.tool(
     const params = new URLSearchParams({ query, limit: String(limit) });
     const data = await fmpRequest(`/search?${params.toString()}`);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_options_chain",
+  "Get options chain (calls and puts) for a symbol with strikes, expiry, IV, delta (Yahoo Finance)",
+  {
+    symbol: z.string().describe("Ticker symbol (e.g. AAPL)"),
+    date: z.string().optional().describe("Expiration date (YYYY-MM-DD). Omit for nearest expiry."),
+  },
+  async ({ symbol, date }) => {
+    const options = await yf.options(symbol, date ? { date: new Date(date) } : undefined);
+    return { content: [{ type: "text", text: JSON.stringify(options, null, 2) }] };
   },
 );
 

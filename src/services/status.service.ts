@@ -162,7 +162,7 @@ async function checkTelegramStatus(): Promise<boolean> {
 }
 
 /** Check if the active market data provider is reachable */
-async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "alpaca" | "none" }> {
+async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "alpaca" | "yfinance" | "none" }> {
   const provider = await getMarketDataProvider();
 
   if (provider === "fmp") {
@@ -191,6 +191,18 @@ async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" |
         },
         signal: AbortSignal.timeout(3000),
       });
+      return { ok: resp.ok, provider };
+    } catch {
+      return { ok: false, provider };
+    }
+  }
+
+  if (provider === "yfinance") {
+    try {
+      const resp = await fetch(
+        "https://query1.finance.yahoo.com/v8/finance/chart/SPY?interval=1d&range=1d",
+        { signal: AbortSignal.timeout(3000) },
+      );
       return { ok: resp.ok, provider };
     } catch {
       return { ok: false, provider };

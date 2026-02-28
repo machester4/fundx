@@ -86,7 +86,8 @@ ${getSkillsSummaryForTemplate()}
   - \`get_economic_calendar\` — FOMC, CPI, NFP, GDP macro events (FMP)
   - \`get_sector_performance\` — All 11 GICS sector % changes today (FMP)
   - \`search_symbol\` — Find ticker by company name (FMP)
-  Note: FMP tools return an informational message if FMP is not configured — use Alpaca tools as alternatives in that case.
+  - \`get_options_chain\` — Options chain with calls, puts, strikes, IV, delta (Yahoo Finance, always available)
+  Note: FMP tools return an informational message if FMP is not configured. Alpaca tools require broker credentials. Yahoo Finance tools (get_options_chain, and fallbacks for get_bars/get_snapshot/get_latest_trade/get_quote etc.) are always available without configuration.
 - **telegram-notify**: Send notifications to the user via Telegram
   - \`send_message\` — Send any text message (supports HTML formatting)
   - \`send_trade_alert\` — Formatted trade execution notification
