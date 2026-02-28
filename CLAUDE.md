@@ -30,7 +30,7 @@ Each Claude Code session:
 1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
 2. Reads persistent state (portfolio, journal, past analyses)
 3. Creates and executes analysis scripts as needed
-4. Optionally launches sub-agents for parallel analysis
+4. Optionally invokes analyst sub-agents via the Task tool (macro, technical, sentiment, risk, news)
 5. Makes decisions within fund constraints
 6. Executes trades via MCP broker server
 7. Updates persistent state and generates reports
@@ -108,7 +108,7 @@ src/
   state.ts              # Per-fund state file CRUD (portfolio, tracker, session log)
   template.ts           # Per-fund CLAUDE.md generation from fund_config.yaml
   agent.ts              # Claude Agent SDK wrapper — single entry point for all AI queries
-  subagent.ts           # Sub-agent parallel execution (macro, technical, sentiment, risk)
+  subagent.ts           # Analyst AgentDefinitions for the Task tool (macro, technical, sentiment, risk, news)
   embeddings.ts         # Trade journal FTS5 indexing + similarity search
   journal.ts            # Trade journal SQLite CRUD (open, insert, query, summary)
   alpaca-helpers.ts     # Shared Alpaca API helpers (credentials, fetch, orders)
@@ -121,7 +121,7 @@ src/
     fund.service.ts     # Fund CRUD, config load/save, list, validate, create
     init.service.ts     # Workspace initialization
     status.service.ts   # Dashboard data aggregation
-    session.service.ts  # Session runner + sub-agent integration
+    session.service.ts  # Session runner
     daemon.service.ts   # Daemon start/stop, cron scheduling
     gateway.service.ts  # Telegram gateway management
     ask.service.ts      # Question answering + cross-fund analysis
@@ -289,12 +289,10 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx gateway start` — standalone gateway, `fundx gateway test` — send test message
 
 ### Phase 4 — Intelligence — COMPLETE
-- [x] Sub-agent parallel execution (`subagent.ts`) — macro, technical, sentiment, risk agents
+- [x] Analyst AgentDefinitions via Task tool (`subagent.ts`) — macro, technical, sentiment, risk, news
 - [x] `fundx ask` command with cross-fund analysis (`ask.ts`)
-- [x] `fundx session run --parallel` — session with sub-agent analysis
-- [x] `fundx session agents` — standalone sub-agent analysis
 - [x] Trade journal FTS5 vector embeddings + similarity search (`embeddings.ts`)
-- [x] Zod schemas for sub-agent config, results, and similar trade results (`types.ts`)
+- [x] Zod schemas for similar trade results (`types.ts`)
 - [x] Auto-indexing via SQLite triggers (INSERT, UPDATE, DELETE sync)
 - [x] Trade context summary generation for prompts
 
