@@ -39,7 +39,7 @@ async function telegramRequest(
 // ── Notification flag helpers ────────────────────────────────
 
 /** Returns false only when the env var is explicitly set to "false" */
-function isEnabled(envVar: string): boolean {
+export function isEnabled(envVar: string): boolean {
   const val = process.env[envVar];
   return val !== "false";
 }
@@ -50,7 +50,7 @@ const SUPPRESSED = (reason: string) => ({
 
 // ── Quiet hours check ────────────────────────────────────────
 
-function isInQuietHours(): boolean {
+export function isInQuietHours(): boolean {
   const start = process.env.QUIET_HOURS_START;
   const end = process.env.QUIET_HOURS_END;
   if (!start || !end) return false;
@@ -70,11 +70,11 @@ function isInQuietHours(): boolean {
 }
 
 /** True when a critical message is allowed to bypass quiet hours */
-function allowCritical(): boolean {
+export function allowCritical(): boolean {
   return isEnabled("QUIET_HOURS_ALLOW_CRITICAL");
 }
 
-function isSuppressedByQuietHours(isCritical: boolean): boolean {
+export function isSuppressedByQuietHours(isCritical: boolean): boolean {
   if (!isInQuietHours()) return false;
   if (isCritical && allowCritical()) return false;
   return true;
