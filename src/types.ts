@@ -455,9 +455,18 @@ export const newsHeadlineSchema = z.object({
 
 export type NewsHeadline = z.infer<typeof newsHeadlineSchema>;
 
+export const sectorSnapshotSchema = z.object({
+  symbol: z.string(),
+  name: z.string(),
+  changePct: z.number(),
+});
+
+export type SectorSnapshot = z.infer<typeof sectorSnapshotSchema>;
+
 export const dashboardMarketDataSchema = z.object({
   indices: z.array(marketIndexSnapshotSchema).default([]),
   news: z.array(newsHeadlineSchema).default([]),
+  sectors: z.array(sectorSnapshotSchema).default([]),
   marketOpen: z.boolean().default(false),
   fetchedAt: z.string(),
 });

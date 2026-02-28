@@ -44,11 +44,17 @@ export function FundsOverviewPanel({ funds, fundExtras, activeFund, width, heigh
         <Text dimColor>Run fundx fund create</Text>
       ) : (
         <>
-          {/* Line 1: status + name + value + P&L */}
+          {/* Line 1: status + name + mode badge + value + P&L */}
           <Box justifyContent="space-between">
             <Box gap={1}>
               <StatusBadge status={fund.status} />
               <Text bold>{fund.displayName}</Text>
+              <Text
+                bold
+                color={fund.brokerMode === "live" ? "red" : "yellow"}
+              >
+                [{fund.brokerMode === "live" ? "LIVE" : "PAPER"}]
+              </Text>
               <Text dimColor>·</Text>
               <Text dimColor>${fund.currentValue.toLocaleString()}</Text>
             </Box>
