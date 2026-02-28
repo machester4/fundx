@@ -286,6 +286,51 @@ describe("buildMcpServers", () => {
 
     expect(servers["broker-alpaca"].env.ALPACA_MODE).toBe("live");
   });
+
+  it("passes FMP_API_KEY to market-data when configured", async () => {
+    mockedGlobalConfig.mockResolvedValue(
+      makeGlobalConfig({
+        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
+      }) as never,
+    );
+
+    const servers = await buildMcpServers("test-fund");
+
+    expect(servers["market-data"].env.FMP_API_KEY).toBe("fmp-test-key");
+  });
+
+  it("omits FMP_API_KEY from market-data when not configured", async () => {
+    // default makeGlobalConfig has no market_data.fmp_api_key
+    const servers = await buildMcpServers("test-fund");
+
+    expect(servers["market-data"].env.FMP_API_KEY).toBeUndefined();
+  });
+
+  it("passes both Alpaca and FMP credentials to market-data when both configured", async () => {
+    mockedGlobalConfig.mockResolvedValue(
+      makeGlobalConfig({
+        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
+      }) as never,
+    );
+
+    const servers = await buildMcpServers("test-fund");
+
+    expect(servers["market-data"].env.ALPACA_API_KEY).toBe("ak-test-123");
+    expect(servers["market-data"].env.ALPACA_SECRET_KEY).toBe("sk-test-456");
+    expect(servers["market-data"].env.FMP_API_KEY).toBe("fmp-test-key");
+  });
+
+  it("does not leak FMP_API_KEY to broker-alpaca", async () => {
+    mockedGlobalConfig.mockResolvedValue(
+      makeGlobalConfig({
+        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
+      }) as never,
+    );
+
+    const servers = await buildMcpServers("test-fund");
+
+    expect(servers["broker-alpaca"].env.FMP_API_KEY).toBeUndefined();
+  });
 });
 
 // ── runAgentQuery ─────────────────────────────────────────────

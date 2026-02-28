@@ -28,6 +28,32 @@ async function dataRequest(path: string): Promise<unknown> {
   return resp.json();
 }
 
+// ── FMP Data API client ───────────────────────────────────────
+
+const FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+
+function getFmpApiKey(): string | undefined {
+  return process.env.FMP_API_KEY;
+}
+
+async function fmpRequest(path: string): Promise<unknown> {
+  const apiKey = getFmpApiKey();
+  if (!apiKey) throw new Error("FMP_API_KEY is not configured");
+  const separator = path.includes("?") ? "&" : "?";
+  const resp = await fetch(`${FMP_BASE_URL}${path}${separator}apikey=${apiKey}`);
+  if (!resp.ok) throw new Error(`FMP API error ${resp.status}: ${await resp.text()}`);
+  return resp.json();
+}
+
+function fmpNotConfigured(toolName: string) {
+  return {
+    content: [{
+      type: "text" as const,
+      text: `${toolName}: FMP_API_KEY is not configured. Set market_data.fmp_api_key in ~/.fundx/config.yaml. Use Alpaca tools (get_snapshot, get_bars) as alternatives.`,
+    }],
+  };
+}
+
 // ── MCP Server ────────────────────────────────────────────────
 
 const server = new McpServer(
@@ -139,12 +165,23 @@ server.tool(
 
 server.tool(
   "get_market_movers",
-  "Get top market movers (gainers and losers) by type",
+  "Get top market movers (gainers and losers). Uses FMP if configured, falls back to Alpaca.",
   {
-    market_type: z.enum(["stocks", "etfs"]).default("stocks").describe("Market type to get movers for"),
+    market_type: z.enum(["stocks", "etfs"]).default("stocks").describe("Market type to get movers for (Alpaca fallback only)"),
     top: z.number().positive().max(50).default(10).describe("Number of top movers to return"),
   },
   async ({ market_type, top }) => {
+    if (getFmpApiKey()) {
+      const [gainers, losers] = await Promise.all([
+        fmpRequest(`/stock_market/gainers`),
+        fmpRequest(`/stock_market/losers`),
+      ]);
+      const result = {
+        gainers: Array.isArray(gainers) ? gainers.slice(0, top) : gainers,
+        losers: Array.isArray(losers) ? losers.slice(0, top) : losers,
+      };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
     const params = new URLSearchParams({ top: String(top) });
     const data = await dataRequest(
       `/v1beta1/screener/${market_type}/movers?${params.toString()}`,
@@ -155,15 +192,23 @@ server.tool(
 
 server.tool(
   "get_news",
-  "Get recent financial news articles, optionally filtered by symbols",
+  "Get recent financial news articles, optionally filtered by symbols. Uses FMP if configured, falls back to Alpaca.",
   {
     symbols: z.string().optional().describe("Comma-separated symbols to filter news (e.g. AAPL,MSFT)"),
     limit: z.number().positive().max(50).default(10).describe("Number of articles"),
-    start: z.string().optional().describe("Start date (ISO 8601)"),
-    end: z.string().optional().describe("End date (ISO 8601)"),
-    sort: z.enum(["asc", "desc"]).default("desc").describe("Sort order"),
+    start: z.string().optional().describe("Start date (YYYY-MM-DD). Maps to 'from' on FMP, 'start' on Alpaca."),
+    end: z.string().optional().describe("End date (YYYY-MM-DD). Maps to 'to' on FMP, 'end' on Alpaca."),
+    sort: z.enum(["asc", "desc"]).default("desc").describe("Sort order (Alpaca fallback only)"),
   },
   async ({ symbols, limit, start, end, sort }) => {
+    if (getFmpApiKey()) {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (symbols) params.set("tickers", symbols);
+      if (start) params.set("from", start);
+      if (end) params.set("to", end);
+      const data = await fmpRequest(`/stock_news?${params.toString()}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    }
     const params = new URLSearchParams({
       limit: String(limit),
       sort,
@@ -192,6 +237,130 @@ server.tool(
     const data = await dataRequest(
       `/v1beta1/screener/stocks/most-actives?${params.toString()}`,
     );
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+// ── FMP-only tools ────────────────────────────────────────────
+
+server.tool(
+  "get_quote",
+  "Get real-time quote with PE ratio, market cap, 52-week range, EPS, and next earnings date (FMP)",
+  {
+    symbols: z.string().describe("Comma-separated ticker symbols (e.g. AAPL,MSFT)"),
+  },
+  async ({ symbols }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_quote");
+    const data = await fmpRequest(`/quote/${symbols}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_company_profile",
+  "Get company profile: sector, industry, CEO, description, market cap, beta, exchange (FMP)",
+  {
+    symbol: z.string().describe("Ticker symbol (e.g. AAPL)"),
+  },
+  async ({ symbol }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_company_profile");
+    const data = await fmpRequest(`/profile/${encodeURIComponent(symbol)}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_income_statement",
+  "Get income statement: revenue, net income, EPS by quarter or annual period (FMP)",
+  {
+    symbol: z.string().describe("Ticker symbol (e.g. AAPL)"),
+    period: z.enum(["quarter", "annual"]).default("quarter").describe("Reporting period"),
+    limit: z.number().positive().max(20).default(4).describe("Number of periods to return"),
+  },
+  async ({ symbol, period, limit }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_income_statement");
+    const params = new URLSearchParams({ period, limit: String(limit) });
+    const data = await fmpRequest(`/income-statement/${encodeURIComponent(symbol)}?${params.toString()}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_financial_ratios",
+  "Get financial ratios: P/E, P/B, ROE, debt ratios, dividend yield by quarter or annual (FMP)",
+  {
+    symbol: z.string().describe("Ticker symbol (e.g. AAPL)"),
+    period: z.enum(["quarter", "annual"]).default("quarter").describe("Reporting period"),
+    limit: z.number().positive().max(20).default(4).describe("Number of periods to return"),
+  },
+  async ({ symbol, period, limit }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_financial_ratios");
+    const params = new URLSearchParams({ period, limit: String(limit) });
+    const data = await fmpRequest(`/ratios/${encodeURIComponent(symbol)}?${params.toString()}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_earnings_calendar",
+  "Get upcoming earnings dates with EPS estimates and revenue estimates (FMP)",
+  {
+    from: z.string().describe("Start date (YYYY-MM-DD)"),
+    to: z.string().describe("End date (YYYY-MM-DD)"),
+    symbols: z.string().optional().describe("Comma-separated symbols to filter (client-side)"),
+  },
+  async ({ from, to, symbols }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_earnings_calendar");
+    const params = new URLSearchParams({ from, to });
+    const data = await fmpRequest(`/earning_calendar?${params.toString()}`);
+    if (symbols && Array.isArray(data)) {
+      const tickers = symbols.toUpperCase().split(",").map((s) => s.trim());
+      const filtered = (data as Array<{ symbol?: string }>).filter(
+        (item) => item.symbol && tickers.includes(item.symbol.toUpperCase()),
+      );
+      return { content: [{ type: "text", text: JSON.stringify(filtered, null, 2) }] };
+    }
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_economic_calendar",
+  "Get macro economic events: FOMC, CPI, NFP, GDP with impact level and consensus estimates (FMP)",
+  {
+    from: z.string().describe("Start date (YYYY-MM-DD)"),
+    to: z.string().describe("End date (YYYY-MM-DD)"),
+  },
+  async ({ from, to }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_economic_calendar");
+    const params = new URLSearchParams({ from, to });
+    const data = await fmpRequest(`/economic_calendar?${params.toString()}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_sector_performance",
+  "Get all 11 GICS sector percentage changes for today (FMP)",
+  {},
+  async () => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_sector_performance");
+    const data = await fmpRequest(`/sector-performance`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "search_symbol",
+  "Search for a ticker symbol by company name or partial ticker (FMP)",
+  {
+    query: z.string().describe("Company name or partial ticker to search for"),
+    limit: z.number().positive().max(50).default(10).describe("Number of results"),
+  },
+  async ({ query, limit }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("search_symbol");
+    const params = new URLSearchParams({ query, limit: String(limit) });
+    const data = await fmpRequest(`/search?${params.toString()}`);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
