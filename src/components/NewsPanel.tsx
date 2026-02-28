@@ -10,8 +10,8 @@ interface NewsPanelProps {
 }
 
 export function NewsPanel({ headlines, width, height, hasCredentials }: NewsPanelProps) {
-  // Inner width for truncating headlines
-  const innerWidth = typeof width === "number" ? width - 6 : 50; // border(2) + paddingX(2) + "- "(2)
+  // border(2) + paddingX(2) + "· "(2) + source + " "
+  const innerWidth = typeof width === "number" ? width - 6 : 50;
 
   return (
     <Box
@@ -27,22 +27,19 @@ export function NewsPanel({ headlines, width, height, hasCredentials }: NewsPane
       ) : headlines.length === 0 ? (
         <Text dimColor>No headlines available</Text>
       ) : (
-        headlines.map((item, i) => {
-          const maxLen = Math.max(10, innerWidth);
+        headlines.map((item) => {
+          const sourceTag = item.source ? `${item.source.slice(0, 12)} ` : "";
+          const headlineWidth = Math.max(10, innerWidth - sourceTag.length - 2);
           const headline =
-            item.headline.length > maxLen
-              ? item.headline.substring(0, maxLen - 1) + "…"
+            item.headline.length > headlineWidth
+              ? item.headline.substring(0, headlineWidth - 1) + "…"
               : item.headline;
 
           return (
-            <Box key={item.id} flexDirection="column">
-              <Text>
-                <Text dimColor>- </Text>
-                <Text>{headline}</Text>
-              </Text>
-              {i < headlines.length - 1 && (
-                <Text dimColor>{"─".repeat(Math.max(1, innerWidth))}</Text>
-              )}
+            <Box key={item.id}>
+              <Text dimColor>· </Text>
+              <Text dimColor>{sourceTag}</Text>
+              <Text>{headline}</Text>
             </Box>
           );
         })

@@ -1,6 +1,6 @@
 import { loadGlobalConfig } from "../config.js";
 import { ALPACA_PAPER_URL, ALPACA_DATA_URL } from "../alpaca-helpers.js";
-import type { MarketIndexSnapshot, NewsHeadline, DashboardMarketData } from "../types.js";
+import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData } from "../types.js";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -10,6 +10,20 @@ const FMP_INDICES: Record<string, string> = {
   "^GSPC": "S&P 500",
   "^IXIC": "NASDAQ",
   "^VIX": "VIX",
+};
+
+const SECTOR_ETFS: Record<string, string> = {
+  XLK: "Tech",
+  XLF: "Fin",
+  XLE: "Energy",
+  XLV: "Health",
+  XLI: "Indust",
+  XLY: "Discret",
+  XLP: "Staples",
+  XLU: "Utils",
+  XLB: "Mats",
+  XLC: "Comm",
+  XLRE: "RE",
 };
 
 const ALPACA_INDICES: Record<string, string> = {
@@ -143,6 +157,33 @@ async function fetchFmpMarketClock(apiKey: string): Promise<{ isOpen: boolean }>
   }
 }
 
+async function fetchFmpSectors(apiKey: string): Promise<SectorSnapshot[]> {
+  const symbols = Object.keys(SECTOR_ETFS);
+  try {
+    const resp = await fetch(
+      `${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (!resp.ok) return [];
+
+    const data = (await resp.json()) as Array<{
+      symbol: string;
+      changesPercentage: number;
+    }>;
+
+    return data
+      .filter((q) => SECTOR_ETFS[q.symbol])
+      .map((q) => ({
+        symbol: q.symbol,
+        name: SECTOR_ETFS[q.symbol],
+        changePct: q.changesPercentage,
+      }))
+      .sort((a, b) => b.changePct - a.changePct);
+  } catch {
+    return [];
+  }
+}
+
 // ── Alpaca provider (fallback) ───────────────────────────────
 
 function alpacaHeaders(apiKey: string, secretKey: string): Record<string, string> {
@@ -225,6 +266,40 @@ async function fetchAlpacaIndices(
   return results;
 }
 
+async function fetchAlpacaSectors(
+  apiKey: string,
+  secretKey: string,
+): Promise<SectorSnapshot[]> {
+  const symbols = Object.keys(SECTOR_ETFS);
+  const headers = alpacaHeaders(apiKey, secretKey);
+  try {
+    const params = new URLSearchParams({ symbols: symbols.join(","), feed: "iex" });
+    const resp = await fetch(
+      `${ALPACA_DATA_URL}/v2/stocks/snapshots?${params.toString()}`,
+      { headers, signal: AbortSignal.timeout(5000) },
+    );
+    if (!resp.ok) return [];
+
+    const snapData = (await resp.json()) as Record<
+      string,
+      { dailyBar?: { c: number; o: number }; prevDailyBar?: { c: number } }
+    >;
+
+    return symbols
+      .filter((s) => snapData[s])
+      .map((s) => {
+        const snap = snapData[s];
+        const price = snap.dailyBar?.c ?? 0;
+        const prevClose = snap.prevDailyBar?.c ?? snap.dailyBar?.o ?? price;
+        const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+        return { symbol: s, name: SECTOR_ETFS[s], changePct };
+      })
+      .sort((a, b) => b.changePct - a.changePct);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchAlpacaNews(
   apiKey: string,
   secretKey: string,
@@ -294,8 +369,20 @@ export async function fetchMarketIndices(): Promise<MarketIndexSnapshot[]> {
   return [];
 }
 
+/** Fetch sector ETF snapshots for heatmap display */
+export async function fetchSectorSnapshots(): Promise<SectorSnapshot[]> {
+  const info = await detectProvider();
+  if (info.provider === "fmp" && info.fmpApiKey) {
+    return fetchFmpSectors(info.fmpApiKey).catch(() => []);
+  }
+  if (info.provider === "alpaca" && info.alpacaApiKey && info.alpacaSecretKey) {
+    return fetchAlpacaSectors(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
+  }
+  return [];
+}
+
 /** Fetch latest news headlines */
-export async function fetchNewsHeadlines(limit = 5): Promise<NewsHeadline[]> {
+export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
   const info = await detectProvider();
   if (info.provider === "fmp" && info.fmpApiKey) {
     return fetchFmpNews(info.fmpApiKey, limit).catch(() => []);
@@ -326,15 +413,17 @@ export async function getMarketDataProvider(): Promise<"fmp" | "alpaca" | "none"
 
 /** Aggregate all market data for the dashboard */
 export async function getDashboardMarketData(): Promise<DashboardMarketData> {
-  const [indices, news, clock] = await Promise.all([
+  const [indices, news, sectors, clock] = await Promise.all([
     fetchMarketIndices().catch(() => [] as MarketIndexSnapshot[]),
     fetchNewsHeadlines().catch(() => [] as NewsHeadline[]),
+    fetchSectorSnapshots().catch(() => [] as SectorSnapshot[]),
     fetchMarketClock().catch(() => ({ isOpen: false })),
   ]);
 
   return {
     indices,
     news,
+    sectors,
     marketOpen: clock.isOpen,
     fetchedAt: new Date().toISOString(),
   };

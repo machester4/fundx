@@ -12,6 +12,7 @@ import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
 import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
 import { NewsPanel } from "../components/NewsPanel.js";
 import { MarketIndicesPanel } from "../components/MarketIndicesPanel.js";
+import { SectorHeatmapPanel } from "../components/SectorHeatmapPanel.js";
 import { DashboardFooter } from "../components/DashboardFooter.js";
 import { ChatView } from "../components/ChatView.js";
 
@@ -19,7 +20,9 @@ export const description = "FundX — Autonomous AI Fund Manager powered by the 
 
 const MARKET_REFRESH_MS = 60_000;
 const DASHBOARD_REFRESH_MS = 30_000;
-const PANEL_HEIGHT = 5;
+const TOP_PANEL_HEIGHT = 5;
+const BOTTOM_PANEL_HEIGHT = 8;
+const SECTOR_ROW_HEIGHT = 3;
 
 type Phase =
   | { type: "resolving" }
@@ -76,12 +79,14 @@ export default function Index() {
   const fundExtras = data?.fundExtras ?? new Map();
   const indices = marketData?.indices ?? [];
   const news = marketData?.news ?? [];
+  const sectors = marketData?.sectors ?? [];
   const marketOpen = marketData?.marketOpen ?? false;
   const isShort = rows < 20;
 
   const innerWidth = columns - 2; // inside outer border
   const halfInner = Math.floor(innerWidth / 2);
-  const newsItems = Math.max(1, Math.floor((PANEL_HEIGHT - 2) * 0.6));
+  // Each news item is 1 line; subtract 2 for borders
+  const newsItems = Math.max(1, BOTTOM_PANEL_HEIGHT - 2);
 
   // Active fund name (available once resolved)
   const activeFundName = phase.type === "ready" ? phase.fundName : undefined;
@@ -94,7 +99,7 @@ export default function Index() {
       <Box>
         <SystemStatusPanel
           width={halfInner}
-          height={PANEL_HEIGHT}
+          height={TOP_PANEL_HEIGHT}
           services={services}
           nextCron={nextCron}
         />
@@ -103,7 +108,7 @@ export default function Index() {
           fundExtras={fundExtras}
           activeFund={activeFundName}
           width={innerWidth - halfInner}
-          height={PANEL_HEIGHT}
+          height={TOP_PANEL_HEIGHT}
         />
       </Box>
 
@@ -113,16 +118,25 @@ export default function Index() {
           <NewsPanel
             headlines={news.slice(0, newsItems)}
             width={halfInner}
-            height={PANEL_HEIGHT}
+            height={BOTTOM_PANEL_HEIGHT}
             hasCredentials={hasCredentials || services.marketData}
           />
           <MarketIndicesPanel
             indices={indices}
             width={innerWidth - halfInner}
-            height={PANEL_HEIGHT}
+            height={BOTTOM_PANEL_HEIGHT}
             hasCredentials={hasCredentials || services.marketData}
           />
         </Box>
+      )}
+
+      {/* Sector heatmap row (hidden on short terminals) */}
+      {!isShort && (
+        <SectorHeatmapPanel
+          sectors={sectors}
+          width={innerWidth}
+          hasCredentials={hasCredentials || services.marketData}
+        />
       )}
     </>
   );
@@ -194,7 +208,9 @@ export default function Index() {
 
   // ── REPL (main state) ───────────────────────────────────────
 
-  const panelsHeight = isShort ? PANEL_HEIGHT : PANEL_HEIGHT * 2;
+  const panelsHeight = isShort
+    ? TOP_PANEL_HEIGHT
+    : TOP_PANEL_HEIGHT + BOTTOM_PANEL_HEIGHT + SECTOR_ROW_HEIGHT;
   const footerHeight = 1;
   const outerBorderHeight = 2; // top + bottom border
   const chatHeight = Math.max(5, rows - panelsHeight - footerHeight - outerBorderHeight);

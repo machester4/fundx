@@ -47,7 +47,7 @@ export function FundContextBar({ welcome: w }: FundContextBarProps) {
           <StatusBadge status={w.fundConfig.fund.status} />
           <Text bold>{w.fundConfig.fund.display_name}</Text>
           <Text dimColor>·</Text>
-          <Text color={modeColor}>{modeLabel}</Text>
+          <Text color={modeColor} bold>[{modeLabel}]</Text>
           <Text dimColor>·</Text>
           <Text dimColor>{w.model}</Text>
         </Box>

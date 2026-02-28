@@ -16,6 +16,7 @@ export interface FundStatusData {
   name: string;
   displayName: string;
   status: "active" | "paused" | "closed" | string;
+  brokerMode: "paper" | "live";
   initialCapital: number;
   currentValue: number;
   pnl: number;
@@ -52,6 +53,7 @@ export async function getAllFundStatuses(): Promise<FundStatusData[]> {
         name,
         displayName: config.fund.display_name,
         status: config.fund.status,
+        brokerMode: config.broker.mode === "live" ? "live" : "paper",
         initialCapital: config.capital.initial,
         currentValue,
         pnl,
@@ -69,6 +71,7 @@ export async function getAllFundStatuses(): Promise<FundStatusData[]> {
         name,
         displayName: name,
         status: "error",
+        brokerMode: "paper",
         initialCapital: 0,
         currentValue: 0,
         pnl: 0,
