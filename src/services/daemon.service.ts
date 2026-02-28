@@ -67,14 +67,24 @@ export async function startDaemon(): Promise<void> {
   cron.schedule("* * * * *", async () => {
     const names = await listFundNames();
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    const currentDay = days[now.getDay()];
 
     for (const name of names) {
       try {
         const config = await loadFundConfig(name);
         if (config.fund.status !== "active") continue;
+
+        const tz = config.schedule.timezone || "UTC";
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          weekday: "short",
+          hour12: false,
+        }).formatToParts(now);
+        const currentTime = `${parts.find((p) => p.type === "hour")!.value}:${parts.find((p) => p.type === "minute")!.value}`;
+        const days: Record<string, string> = { Sun: "SUN", Mon: "MON", Tue: "TUE", Wed: "WED", Thu: "THU", Fri: "FRI", Sat: "SAT" };
+        const currentDay = days[parts.find((p) => p.type === "weekday")!.value] ?? "SUN";
+
         if (!config.schedule.trading_days.includes(currentDay as never))
           continue;
 
@@ -111,7 +121,8 @@ export async function startDaemon(): Promise<void> {
             await log(`Weekly report error (${name}): ${err}`);
           });
         }
-        if (now.getDate() === 1 && currentTime === MONTHLY_REPORT_TIME) {
+        const dayOfMonth = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, day: "numeric" }).format(now), 10);
+        if (dayOfMonth === 1 && currentTime === MONTHLY_REPORT_TIME) {
           generateMonthlyReport(name).catch(async (err) => {
             await log(`Monthly report error (${name}): ${err}`);
           });
@@ -123,8 +134,8 @@ export async function startDaemon(): Promise<void> {
           });
         }
 
-        const hour = now.getHours();
-        const minute = now.getMinutes();
+        const hour = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+        const minute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
         const duringMarket =
           (hour > MARKET_OPEN_HOUR || (hour === MARKET_OPEN_HOUR && minute >= MARKET_OPEN_MINUTE)) &&
           hour < MARKET_CLOSE_HOUR;
