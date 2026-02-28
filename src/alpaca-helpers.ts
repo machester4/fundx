@@ -1,5 +1,5 @@
 import { loadGlobalConfig } from "./config.js";
-import { loadFundConfig } from "./fund.js";
+import { loadFundConfig } from "./services/fund.service.js";
 
 // ── Alpaca Constants & Credentials ──────────────────────────
 

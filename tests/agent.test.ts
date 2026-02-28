@@ -8,7 +8,7 @@ import { homedir } from "node:os";
  * We mock:
  * - @anthropic-ai/claude-agent-sdk (the SDK query function)
  * - ../src/config.js (global config)
- * - ../src/fund.js (fund config)
+ * - ../src/services/fund.service.js (fund config)
  *
  * We test:
  * - buildMcpServers: env var assembly, conditional telegram-notify
@@ -85,14 +85,14 @@ vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn(),
 }));
 
-vi.mock("../src/fund.js", () => ({
+vi.mock("../src/services/fund.service.js", () => ({
   loadFundConfig: vi.fn(),
 }));
 
 // Import after mocks
 import { buildMcpServers, runAgentQuery } from "../src/agent.js";
 import { loadGlobalConfig } from "../src/config.js";
-import { loadFundConfig } from "../src/fund.js";
+import { loadFundConfig } from "../src/services/fund.service.js";
 import { MCP_SERVERS } from "../src/paths.js";
 
 const mockedGlobalConfig = vi.mocked(loadGlobalConfig);
@@ -441,6 +441,7 @@ describe("runAgentQuery", () => {
   it("handles thrown errors from SDK query", async () => {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
     vi.mocked(query).mockReturnValueOnce({
+      // eslint-disable-next-line require-yield
       [Symbol.asyncIterator]: async function* () {
         throw new Error("Network connection failed");
       },
@@ -517,6 +518,7 @@ describe("runAgentQuery", () => {
   it("detects AbortError as timeout status", async () => {
     const { query, AbortError } = await import("@anthropic-ai/claude-agent-sdk");
     vi.mocked(query).mockReturnValueOnce({
+      // eslint-disable-next-line require-yield
       [Symbol.asyncIterator]: async function* () {
         throw new (AbortError as new (msg?: string) => Error)("The operation was aborted");
       },
@@ -536,6 +538,7 @@ describe("runAgentQuery", () => {
   it("does not treat non-abort errors as timeout", async () => {
     const { query } = await import("@anthropic-ai/claude-agent-sdk");
     vi.mocked(query).mockReturnValueOnce({
+      // eslint-disable-next-line require-yield
       [Symbol.asyncIterator]: async function* () {
         throw new Error("API rate limit exceeded");
       },

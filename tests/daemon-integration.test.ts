@@ -27,25 +27,26 @@ vi.mock("node-cron", () => ({
   },
 }));
 
-vi.mock("../src/fund.js", () => ({
+vi.mock("../src/services/fund.service.js", () => ({
   listFundNames: vi.fn().mockResolvedValue([]),
   loadFundConfig: vi.fn(),
+  saveFundConfig: vi.fn(),
 }));
 
-vi.mock("../src/session.js", () => ({
+vi.mock("../src/services/session.service.js", () => ({
   runFundSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../src/gateway.js", () => ({
+vi.mock("../src/services/gateway.service.js", () => ({
   startGateway: vi.fn().mockResolvedValue(undefined),
   stopGateway: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../src/special-sessions.js", () => ({
+vi.mock("../src/services/special-sessions.service.js", () => ({
   checkSpecialSessions: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock("../src/reports.js", () => ({
+vi.mock("../src/services/reports.service.js", () => ({
   generateDailyReport: vi.fn().mockResolvedValue(undefined),
   generateWeeklyReport: vi.fn().mockResolvedValue(undefined),
   generateMonthlyReport: vi.fn().mockResolvedValue(undefined),
@@ -85,10 +86,11 @@ vi.mock("../src/journal.js", () => ({
 
 // Import after mocks
 import cron from "node-cron";
-import { listFundNames, loadFundConfig } from "../src/fund.js";
+import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
 import { syncPortfolio } from "../src/sync.js";
 import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
-import { generateDailyReport } from "../src/reports.js";
+import { generateDailyReport } from "../src/services/reports.service.js";
+import { startDaemon, stopDaemon, isDaemonRunning } from "../src/services/daemon.service.js";
 import type { FundConfig } from "../src/types.js";
 import { fundConfigSchema } from "../src/types.js";
 
@@ -113,21 +115,20 @@ beforeEach(() => {
   exitSpy.mockImplementation((() => {}) as never);
 });
 
-// ── Daemon module imports ────────────────────────────────────────
+// ── Daemon module ────────────────────────────────────────────
 
 describe("daemon module", () => {
   it("exports start and stop commands", async () => {
-    const { startCommand, stopCommand } = await import("../src/daemon.js");
-    expect(startCommand.name()).toBe("start");
-    expect(stopCommand.name()).toBe("stop");
+    expect(typeof startDaemon).toBe("function");
+    expect(typeof stopDaemon).toBe("function");
+    expect(typeof isDaemonRunning).toBe("function");
   });
 
   it("registers cron schedule on start", async () => {
     const { existsSync } = await import("node:fs");
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const { startCommand } = await import("../src/daemon.js");
-    await startCommand.parseAsync([], { from: "user" });
+    await startDaemon();
 
     expect(cron.schedule).toHaveBeenCalledWith("* * * * *", expect.any(Function));
   });
@@ -167,9 +168,8 @@ describe("daemon cron callback", () => {
     const { existsSync } = await import("node:fs");
     vi.mocked(existsSync).mockReturnValue(false);
 
-    // Import daemon to trigger startDaemon → cron.schedule
-    const { startCommand } = await import("../src/daemon.js");
-    await startCommand.parseAsync([], { from: "user" });
+    // Start daemon to trigger cron.schedule
+    await startDaemon();
 
     // Set up default mocks for the cron loop
     vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);

@@ -171,7 +171,7 @@ describe("Phase 5 Zod Schemas", () => {
 
 describe("Monte Carlo Simulation", () => {
   it("should run a basic simulation", async () => {
-    const { runMonteCarloSimulation } = await import("../src/montecarlo.js");
+    const { runMonteCarloSimulation } = await import("../src/services/montecarlo.service.js");
 
     const result = runMonteCarloSimulation(
       30000,
@@ -193,7 +193,7 @@ describe("Monte Carlo Simulation", () => {
   });
 
   it("should compute runway with monthly burn", async () => {
-    const { runMonteCarloSimulation } = await import("../src/montecarlo.js");
+    const { runMonteCarloSimulation } = await import("../src/services/montecarlo.service.js");
 
     const result = runMonteCarloSimulation(
       30000,
@@ -211,7 +211,7 @@ describe("Monte Carlo Simulation", () => {
   });
 
   it("should be deterministic with same seed", async () => {
-    const { runMonteCarloSimulation } = await import("../src/montecarlo.js");
+    const { runMonteCarloSimulation } = await import("../src/services/montecarlo.service.js");
 
     const result1 = runMonteCarloSimulation(
       10000,
@@ -236,7 +236,7 @@ describe("Monte Carlo Simulation", () => {
   });
 
   it("should handle zero returns gracefully", async () => {
-    const { runMonteCarloSimulation } = await import("../src/montecarlo.js");
+    const { runMonteCarloSimulation } = await import("../src/services/montecarlo.service.js");
 
     const result = runMonteCarloSimulation(
       10000,
@@ -257,7 +257,7 @@ describe("Monte Carlo Simulation", () => {
 
 describe("Special Sessions", () => {
   it("should detect third Friday (OpEx)", async () => {
-    const { checkSpecialSessions } = await import("../src/special-sessions.js");
+    const { checkSpecialSessions } = await import("../src/services/special-sessions.service.js");
     const { fundConfigSchema } = await import("../src/types.js");
 
     const config = fundConfigSchema.parse({
@@ -287,7 +287,7 @@ describe("Special Sessions", () => {
   });
 
   it("should not trigger on non-matching dates", async () => {
-    const { checkSpecialSessions } = await import("../src/special-sessions.js");
+    const { checkSpecialSessions } = await import("../src/services/special-sessions.service.js");
     const { fundConfigSchema } = await import("../src/types.js");
 
     const config = fundConfigSchema.parse({
@@ -316,7 +316,7 @@ describe("Special Sessions", () => {
   });
 
   it("should handle disabled special sessions", async () => {
-    const { checkSpecialSessions } = await import("../src/special-sessions.js");
+    const { checkSpecialSessions } = await import("../src/services/special-sessions.service.js");
     const { fundConfigSchema } = await import("../src/types.js");
 
     const config = fundConfigSchema.parse({
@@ -344,7 +344,7 @@ describe("Special Sessions", () => {
   });
 
   it("should list known market events", async () => {
-    const { KNOWN_EVENTS } = await import("../src/special-sessions.js");
+    const { KNOWN_EVENTS } = await import("../src/services/special-sessions.service.js");
 
     expect(KNOWN_EVENTS.length).toBeGreaterThan(0);
     expect(KNOWN_EVENTS.some((e) => e.name === "FOMC Meeting")).toBe(true);
@@ -419,7 +419,7 @@ describe("Broker Adapters", () => {
 
 describe("Fund Templates", () => {
   it("should list built-in templates", async () => {
-    const { listTemplates } = await import("../src/templates.js");
+    const { listTemplates } = await import("../src/services/templates.service.js");
 
     // Mock fs operations to avoid touching real filesystem
     const templates = await listTemplates();

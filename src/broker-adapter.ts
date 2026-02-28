@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { loadGlobalConfig } from "./config.js";
-import { loadFundConfig } from "./fund.js";
+import { loadFundConfig } from "./services/fund.service.js";
 import { ALPACA_PAPER_URL, ALPACA_LIVE_URL } from "./alpaca-helpers.js";
 import type { BrokerCapabilities } from "./types.js";
 
