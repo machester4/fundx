@@ -3,7 +3,7 @@ import zod from "zod";
 import { argument } from "pastel";
 import { Text } from "ink";
 import { Spinner } from "@inkjs/ui";
-import { runFundSession, runFundSessionWithSubAgents } from "../../services/session.service.js";
+import { runFundSession } from "../../services/session.service.js";
 import { SuccessMessage } from "../../components/SuccessMessage.js";
 
 export const description = "Manually trigger a session";
@@ -14,7 +14,6 @@ export const args = zod.tuple([
 ]);
 
 export const options = zod.object({
-  parallel: zod.boolean().default(false).describe("Use sub-agent parallel analysis"),
   debate: zod.boolean().default(false).describe("Prioritize thorough analysis using debate skills"),
 });
 
@@ -23,16 +22,11 @@ type Props = { args: zod.infer<typeof args>; options: zod.infer<typeof options> 
 export default function SessionRun({ args: [fund, type], options: opts }: Props) {
   const [status, setStatus] = useState<"running" | "done" | "error">("running");
   const [error, setError] = useState<string | null>(null);
-  const mode = opts.parallel ? "parallel" : opts.debate ? "debate" : "standard";
 
   useEffect(() => {
     (async () => {
       try {
-        if (opts.parallel) {
-          await runFundSessionWithSubAgents(fund, type);
-        } else {
-          await runFundSession(fund, type, { useDebateSkills: opts.debate });
-        }
+        await runFundSession(fund, type, { useDebateSkills: opts.debate });
         setStatus("done");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
@@ -41,7 +35,7 @@ export default function SessionRun({ args: [fund, type], options: opts }: Props)
     })();
   }, []);
 
-  if (status === "running") return <Spinner label={`Running ${type} session for '${fund}' (${mode})...`} />;
+  if (status === "running") return <Spinner label={`Running ${type} session for '${fund}'...`} />;
   if (status === "error") return <Text color="red">Session failed: {error}</Text>;
-  return <SuccessMessage>{opts.parallel ? "Parallel session" : "Session"} complete for &apos;{fund}&apos;.</SuccessMessage>;
+  return <SuccessMessage>Session complete for &apos;{fund}&apos;.</SuccessMessage>;
 }
