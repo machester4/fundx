@@ -21,6 +21,7 @@ function ServiceDot({ label, active }: { label: string; active: boolean }) {
 const PROVIDER_LABELS: Record<string, string> = {
   fmp: "FMP",
   alpaca: "Alpaca",
+  yfinance: "Yahoo",
   none: "Market",
 };
 

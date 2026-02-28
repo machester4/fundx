@@ -1,6 +1,9 @@
+import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
 import { ALPACA_PAPER_URL, ALPACA_DATA_URL } from "../alpaca-helpers.js";
 import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData } from "../types.js";
+
+const yf = new YahooFinance();
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -32,14 +35,19 @@ const ALPACA_INDICES: Record<string, string> = {
   VIXY: "VIX",
 };
 
+const YFINANCE_INDICES: Record<string, string> = {
+  "^GSPC": "S&P 500",
+  "^IXIC": "NASDAQ",
+  "^VIX": "VIX",
+};
+
 // ── Provider detection ───────────────────────────────────────
 
-interface ProviderInfo {
-  provider: "fmp" | "alpaca" | "none";
-  fmpApiKey?: string;
-  alpacaApiKey?: string;
-  alpacaSecretKey?: string;
-}
+type ProviderInfo =
+  | { provider: "fmp"; fmpApiKey: string }
+  | { provider: "alpaca"; alpacaApiKey: string; alpacaSecretKey: string }
+  | { provider: "yfinance" }
+  | { provider: "none" };
 
 async function detectProvider(): Promise<ProviderInfo> {
   try {
@@ -56,9 +64,9 @@ async function detectProvider(): Promise<ProviderInfo> {
       return { provider: "alpaca", alpacaApiKey: alpacaKey, alpacaSecretKey: alpacaSecret };
     }
 
-    return { provider: "none" };
+    return { provider: "yfinance" };
   } catch {
-    return { provider: "none" };
+    return { provider: "yfinance" };
   }
 }
 
@@ -181,6 +189,80 @@ async function fetchFmpSectors(apiKey: string): Promise<SectorSnapshot[]> {
       .sort((a, b) => b.changePct - a.changePct);
   } catch {
     return [];
+  }
+}
+
+// ── Yahoo Finance provider (free fallback) ────────────────────
+
+async function fetchYFinanceIndices(): Promise<MarketIndexSnapshot[]> {
+  const symbols = Object.keys(YFINANCE_INDICES);
+  const quotes = await yf.quote(symbols, { return: "array" });
+  const results: MarketIndexSnapshot[] = [];
+  for (const q of quotes) {
+    if (!q.symbol || YFINANCE_INDICES[q.symbol] === undefined) continue;
+    let sparklineValues: number[] = [];
+    try {
+      const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const bars = await yf.historical(q.symbol, {
+        period1: twoWeeksAgo,
+        period2: new Date(),
+        interval: "1d",
+      });
+      sparklineValues = bars.slice(-12).map((b) => b.close);
+    } catch { /* sparklines are optional */ }
+    results.push({
+      symbol: q.symbol,
+      name: YFINANCE_INDICES[q.symbol],
+      price: q.regularMarketPrice ?? 0,
+      change: q.regularMarketChange ?? 0,
+      changePct: q.regularMarketChangePercent ?? 0,
+      sparklineValues,
+    });
+  }
+  return results;
+}
+
+async function fetchYFinanceSectors(): Promise<SectorSnapshot[]> {
+  try {
+    const symbols = Object.keys(SECTOR_ETFS);
+    const quotes = await yf.quote(symbols, { return: "array" });
+    return quotes
+      .filter((q) => q.symbol && SECTOR_ETFS[q.symbol])
+      .map((q) => ({
+        symbol: q.symbol!,
+        name: SECTOR_ETFS[q.symbol!],
+        changePct: q.regularMarketChangePercent ?? 0,
+      }))
+      .sort((a, b) => b.changePct - a.changePct);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchYFinanceNews(limit = 5): Promise<NewsHeadline[]> {
+  try {
+    const result = await yf.search("stock market", { newsCount: limit });
+    return (result.news ?? []).slice(0, limit).map((n, i) => ({
+      id: String(i),
+      headline: n.title,
+      source: n.publisher,
+      timestamp: n.providerPublishTime instanceof Date
+        ? n.providerPublishTime.toISOString()
+        : new Date().toISOString(),
+      symbols: [],
+      url: n.link,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchYFinanceMarketClock(): Promise<{ isOpen: boolean }> {
+  try {
+    const quote = await yf.quote("SPY");
+    return { isOpen: quote.marketState === "REGULAR" };
+  } catch {
+    return { isOpen: false };
   }
 }
 
@@ -360,11 +442,14 @@ async function fetchAlpacaMarketClock(
 /** Fetch market index snapshots for dashboard display */
 export async function fetchMarketIndices(): Promise<MarketIndexSnapshot[]> {
   const info = await detectProvider();
-  if (info.provider === "fmp" && info.fmpApiKey) {
+  if (info.provider === "fmp") {
     return fetchFmpIndices(info.fmpApiKey).catch(() => []);
   }
-  if (info.provider === "alpaca" && info.alpacaApiKey && info.alpacaSecretKey) {
+  if (info.provider === "alpaca") {
     return fetchAlpacaIndices(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
+  }
+  if (info.provider === "yfinance") {
+    return fetchYFinanceIndices().catch(() => []);
   }
   return [];
 }
@@ -372,11 +457,14 @@ export async function fetchMarketIndices(): Promise<MarketIndexSnapshot[]> {
 /** Fetch sector ETF snapshots for heatmap display */
 export async function fetchSectorSnapshots(): Promise<SectorSnapshot[]> {
   const info = await detectProvider();
-  if (info.provider === "fmp" && info.fmpApiKey) {
+  if (info.provider === "fmp") {
     return fetchFmpSectors(info.fmpApiKey).catch(() => []);
   }
-  if (info.provider === "alpaca" && info.alpacaApiKey && info.alpacaSecretKey) {
+  if (info.provider === "alpaca") {
     return fetchAlpacaSectors(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
+  }
+  if (info.provider === "yfinance") {
+    return fetchYFinanceSectors().catch(() => []);
   }
   return [];
 }
@@ -384,11 +472,14 @@ export async function fetchSectorSnapshots(): Promise<SectorSnapshot[]> {
 /** Fetch latest news headlines */
 export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
   const info = await detectProvider();
-  if (info.provider === "fmp" && info.fmpApiKey) {
+  if (info.provider === "fmp") {
     return fetchFmpNews(info.fmpApiKey, limit).catch(() => []);
   }
-  if (info.provider === "alpaca" && info.alpacaApiKey && info.alpacaSecretKey) {
+  if (info.provider === "alpaca") {
     return fetchAlpacaNews(info.alpacaApiKey, info.alpacaSecretKey, limit).catch(() => []);
+  }
+  if (info.provider === "yfinance") {
+    return fetchYFinanceNews(limit).catch(() => []);
   }
   return [];
 }
@@ -396,17 +487,20 @@ export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
 /** Check if market is currently open */
 export async function fetchMarketClock(): Promise<{ isOpen: boolean }> {
   const info = await detectProvider();
-  if (info.provider === "fmp" && info.fmpApiKey) {
+  if (info.provider === "fmp") {
     return fetchFmpMarketClock(info.fmpApiKey).catch(() => ({ isOpen: false }));
   }
-  if (info.provider === "alpaca" && info.alpacaApiKey && info.alpacaSecretKey) {
+  if (info.provider === "alpaca") {
     return fetchAlpacaMarketClock(info.alpacaApiKey, info.alpacaSecretKey).catch(() => ({ isOpen: false }));
+  }
+  if (info.provider === "yfinance") {
+    return fetchYFinanceMarketClock().catch(() => ({ isOpen: false }));
   }
   return { isOpen: false };
 }
 
 /** Get the active market data provider name */
-export async function getMarketDataProvider(): Promise<"fmp" | "alpaca" | "none"> {
+export async function getMarketDataProvider(): Promise<"fmp" | "alpaca" | "yfinance" | "none"> {
   const info = await detectProvider();
   return info.provider;
 }
