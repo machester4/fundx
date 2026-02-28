@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
-import { checkSpecialSessions, KNOWN_EVENTS } from "../src/special-sessions.js";
+import { checkSpecialSessions, KNOWN_EVENTS } from "../src/services/special-sessions.service.js";
 import type { FundConfig } from "../src/types.js";
 
-vi.mock("../src/fund.js", () => ({
+vi.mock("../src/services/fund.service.js", () => ({
   loadFundConfig: vi.fn(),
   saveFundConfig: vi.fn(),
   listFundNames: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("../src/session.js", () => ({
+vi.mock("../src/services/session.service.js", () => ({
   runFundSession: vi.fn(),
 }));
 

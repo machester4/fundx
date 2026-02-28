@@ -101,10 +101,10 @@ vi.mock("../src/agent.js", () => ({
 
 // Import after mocks are set up
 import { saveGlobalConfig, loadGlobalConfig } from "../src/config.js";
-import { saveFundConfig, loadFundConfig, listFundNames } from "../src/fund.js";
+import { saveFundConfig, loadFundConfig, listFundNames } from "../src/services/fund.service.js";
 import { initFundState, readPortfolio, readTracker, writeSessionLog, readSessionLog } from "../src/state.js";
 import { generateFundClaudeMd } from "../src/template.js";
-import { runFundSession } from "../src/session.js";
+import { runFundSession } from "../src/services/session.service.js";
 import { fundConfigSchema, globalConfigSchema } from "../src/types.js";
 import type { GlobalConfig, FundConfig } from "../src/types.js";
 

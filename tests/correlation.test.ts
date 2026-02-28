@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { computeFundCorrelation, computeCorrelationMatrix } from "../src/correlation.js";
+import { computeFundCorrelation, computeCorrelationMatrix } from "../src/services/correlation.service.js";
 
-vi.mock("../src/fund.js", () => ({
+vi.mock("../src/services/fund.service.js", () => ({
   listFundNames: vi.fn().mockResolvedValue(["fund-a", "fund-b", "fund-c"]),
 }));
 

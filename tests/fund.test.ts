@@ -61,7 +61,7 @@ vi.mock("@inquirer/prompts", () => ({
   confirm: vi.fn(),
 }));
 
-import { loadFundConfig, saveFundConfig, listFundNames } from "../src/fund.js";
+import { loadFundConfig, saveFundConfig, listFundNames } from "../src/services/fund.service.js";
 
 beforeEach(() => {
   vi.clearAllMocks();

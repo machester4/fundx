@@ -6,7 +6,7 @@ import type {
   AgentDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadGlobalConfig } from "./config.js";
-import { loadFundConfig } from "./fund.js";
+import { loadFundConfig } from "./services/fund.service.js";
 import { fundPaths, MCP_SERVERS } from "./paths.js";
 
 // ── Types ────────────────────────────────────────────────────

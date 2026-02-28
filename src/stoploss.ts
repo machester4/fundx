@@ -1,4 +1,4 @@
-import { loadFundConfig } from "./fund.js";
+import { loadFundConfig } from "./services/fund.service.js";
 import { readPortfolio, writePortfolio } from "./state.js";
 import { openJournal, insertTrade } from "./journal.js";
 import {

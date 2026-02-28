@@ -64,7 +64,7 @@ Each Claude Code session:
 | Component    | Technology                              |
 |-------------|-----------------------------------------|
 | Language     | TypeScript (Node.js 20+)                |
-| CLI          | Commander.js + @inquirer/prompts + chalk |
+| CLI          | Ink (React for CLI) + Pastel (file-based routing) + @inkjs/ui |
 | Config       | YAML (js-yaml) + Zod validation         |
 | State DB     | SQLite (better-sqlite3)                 |
 | Daemon       | node-cron                               |
@@ -92,50 +92,100 @@ Each Claude Code session:
 
 ```
 src/
-  index.ts            # CLI entry point — wires all commands via Commander.js
-  types.ts            # Zod schemas + inferred TypeScript types (single source of truth)
-  paths.ts            # ~/.fundx path constants and per-fund path helpers
-  config.ts           # Global config read/write (~/.fundx/config.yaml)
-  state.ts            # Per-fund state file CRUD (portfolio, tracker, session log)
-  template.ts         # Per-fund CLAUDE.md generation from fund_config.yaml
-  init.ts             # `fundx init` command — workspace setup wizard
-  fund.ts             # `fundx fund *` commands + fund CRUD logic
-  status.ts           # `fundx status` command — dashboard
-  agent.ts            # Claude Agent SDK wrapper — single entry point for all AI queries
-  session.ts          # `fundx session run` + session launcher + sub-agent integration
-  daemon.ts           # `fundx start/stop` + node-cron scheduler + gateway startup
-  gateway.ts          # Telegram bot + quick commands + free question routing
-  ask.ts              # `fundx ask` command — question answering + cross-fund analysis
-  subagent.ts         # Sub-agent parallel execution (macro, technical, sentiment, risk)
-  embeddings.ts       # Trade journal FTS5 indexing + similarity search
-  journal.ts          # Trade journal SQLite CRUD (open, insert, query, summary)
-  alpaca-helpers.ts   # Shared Alpaca API helpers (credentials, fetch, orders)
-  sync.ts             # Portfolio sync from Alpaca broker
-  stoploss.ts         # Stop-loss monitoring and execution
-  live-trading.ts     # Live trading mode with safety checks + CLI
-  broker-adapter.ts   # Broker adapter interface + Alpaca implementation (IBKR/Binance planned)
-  templates.ts        # Fund templates (export/import/builtin) + CLI
-  special-sessions.ts # Event-triggered sessions (FOMC, OpEx, etc.) + CLI
-  chart.ts            # Terminal-based performance charts + CLI
-  reports.ts          # Auto-reports (daily/weekly/monthly) + CLI
-  correlation.ts      # Cross-fund correlation monitoring + CLI
-  montecarlo.ts       # Monte Carlo runway/portfolio projections + CLI
-  logs.ts             # `fundx logs` command
-  portfolio-cmd.ts    # `fundx portfolio` command
-  trades-cmd.ts       # `fundx trades` command
-  performance-cmd.ts  # `fundx performance` command
+  index.tsx             # Pastel entry point (file-based CLI routing)
+  types.ts              # Zod schemas + inferred TypeScript types (single source of truth)
+  paths.ts              # ~/.fundx path constants and per-fund path helpers
+  config.ts             # Global config read/write (~/.fundx/config.yaml)
+  state.ts              # Per-fund state file CRUD (portfolio, tracker, session log)
+  template.ts           # Per-fund CLAUDE.md generation from fund_config.yaml
+  agent.ts              # Claude Agent SDK wrapper — single entry point for all AI queries
+  subagent.ts           # Sub-agent parallel execution (macro, technical, sentiment, risk)
+  embeddings.ts         # Trade journal FTS5 indexing + similarity search
+  journal.ts            # Trade journal SQLite CRUD (open, insert, query, summary)
+  alpaca-helpers.ts     # Shared Alpaca API helpers (credentials, fetch, orders)
+  sync.ts               # Portfolio sync from Alpaca broker
+  stoploss.ts           # Stop-loss monitoring and execution
+  broker-adapter.ts     # Broker adapter interface + Alpaca implementation
+  skills.ts             # Reusable analysis skills
+  services/             # Pure business logic (async functions, no UI)
+    index.ts            # Barrel file re-exporting all services
+    fund.service.ts     # Fund CRUD, config load/save, list, validate, create
+    init.service.ts     # Workspace initialization
+    status.service.ts   # Dashboard data aggregation
+    session.service.ts  # Session runner + sub-agent integration
+    daemon.service.ts   # Daemon start/stop, cron scheduling
+    gateway.service.ts  # Telegram gateway management
+    ask.service.ts      # Question answering + cross-fund analysis
+    chat.service.ts     # Chat REPL context building + streaming
+    live-trading.service.ts  # Live trading safety checks + mode switching
+    templates.service.ts     # Fund templates (export/import/builtin/clone)
+    special-sessions.service.ts  # Event-triggered sessions (FOMC, OpEx, etc.)
+    chart.service.ts    # Performance chart data (allocation, P&L, sparklines)
+    reports.service.ts  # Auto-reports (daily/weekly/monthly)
+    correlation.service.ts   # Cross-fund correlation monitoring
+    montecarlo.service.ts    # Monte Carlo runway/portfolio projections
+    logs.service.ts     # Daemon/session log retrieval
+    portfolio.service.ts     # Portfolio display data
+    trades.service.ts   # Trade history queries
+    performance.service.ts   # Performance metrics aggregation
+  commands/             # Pastel commands (React/Ink components, file-based routing)
+    index.tsx           # Default command (dashboard)
+    init.tsx            # fundx init
+    status.tsx          # fundx status
+    start.tsx           # fundx start
+    stop.tsx            # fundx stop
+    ask.tsx             # fundx ask <question>
+    chat.tsx            # fundx chat (interactive REPL)
+    portfolio.tsx       # fundx portfolio <fund>
+    trades.tsx          # fundx trades <fund>
+    performance.tsx     # fundx performance <fund>
+    logs.tsx            # fundx logs
+    correlation.tsx     # fundx correlation
+    fund/               # fundx fund {create,list,info,delete,clone}
+    session/            # fundx session {run,agents}
+    gateway/            # fundx gateway {start,test}
+    live/               # fundx live {enable,disable}
+    template/           # fundx template {list,export,import,builtin}
+    special/            # fundx special {list,add,remove}
+    chart/              # fundx chart {allocation,pnl,sparkline}
+    report/             # fundx report {daily,weekly,monthly,view}
+    montecarlo/         # fundx montecarlo {run}
+  components/           # Reusable Ink components
+    StatusBadge.tsx     # Colored status indicator (active/paused/closed)
+    PnlText.tsx         # Green/red P&L display with $ and %
+    Header.tsx          # Bold section header with optional rule
+    ErrorMessage.tsx    # Red error display
+    SuccessMessage.tsx  # Green success with checkmark
+    Table.tsx           # Terminal table with aligned columns
+    FundSelector.tsx    # Interactive fund picker (Select)
+    ConfirmAction.tsx   # Y/n confirmation (ConfirmInput)
+    WizardStep.tsx      # Multi-step form wizard
+    Logo.tsx            # FundX ASCII banner
+    BarChart.tsx        # Horizontal bar chart with Unicode blocks
+    Sparkline.tsx       # Inline sparkline
+    MarkdownView.tsx    # Terminal markdown renderer
+  hooks/                # Custom React hooks
+    useAsyncAction.ts   # Run async fn, track { data, isLoading, error, retry }
+    useStreaming.ts     # Agent SDK streaming with buffer + cancel
+    useFundData.ts      # Load fund config + portfolio + tracker
+    useAllFunds.ts      # List all fund names
+    useDaemonStatus.ts  # Check if daemon is running
+  context/              # React contexts
+    AppContext.tsx       # Global config, error handling
   mcp/
     broker-alpaca.ts    # MCP server: Alpaca broker integration
     market-data.ts      # MCP server: market data provider
     telegram-notify.ts  # MCP server: Telegram notifications for Claude sessions
 ```
 
-**Design pattern:** Each file owns its domain completely — CLI command definition and business logic live together. No separate "commands" and "core" layers. This avoids indirection while the codebase is small. Split only when a file gets too large.
+**Design pattern:** Strict separation of concerns — services contain pure business logic (no UI deps), commands are thin React/Ink components that call services and render results. Pastel provides file-based routing: folder nesting = subcommands.
 
 - All Zod schemas and types live in `types.ts` — single import for any module
 - `paths.ts` is the only place that knows about `~/.fundx` structure
 - `state.ts` handles all JSON read/write with atomic writes (tmp + rename)
-- New commands get their own file (e.g., `ask.ts`, `portfolio.ts`) and register in `index.ts`
+- New commands: add a `.tsx` file under `commands/` (Pastel auto-discovers it)
+- New business logic: add to or create a service in `services/`
+- Commands use `export const description`, `export const args` (zod), `export const options` (zod), and `export default function` pattern
 
 ### Configuration
 

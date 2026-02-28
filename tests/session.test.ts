@@ -7,7 +7,7 @@ import { homedir } from "node:os";
  *
  * We mock:
  * - ../src/agent.js (runAgentQuery, buildMcpServers)
- * - ../src/fund.js (loadFundConfig)
+ * - ../src/services/fund.service.js (loadFundConfig)
  * - ../src/state.js (writeSessionLog)
  * - ../src/subagent.js (runSubAgents, etc.)
  * - node:fs/promises (for file writes)
@@ -17,7 +17,7 @@ import { homedir } from "node:os";
  * - runFundSessionWithSubAgents: sub-agent invocation, combined prompt, log
  */
 
-const WORKSPACE = join(homedir(), ".fundx");
+const _WORKSPACE = join(homedir(), ".fundx");
 
 // ── Mock setup ────────────────────────────────────────────────
 
@@ -92,14 +92,14 @@ const makeFundConfig = (sessionOverrides: Record<string, unknown> = {}) => ({
   },
 });
 
-vi.mock("../src/fund.js", () => ({
+vi.mock("../src/services/fund.service.js", () => ({
   loadFundConfig: vi.fn(),
   saveFundConfig: vi.fn(),
   listFundNames: vi.fn(async () => ["test-fund"]),
 }));
 
-import { runFundSession, runFundSessionWithSubAgents } from "../src/session.js";
-import { loadFundConfig } from "../src/fund.js";
+import { runFundSession, runFundSessionWithSubAgents } from "../src/services/session.service.js";
+import { loadFundConfig } from "../src/services/fund.service.js";
 
 const mockedLoadFundConfig = vi.mocked(loadFundConfig);
 
