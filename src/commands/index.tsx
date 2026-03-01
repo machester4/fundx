@@ -11,7 +11,7 @@ import { forkDaemon } from "../services/daemon.service.js";
 import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
 import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
 import { NewsPanel } from "../components/NewsPanel.js";
-import { MarketIndicesPanel } from "../components/MarketIndicesPanel.js";
+import { MarketTickerBanner } from "../components/MarketTickerBanner.js";
 import { SectorHeatmapPanel } from "../components/SectorHeatmapPanel.js";
 import { DashboardFooter } from "../components/DashboardFooter.js";
 import { ChatView } from "../components/ChatView.js";
@@ -20,6 +20,7 @@ export const description = "FundX — Autonomous AI Fund Manager powered by the 
 
 const MARKET_REFRESH_MS = 60_000;
 const DASHBOARD_REFRESH_MS = 30_000;
+const TICKER_HEIGHT = 3;
 const TOP_PANEL_HEIGHT = 5;
 const BOTTOM_PANEL_HEIGHT = 8;
 const SECTOR_ROW_HEIGHT = 3;
@@ -100,6 +101,15 @@ export default function Index() {
 
   const panelsBlock = (
     <>
+      {/* Ticker banner - full width (hidden on short terminals) */}
+      {!isShort && (
+        <MarketTickerBanner
+          indices={indices}
+          width={innerWidth}
+          hasCredentials={hasCredentials || services.marketData}
+        />
+      )}
+
       {/* Top row: System Status | Fund Detail */}
       <Box>
         <SystemStatusPanel
@@ -117,22 +127,14 @@ export default function Index() {
         />
       </Box>
 
-      {/* Middle row: News | Markets (hidden on short terminals) */}
+      {/* News - full width (hidden on short terminals) */}
       {!isShort && (
-        <Box>
-          <NewsPanel
-            headlines={news.slice(0, newsItems)}
-            width={halfInner}
-            height={BOTTOM_PANEL_HEIGHT}
-            hasCredentials={hasCredentials || services.marketData}
-          />
-          <MarketIndicesPanel
-            indices={indices}
-            width={innerWidth - halfInner}
-            height={BOTTOM_PANEL_HEIGHT}
-            hasCredentials={hasCredentials || services.marketData}
-          />
-        </Box>
+        <NewsPanel
+          headlines={news.slice(0, newsItems)}
+          width={innerWidth}
+          height={BOTTOM_PANEL_HEIGHT}
+          hasCredentials={hasCredentials || services.marketData}
+        />
       )}
 
       {/* Sector heatmap row (hidden on short terminals) */}
@@ -215,7 +217,7 @@ export default function Index() {
 
   const panelsHeight = isShort
     ? TOP_PANEL_HEIGHT
-    : TOP_PANEL_HEIGHT + BOTTOM_PANEL_HEIGHT + SECTOR_ROW_HEIGHT;
+    : TICKER_HEIGHT + TOP_PANEL_HEIGHT + BOTTOM_PANEL_HEIGHT + SECTOR_ROW_HEIGHT;
   const footerHeight = 1;
   const outerBorderHeight = 2; // top + bottom border
   const chatHeight = Math.max(5, rows - panelsHeight - footerHeight - outerBorderHeight);
