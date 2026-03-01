@@ -112,27 +112,29 @@ describe("generateFundClaudeMd", () => {
     expect(content).toContain("SPY, QQQ");
   });
 
-  it("includes Advanced Analysis Skills section", async () => {
+  it("does not embed skills inline — they are loaded from .claude/skills/ by the Agent SDK", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
-    expect(content).toContain("## Advanced Analysis Skills");
-    expect(content).toContain("Investment Debate");
-    expect(content).toContain("Risk Assessment Matrix");
-    expect(content).toContain("at your discretion");
+    // Skills live in .claude/skills/<name>/SKILL.md, not embedded in CLAUDE.md
+    expect(content).not.toContain("## Advanced Analysis Skills");
+    expect(content).not.toContain("Investment Debate");
+    expect(content).not.toContain("Risk Assessment Matrix");
   });
 
-  it("places skills section between Decision Framework and Session Protocol", async () => {
+  it("Decision Framework section comes before Session Protocol with no skills section between them", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
     const frameworkIdx = content.indexOf("## Decision Framework");
-    const skillsIdx = content.indexOf("## Advanced Analysis Skills");
     const protocolIdx = content.indexOf("## Session Protocol");
 
-    expect(frameworkIdx).toBeLessThan(skillsIdx);
-    expect(skillsIdx).toBeLessThan(protocolIdx);
+    expect(frameworkIdx).toBeGreaterThan(-1);
+    expect(protocolIdx).toBeGreaterThan(-1);
+    expect(frameworkIdx).toBeLessThan(protocolIdx);
+    // No skills section between them
+    expect(content.indexOf("## Advanced Analysis Skills")).toBe(-1);
   });
 });

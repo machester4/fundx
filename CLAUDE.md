@@ -222,6 +222,50 @@ src/
 - Credentials must NEVER be stored in per-fund configs or committed to git
 - The `.gitignore` already covers `.env` files — maintain this pattern
 
+### Skills and Rules Pattern
+
+FundX uses the Claude Agent SDK's native skill and rules system. Instructions live in files, not hardcoded in TypeScript strings.
+
+**How it works:** The Agent SDK loads `CLAUDE.md`, `.claude/skills/*/SKILL.md`, and `.claude/rules/**/*.md` automatically when `settingSources: ["project"]` is set and `cwd` points to the target directory.
+
+**Directory layout:**
+```
+~/.fundx/                              # workspace cwd (fundx chat, no fund selected)
+├── CLAUDE.md                          # workspace assistant identity
+└── .claude/
+    ├── rules/assistant-behavior.md    # fund creation behavioral rules
+    └── skills/create-fund/SKILL.md    # fund creation skill with full schema
+
+~/.fundx/funds/<name>/                 # per-fund cwd (fundx chat --fund <name>)
+├── CLAUDE.md                          # fund AI manager identity (generated from fund_config.yaml)
+└── .claude/
+    └── skills/
+        ├── investment-debate/SKILL.md
+        ├── risk-matrix/SKILL.md
+        ├── trade-memory/SKILL.md
+        ├── market-regime/SKILL.md
+        ├── position-sizing/SKILL.md
+        └── session-reflection/SKILL.md
+```
+
+**SKILL.md format** (required frontmatter):
+```markdown
+---
+name: skill-dir-name
+description: One-line description — Claude uses this to decide when to invoke the skill
+---
+# Skill Title
+## When to Use ...
+## Technique ...
+## Output Format ...
+```
+
+**Where skills are defined:** `src/skills.ts` — `BUILTIN_SKILLS` (6 fund skills) + `WORKSPACE_SKILL` (create-fund). Generated via `ensureFundSkillFiles()` on fund creation and `ensureWorkspaceSkillFiles()` on init.
+
+**Rules** are plain `.md` files in `.claude/rules/`. No special format required (optional `paths:` frontmatter for path-scoped rules).
+
+**Never** hardcode skill content as strings in service functions — always use `src/skills.ts`. See `.claude/rules/skills-and-rules.md` for the full pattern.
+
 ### Key Design Principles
 
 1. **Goal-first, not trade-first** — Every decision is evaluated against the fund's life objective, not just P&L

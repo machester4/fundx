@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { Spinner, TextInput } from "@inkjs/ui";
 import {
@@ -9,6 +9,7 @@ import {
   loadChatWelcomeData,
   persistChatSession,
   loadActiveSessionId,
+  completeFundSetup,
 } from "../services/chat.service.js";
 import { listFundNames } from "../services/fund.service.js";
 import { clearActiveSession, readChatHistory, writeChatHistory, clearChatHistory } from "../state.js";
@@ -33,7 +34,7 @@ function estimateMessageLines(msg: { sender: string; content: string }, width: n
 }
 
 interface ChatViewProps {
-  fundName: string;
+  fundName: string | null;
   width: number;
   height: number;
   onExit?: () => void;
@@ -53,11 +54,12 @@ interface ChatMsg {
 
 export function ChatView({ fundName, width, height, onExit, onSwitchFund, options, mode = "standalone" }: ChatViewProps) {
   const isInline = mode === "inline";
+  const isWorkspaceMode = fundName === null;
   const [phase, setPhase] = useState<"loading" | "ready" | "streaming" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [welcomeData, setWelcomeData] = useState<ChatWelcomeData | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [nextId, setNextId] = useState(1);
+  const nextIdRef = useRef(1);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [turnCount, setTurnCount] = useState(0);
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
@@ -65,18 +67,19 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[]; env: Record<string, string> }>>({});
   const [scrollOffset, setScrollOffset] = useState(0); // 0 = pinned to bottom
   const streaming = useStreaming();
+  // Track known fund names to detect when Claude creates a new fund in workspace mode
+  const knownFundsRef = useRef<string[]>([]);
 
   const addMessage = useCallback((sender: ChatMsg["sender"], content: string, cost?: number, turns?: number) => {
     setMessages((prev) => [...prev, {
-      id: nextId,
+      id: nextIdRef.current++,
       sender,
       content,
       timestamp: new Date(),
       cost,
       turns,
     }]);
-    setNextId((n) => n + 1);
-  }, [nextId]);
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -84,9 +87,18 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       try {
         const resolvedModel = await resolveChatModel(fundName, options.model);
         const servers = await buildChatMcpServers(fundName);
-        const welcome = await loadChatWelcomeData(fundName, resolvedModel, options.readonly);
         setModel(resolvedModel);
         setMcpServers(servers);
+
+        if (isWorkspaceMode) {
+          // Workspace mode: no fund data to load
+          const allFunds = await listFundNames();
+          knownFundsRef.current = allFunds;
+          setPhase("ready");
+          return;
+        }
+
+        const welcome = await loadChatWelcomeData(fundName, resolvedModel, options.readonly);
         setWelcomeData(welcome);
 
         // Resume from a previous chat or daemon session if one exists
@@ -106,7 +118,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             );
             // Derive the next ID from the maximum stored ID to avoid duplicates
             const maxId = history.messages.reduce((max, m) => Math.max(max, m.id), 0);
-            setNextId(maxId + 1);
+            nextIdRef.current = maxId + 1;
           }
         }
 
@@ -149,20 +161,41 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       }));
 
       setMessages((prev) => [...prev, {
-        id: nextId + 1,
+        id: nextIdRef.current++,
         sender: "claude",
         content: result.responseText,
         timestamp: new Date(),
         cost: result.cost_usd,
         turns: result.num_turns,
       }]);
-      setNextId((n) => n + 2);
+
+      // In workspace mode, check if Claude created a new fund
+      if (isWorkspaceMode) {
+        try {
+          const currentFunds = await listFundNames();
+          const newFunds = currentFunds.filter((f) => !knownFundsRef.current.includes(f));
+          for (const newFund of newFunds) {
+            try {
+              await completeFundSetup(newFund);
+              addMessage("system", `Fund **${newFund}** created. Type \`/fund ${newFund}\` to switch to it.`);
+            } catch (err) {
+              console.error("[ChatView] completeFundSetup failed for", newFund, err);
+              addMessage("system", `Fund directory detected for **${newFund}**, but setup failed: ${err instanceof Error ? err.message : String(err)}. Run \`fundx fund info ${newFund}\` to verify.`);
+            }
+          }
+          knownFundsRef.current = currentFunds;
+        } catch (err) {
+          console.error("[ChatView] Fund detection failed after response:", err);
+          addMessage("system", "Warning: could not check for new funds after this response.");
+        }
+      }
+
       setPhase("ready");
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setPhase("error");
     }
-  }, [turnCount, sessionId, model, mcpServers, options, streaming, fundName, nextId]);
+  }, [turnCount, sessionId, model, mcpServers, options, streaming, fundName, addMessage, isWorkspaceMode]);
 
   const handleSubmit = useCallback(async (value: string) => {
     const trimmed = value.trim();
@@ -185,21 +218,27 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       setSessionId(undefined);
       setTurnCount(0);
       setMessages([]);
-      setNextId(1);
+      nextIdRef.current = 1;
       streaming.reset();
-      try {
-        await clearActiveSession(fundName);
-      } catch (err) {
-        addMessage("system", `Warning: could not clear session state. (${err instanceof Error ? err.message : String(err)})`);
-      }
-      try {
-        await clearChatHistory(fundName);
-      } catch (err) {
-        addMessage("system", `Warning: could not clear chat history. (${err instanceof Error ? err.message : String(err)})`);
+      if (fundName) {
+        try {
+          await clearActiveSession(fundName);
+        } catch (err) {
+          addMessage("system", `Warning: could not clear session state. (${err instanceof Error ? err.message : String(err)})`);
+        }
+        try {
+          await clearChatHistory(fundName);
+        } catch (err) {
+          addMessage("system", `Warning: could not clear chat history. (${err instanceof Error ? err.message : String(err)})`);
+        }
       }
       return;
     }
     if (trimmed === "/portfolio") {
+      if (!fundName) {
+        addMessage("system", "No fund selected. Describe your investment goal to create one.");
+        return;
+      }
       try {
         const p = await getPortfolioDisplay(fundName);
         const lines = [`**Portfolio — ${p.fundDisplayName}**`, `Total: $${p.totalValue.toLocaleString()} | Cash: $${p.cash.toFixed(2)} (${p.cashPct.toFixed(1)}%)`];
@@ -214,6 +253,10 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       return;
     }
     if (trimmed === "/trades") {
+      if (!fundName) {
+        addMessage("system", "No fund selected. Describe your investment goal to create one.");
+        return;
+      }
       try {
         const t = await getTradesDisplay(fundName, { limit: 10 });
         const lines = [`**Recent Trades — ${t.fundDisplayName}** (${t.label})`];
@@ -234,7 +277,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         const allFunds = await listFundNames();
         if (!arg) {
           // List available funds
-          const lines = [`**Funds** (current: ${fundName})`];
+          const lines = fundName ? [`**Funds** (current: ${fundName})`] : [`**Funds** (workspace mode — no fund selected)`];
           for (const f of allFunds) {
             const marker = f === fundName ? " ← active" : "";
             lines.push(`  ${f}${marker}`);
@@ -268,7 +311,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   // Persist chat history to disk whenever messages or sessionId change.
   // Write errors are logged but not surfaced — persistence is best-effort and must not interrupt the UI.
   useEffect(() => {
-    if (!sessionId || messages.length === 0) return;
+    if (!fundName || !sessionId || messages.length === 0) return;
     const persistable = messages.filter(
       (m): m is ChatMsg & { sender: "you" | "claude" } =>
         m.sender === "you" || m.sender === "claude",
@@ -378,7 +421,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   });
 
   if (phase === "loading") {
-    return <Spinner label={`Loading ${fundName}...`} />;
+    return <Spinner label={fundName ? `Loading ${fundName}...` : "Loading FundX..."} />;
   }
 
   if (phase === "error") {
@@ -395,10 +438,18 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       {/* Messages area — fills available space */}
       <Box flexDirection="column" flexGrow={1} overflowY="hidden">
         {!isInline && messages.length === 0 && !isStreaming && (
-          <Box marginY={1} paddingX={1}>
-            <Text dimColor>
-              Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
-            </Text>
+          <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
+            {isWorkspaceMode ? (
+              <>
+                <Text bold color="yellow">FundX Setup Assistant</Text>
+                <Text dimColor>Describe your investment goal and I'll create a complete fund configuration for you.</Text>
+                <Text dimColor>Example: "I want to invest in precious metals ETFs with a systematic 4-tranche deployment strategy..."</Text>
+              </>
+            ) : (
+              <Text dimColor>
+                Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
+              </Text>
+            )}
           </Box>
         )}
         {visibleMessages.map((msg) => (
