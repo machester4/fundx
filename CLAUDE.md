@@ -149,7 +149,6 @@ src/
     start.tsx           # fundx start
     stop.tsx            # fundx stop
     ask.tsx             # fundx ask <question>
-    chat.tsx            # fundx chat (interactive REPL)
     portfolio.tsx       # fundx portfolio <fund>
     trades.tsx          # fundx trades <fund>
     performance.tsx     # fundx performance <fund>
@@ -234,13 +233,13 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
 
 **Directory layout:**
 ```
-~/.fundx/                              # workspace cwd (fundx chat, no fund selected)
+~/.fundx/                              # workspace cwd (fundx, no fund selected)
 ├── CLAUDE.md                          # workspace assistant identity
 └── .claude/
     ├── rules/assistant-behavior.md    # fund creation behavioral rules
     └── skills/create-fund/SKILL.md    # fund creation skill with full schema
 
-~/.fundx/funds/<name>/                 # per-fund cwd (fundx chat --fund <name>)
+~/.fundx/funds/<name>/                 # per-fund cwd (fundx --fund <name>)
 ├── CLAUDE.md                          # fund AI manager identity (generated from fund_config.yaml)
 └── .claude/
     └── skills/

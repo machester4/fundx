@@ -70,9 +70,12 @@ fundx start
 
 ```
 fundx                               Fullscreen TUI dashboard with chat REPL
+  --fund <name>                     Open with a specific fund selected
+  --model <model>                   Claude model (sonnet, opus, haiku)
+  --readonly                        Read-only mode (no trades)
+  --max-budget <usd>                Maximum budget in USD for the session
 fundx init                          Initialize FundX workspace (~/.fundx/)
 fundx status                        Quick status of all funds and services
-fundx chat                          Interactive chat REPL (standalone)
 fundx start [fund|all]              Start daemon scheduler
 fundx stop [fund|all]               Stop daemon
 fundx logs [fund] [-f|--follow]     View logs

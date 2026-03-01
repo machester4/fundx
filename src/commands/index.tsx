@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import zod from "zod";
 import { Box, Text, useApp } from "ink";
-import { Spinner, Select } from "@inkjs/ui";
+import { Spinner } from "@inkjs/ui";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
 import { useInterval } from "../hooks/useInterval.js";
@@ -18,6 +19,13 @@ import { ChatView } from "../components/ChatView.js";
 
 export const description = "FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK";
 
+export const options = zod.object({
+  fund: zod.string().optional().describe("Fund to chat with"),
+  model: zod.string().optional().describe("Claude model (sonnet, opus, haiku)"),
+  readonly: zod.boolean().default(false).describe("Read-only mode (no trades)"),
+  maxBudget: zod.string().optional().describe("Maximum budget in USD for the session"),
+});
+
 const MARKET_REFRESH_MS = 60_000;
 const DASHBOARD_REFRESH_MS = 30_000;
 const TICKER_HEIGHT = 3; // 1 content row + 2 border rows (borderStyle="single")
@@ -27,11 +35,11 @@ const SECTOR_ROW_HEIGHT = 3;
 
 type Phase =
   | { type: "resolving" }
-  | { type: "no-funds" }
-  | { type: "selecting-fund"; funds: string[] }
-  | { type: "ready"; fundName: string };
+  | { type: "ready"; fundName: string | null; initError?: string };
 
-export default function Index() {
+type Props = { options: zod.infer<typeof options> };
+
+export default function Index({ options: opts }: Props) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
   const [phase, setPhase] = useState<Phase>({ type: "resolving" });
@@ -43,18 +51,20 @@ export default function Index() {
     forkDaemon().catch(() => {});
   }, []);
 
-  // Resolve fund on mount
+  // Resolve fund on mount — workspace mode by default, specific fund only via --fund
   useEffect(() => {
     (async () => {
       try {
-        const { fundName, allFunds } = await resolveChatFund();
-        if (!fundName) {
-          setPhase({ type: "selecting-fund", funds: allFunds });
-        } else {
+        if (opts.fund) {
+          const { fundName } = await resolveChatFund(opts.fund);
           setPhase({ type: "ready", fundName });
+        } else {
+          setPhase({ type: "ready", fundName: null });
         }
-      } catch {
-        setPhase({ type: "no-funds" });
+      } catch (err) {
+        // Fall back to workspace mode so the user isn't trapped on a dead-end screen
+        const message = err instanceof Error ? err.message : String(err);
+        setPhase({ type: "ready", fundName: null, initError: message });
       }
     })();
   }, []);
@@ -90,12 +100,15 @@ export default function Index() {
   const newsItems = Math.max(1, BOTTOM_PANEL_HEIGHT - 2);
 
   // Active fund name (available once resolved)
-  const activeFundName = phase.type === "ready" ? phase.fundName : undefined;
+  const activeFundName = phase.type === "ready" ? (phase.fundName ?? undefined) : undefined;
 
   // Stable references so ChatView's internal callbacks aren't recreated on every dashboard refresh.
   const handleExit = useCallback(() => exit(), [exit]);
   const handleSwitchFund = useCallback((name: string) => setPhase({ type: "ready", fundName: name }), []);
-  const chatOptions = useMemo(() => ({ readonly: false }), []);
+  const chatOptions = useMemo(
+    () => ({ model: opts.model, readonly: opts.readonly, maxBudget: opts.maxBudget }),
+    [opts.model, opts.readonly, opts.maxBudget],
+  );
 
   // ── Panels block (reused in all states) ─────────────────────
 
@@ -169,44 +182,7 @@ export default function Index() {
         <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
           {panelsBlock}
           <Box flexGrow={1} justifyContent="center" alignItems="center">
-            <Spinner label="Resolving fund..." />
-          </Box>
-        </Box>
-        {footerBlock}
-      </Box>
-    );
-  }
-
-  // ── No funds state ──────────────────────────────────────────
-
-  if (phase.type === "no-funds") {
-    return (
-      <Box flexDirection="column" width={columns} height={rows}>
-        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
-          {panelsBlock}
-          <Box flexGrow={1} justifyContent="center" alignItems="center" flexDirection="column" gap={1}>
-            <Text>No funds found.</Text>
-            <Text dimColor>Run <Text color="cyan">fundx fund create</Text> to get started.</Text>
-          </Box>
-        </Box>
-        {footerBlock}
-      </Box>
-    );
-  }
-
-  // ── Fund selection state ────────────────────────────────────
-
-  if (phase.type === "selecting-fund") {
-    return (
-      <Box flexDirection="column" width={columns} height={rows}>
-        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
-          {panelsBlock}
-          <Box flexGrow={1} flexDirection="column" paddingX={2} paddingY={1}>
-            <Text bold>Select a fund:</Text>
-            <Select
-              options={phase.funds.map((f) => ({ label: f, value: f }))}
-              onChange={(value) => setPhase({ type: "ready", fundName: value })}
-            />
+            <Spinner label="Loading..." />
           </Box>
         </Box>
         {footerBlock}
@@ -229,9 +205,16 @@ export default function Index() {
       <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
         {panelsBlock}
 
+        {/* Init error banner (e.g. --fund not found) */}
+        {phase.initError && (
+          <Box paddingX={1}>
+            <Text color="red">{phase.initError} — falling back to workspace mode.</Text>
+          </Box>
+        )}
+
         {/* Chat REPL — always active */}
         <ChatView
-          key={phase.fundName}
+          key={phase.fundName ?? "__workspace__"}
           fundName={phase.fundName}
           width={innerWidth}
           height={chatHeight}
