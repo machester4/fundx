@@ -188,7 +188,7 @@ src/
     DashboardFooter.tsx # Dashboard footer with hints
     FundsOverviewPanel.tsx # Funds overview panel
     SystemStatusPanel.tsx  # Service status panel (daemon, telegram, market data)
-    MarketIndicesPanel.tsx # Market indices with price, change%, sparklines
+    MarketTickerBanner.tsx  # Full-width market ticker bar (indices, commodities, crypto)
   hooks/                # Custom React hooks
     useAsyncAction.ts   # Run async fn, track { data, isLoading, error, retry }
     useStreaming.ts     # Agent SDK streaming with buffer + cancel

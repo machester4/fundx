@@ -20,7 +20,7 @@ export const description = "FundX — Autonomous AI Fund Manager powered by the 
 
 const MARKET_REFRESH_MS = 60_000;
 const DASHBOARD_REFRESH_MS = 30_000;
-const TICKER_HEIGHT = 3;
+const TICKER_HEIGHT = 3; // 1 content row + 2 border rows (borderStyle="single")
 const TOP_PANEL_HEIGHT = 5;
 const BOTTOM_PANEL_HEIGHT = 8;
 const SECTOR_ROW_HEIGHT = 3;
@@ -72,9 +72,9 @@ export default function Index() {
 
   const data = dashboard.data;
   const marketData = market.data;
-  const hasCredentials = marketData ? (marketData.indices.length > 0 || marketData.news.length > 0) : false;
-
   const services = data?.services ?? { daemon: false, telegram: false, marketData: false, marketDataProvider: "none" as const };
+  // Derive from provider detection, not from whether data arrived in this cycle
+  const hasCredentials = services.marketDataProvider !== "none";
   const nextCron = data?.nextCron ?? null;
   const funds = data?.funds ?? [];
   const fundExtras = data?.fundExtras ?? new Map();
@@ -101,12 +101,13 @@ export default function Index() {
 
   const panelsBlock = (
     <>
-      {/* Ticker banner - full width (hidden on short terminals) */}
+      {/* Market index bar - static, full width, hidden on short terminals */}
       {!isShort && (
         <MarketTickerBanner
           indices={indices}
           width={innerWidth}
-          hasCredentials={hasCredentials || services.marketData}
+          hasCredentials={hasCredentials}
+          isLoading={market.isLoading}
         />
       )}
 
@@ -133,7 +134,7 @@ export default function Index() {
           headlines={news.slice(0, newsItems)}
           width={innerWidth}
           height={BOTTOM_PANEL_HEIGHT}
-          hasCredentials={hasCredentials || services.marketData}
+          hasCredentials={hasCredentials}
         />
       )}
 
@@ -142,7 +143,7 @@ export default function Index() {
         <SectorHeatmapPanel
           sectors={sectors}
           width={innerWidth}
-          hasCredentials={hasCredentials || services.marketData}
+          hasCredentials={hasCredentials}
         />
       )}
     </>

@@ -17,9 +17,10 @@ interface MarketTickerBannerProps {
   indices: MarketIndexSnapshot[];
   width: number;
   hasCredentials: boolean;
+  isLoading?: boolean;
 }
 
-export function MarketTickerBanner({ indices, width, hasCredentials }: MarketTickerBannerProps) {
+export function MarketTickerBanner({ indices, width, hasCredentials, isLoading }: MarketTickerBannerProps) {
   if (!hasCredentials) {
     return (
       <Box width={width} borderStyle="single" borderDimColor paddingX={1}>
@@ -31,7 +32,7 @@ export function MarketTickerBanner({ indices, width, hasCredentials }: MarketTic
   if (indices.length === 0) {
     return (
       <Box width={width} borderStyle="single" borderDimColor paddingX={1}>
-        <Text dimColor>Loading market data...</Text>
+        <Text dimColor>{isLoading ? "Loading market data..." : "Market data unavailable — check API key or network"}</Text>
       </Box>
     );
   }
