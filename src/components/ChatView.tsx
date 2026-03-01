@@ -487,26 +487,8 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       {/* === Bottom pinned section (standalone only) === */}
 
       {/* Context bar — always visible at bottom */}
-      {!isInline && welcomeData && <FundContextBar welcome={welcomeData} />}
-      {!isInline && isWorkspaceMode && (
-        <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
-          <Box gap={1}>
-            <Text bold>FundX</Text>
-            <Text dimColor>·</Text>
-            <Text dimColor>{model}</Text>
-            {workspaceFunds.length > 0 && (
-              <>
-                <Text dimColor>·</Text>
-                <Text dimColor>{workspaceFunds.join(", ")}</Text>
-              </>
-            )}
-          </Box>
-          <Text dimColor>
-            {workspaceFunds.length === 0
-              ? "No funds yet — describe your investment goal to create one"
-              : "No fund selected — /fund <name> to switch"}
-          </Text>
-        </Box>
+      {!isInline && (welcomeData || isWorkspaceMode) && (
+        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
       )}
 
       {/* Cost summary */}
