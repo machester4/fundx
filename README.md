@@ -1,8 +1,34 @@
 # FundX — Autonomous AI Fund Manager
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)]()
+[![Node](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)]()
+[![Claude Agent SDK](https://img.shields.io/badge/Claude_Agent_SDK-powered-blueviolet.svg)]()
+
 > **CLI-first, goal-oriented, multi-fund autonomous investment platform powered by the Claude Agent SDK.**
 
 FundX lets you define investment funds with **real-life financial objectives** and delegates analysis, decision-making, and trade execution to Claude running autonomously via scheduled sessions.
+
+![FundX Dashboard](Screenshot.png)
+
+## Table of Contents
+
+- [What Makes FundX Different](#what-makes-fundx-different)
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Fund Objective Types](#fund-objective-types)
+- [CLI Reference](#cli-reference)
+- [Architecture](#architecture)
+- [Configuration](#configuration)
+- [Telegram Integration](#telegram-integration)
+- [Tech Stack](#tech-stack)
+- [Development](#development)
+- [Roadmap](#roadmap)
+- [Design Principles](#design-principles)
+- [Contributing](#contributing)
+- [Inspiration & Prior Art](#inspiration--prior-art)
+- [License](#license)
 
 ## What Makes FundX Different
 
@@ -11,29 +37,6 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - **Multi-fund architecture.** Run a conservative runway fund, an aggressive growth fund, and a BTC accumulation fund simultaneously, each with its own AI personality.
 - **Bidirectional Telegram.** Get trade alerts AND wake Claude anytime to ask questions about positions or past analyses.
 - **Paper first, live later.** Every fund starts in paper mode. Live trading requires explicit confirmation and safety checks.
-
-## Prerequisites
-
-- **Node.js** >= 20
-- **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
-- **pnpm** (recommended) or npm
-- **Alpaca** account for paper/live trading (optional for setup)
-- **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (optional, falls back to Alpaca)
-- **Telegram** bot token for notifications (optional)
-
-## Installation
-
-```bash
-# From npm (when published)
-npm install -g fundx
-
-# From source
-git clone https://github.com/machester4/fundx.git
-cd fundx
-pnpm install
-pnpm build
-pnpm link --global
-```
 
 ## Quick Start
 
@@ -53,6 +56,28 @@ fundx session run <fund-name> pre_market
 # 5. Start the daemon (automated sessions)
 fundx start
 ```
+
+## Prerequisites
+
+- **Node.js** >= 20
+- **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
+- **pnpm** (recommended) or npm
+- **Alpaca** account for paper/live trading (optional for setup)
+- **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (optional, falls back to Alpaca)
+- **Telegram** bot token for notifications (optional)
+
+## Installation
+
+```bash
+# From source (recommended during early development)
+git clone https://github.com/machester4/fundx.git
+cd fundx
+pnpm install
+pnpm build
+pnpm link --global
+```
+
+> `npm install -g fundx` coming soon.
 
 ## Fund Objective Types
 
@@ -284,7 +309,8 @@ Each fund is fully defined by its config. Key sections:
 - **notifications** — Telegram alerts, quiet hours, priority overrides
 - **claude** — Model, personality, decision framework
 
-### Fund Configuration Schema
+<details>
+<summary>Full fund_config.yaml schema</summary>
 
 ```yaml
 fund:
@@ -404,6 +430,8 @@ claude:
   decision_framework: "Always ask: does this move the runway needle? If not, skip it."
 ```
 
+</details>
+
 ## Telegram Integration
 
 ### Quick Commands (instant, no Claude needed)
@@ -463,6 +491,19 @@ pnpm format               # Format (prettier)
 pnpm typecheck            # Type check (tsc --noEmit)
 ```
 
+## Roadmap
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1 — MVP | CLI, fund CRUD, daemon, sessions | Done |
+| 2 — Trading | Alpaca broker, market data, portfolio sync | Done |
+| 3 — Telegram | Gateway, notifications, bidirectional chat | Done |
+| 4 — Intelligence | Sub-agents, trade journal, embeddings | Done |
+| 5 — Advanced | Live trading, templates, Monte Carlo, reports | Done |
+| 6 — Community | npm distribution, docs, plugin system | **In progress** |
+
+See [open issues](https://github.com/machester4/fundx/issues) for contribution opportunities.
+
 ## Design Principles
 
 1. **Goal-first, not trade-first.** Every decision is evaluated against the fund's life objective.
@@ -473,6 +514,22 @@ pnpm typecheck            # Type check (tsc --noEmit)
 6. **Paper first, live later.** Every fund starts in paper mode.
 7. **Memory makes it smarter.** Trade journal + FTS5 search enables learning from history.
 8. **Open and extensible.** New brokers, MCP servers, and objective types are all pluggable.
+
+## Contributing
+
+Contributions welcome! Here's how to get started:
+
+```bash
+git clone https://github.com/machester4/fundx.git
+cd fundx
+pnpm install
+pnpm dev -- --help    # Run in dev mode
+pnpm test             # Run tests
+pnpm typecheck        # Type check
+```
+
+- Open an issue to discuss before submitting PRs
+- See [CLAUDE.md](CLAUDE.md) for architecture and conventions
 
 ## Inspiration & Prior Art
 
@@ -493,7 +550,3 @@ pnpm typecheck            # Type check (tsc --noEmit)
 ## License
 
 [Apache License 2.0](LICENSE)
-
-## Contributing
-
-Contributions welcome! Please open an issue to discuss before submitting PRs.
