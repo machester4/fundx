@@ -1,14 +1,16 @@
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { loadFundConfig, listFundNames } from "./fund.service.js";
 import { loadGlobalConfig } from "../config.js";
-import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession } from "../state.js";
+import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession, initFundState } from "../state.js";
 import { openJournal, getTradeSummary } from "../journal.js";
 import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
-import { fundPaths, DAEMON_PID, DAEMON_LOG } from "../paths.js";
+import { generateFundClaudeMd } from "../template.js";
+import { ensureFundSkillFiles } from "../skills.js";
+import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS } from "../paths.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -129,12 +131,13 @@ export function getScheduleLines(config: FundConfig): string[] {
   return sessions.map(([name, s]) => `${name} ${s.time}`);
 }
 
-/** Load all welcome data for the chat banner */
+/** Load all welcome data for the chat banner. Returns null in workspace mode (no fund). */
 export async function loadChatWelcomeData(
-  fundName: string,
+  fundName: string | null,
   model: string,
   isReadonly: boolean,
-): Promise<ChatWelcomeData> {
+): Promise<ChatWelcomeData | null> {
+  if (!fundName) return null;
   const fundConfig = await loadFundConfig(fundName);
 
   let portfolio: Portfolio | null = null;
@@ -175,8 +178,24 @@ export async function loadChatWelcomeData(
 
 // ── Context Builders ─────────────────────────────────────────
 
+/** Build runtime context for workspace mode.
+ * Static instructions come from ~/.fundx/CLAUDE.md loaded by the Agent SDK.
+ * This only provides dynamic state that changes between sessions. */
+export async function buildWorkspaceContext(): Promise<string> {
+  const allFunds = await listFundNames();
+  const globalConfig = await loadGlobalConfig();
+
+  return [
+    `## Workspace State`,
+    `Existing funds: ${allFunds.length === 0 ? "none yet" : allFunds.join(", ")}`,
+    `Broker: ${globalConfig.broker.provider} (${globalConfig.broker.mode} mode)`,
+    `Model: ${globalConfig.default_model ?? "sonnet"}`,
+  ].join("\n");
+}
+
 /** Build full fund context for the first turn */
-export async function buildChatContext(fundName: string): Promise<string> {
+export async function buildChatContext(fundName: string | null): Promise<string> {
+  if (!fundName) return buildWorkspaceContext();
   const sections: string[] = [];
 
   try {
@@ -252,7 +271,8 @@ export async function buildChatContext(fundName: string): Promise<string> {
 }
 
 /** Build compact context refresh for turn 2+ */
-export async function buildCompactContext(fundName: string): Promise<string> {
+export async function buildCompactContext(fundName: string | null): Promise<string> {
+  if (!fundName) return "[Workspace mode — no fund selected]";
   try {
     const portfolio = await readPortfolio(fundName);
     const posCount = portfolio.positions.length;
@@ -266,7 +286,7 @@ export async function buildCompactContext(fundName: string): Promise<string> {
 
 /** Run a single chat turn with streaming output, returning the response text */
 export async function runChatTurn(
-  fundName: string,
+  fundName: string | null,
   sessionId: string | undefined,
   message: string,
   context: string,
@@ -282,7 +302,7 @@ export async function runChatTurn(
     onStreamEnd?: () => void;
   },
 ): Promise<ChatTurnResult> {
-  const paths = fundPaths(fundName);
+  const cwd = fundName ? fundPaths(fundName).root : WORKSPACE;
 
   const readonlyNote = opts.readonly
     ? "\nIMPORTANT: This is a READ-ONLY session. Do NOT execute trades or modify state files."
@@ -290,13 +310,20 @@ export async function runChatTurn(
 
   const prompt = sessionId
     ? `${context}\n${readonlyNote}\n\n${message}`
-    : [
+    : fundName
+    ? [
         `You are an interactive assistant for the FundX investment fund "${fundName}".`,
         `You have access to MCP tools for market data and broker operations.`,
         `Be concise and helpful. Use specific numbers when available.`,
         readonlyNote,
         "",
         "## Current Fund State",
+        context,
+        "",
+        "## User Message",
+        message,
+      ].join("\n")
+    : [
         context,
         "",
         "## User Message",
@@ -317,7 +344,7 @@ export async function runChatTurn(
       model: opts.model,
       maxTurns: 30,
       maxBudgetUsd: opts.maxBudgetUsd,
-      cwd: paths.root,
+      cwd,
       systemPrompt: { type: "preset", preset: "claude_code" },
       settingSources: ["project"],
       mcpServers: opts.mcpServers,
@@ -367,14 +394,12 @@ export async function runChatTurn(
   };
 }
 
-/** Resolve which fund to use for chat */
+/** Resolve which fund to use for chat.
+ * Returns fundName=null when no funds exist (workspace mode). */
 export async function resolveChatFund(
   fundOption?: string,
-): Promise<{ fundName: string; allFunds: string[] }> {
+): Promise<{ fundName: string | null; allFunds: string[] }> {
   const allFunds = await listFundNames();
-  if (allFunds.length === 0) {
-    throw new Error("No funds found. Create one first: fundx fund create");
-  }
 
   if (fundOption) {
     if (!allFunds.includes(fundOption)) {
@@ -383,21 +408,29 @@ export async function resolveChatFund(
     return { fundName: fundOption, allFunds };
   }
 
+  if (allFunds.length === 0) {
+    // No funds — enter workspace mode where Claude can create one
+    return { fundName: null, allFunds };
+  }
+
   if (allFunds.length === 1) {
     return { fundName: allFunds[0], allFunds };
   }
 
   // Multiple funds — caller needs to prompt for selection
-  return { fundName: "", allFunds };
+  return { fundName: null, allFunds };
 }
 
 /** Resolve model for chat */
 export async function resolveChatModel(
-  fundName: string,
+  fundName: string | null,
   modelOption?: string,
 ): Promise<string> {
-  const fundConfig = await loadFundConfig(fundName);
   const globalConfig = await loadGlobalConfig();
+  if (!fundName) {
+    return modelOption ?? globalConfig.default_model ?? "sonnet";
+  }
+  const fundConfig = await loadFundConfig(fundName);
   return (
     modelOption ??
     fundConfig.claude.model ??
@@ -407,7 +440,8 @@ export async function resolveChatModel(
 }
 
 /** Persist the current chat session ID so the daemon can resume it */
-export async function persistChatSession(fundName: string, sessionId: string): Promise<void> {
+export async function persistChatSession(fundName: string | null, sessionId: string): Promise<void> {
+  if (!fundName) return; // workspace mode — no persistence
   await writeActiveSession(fundName, {
     session_id: sessionId,
     updated_at: new Date().toISOString(),
@@ -417,14 +451,50 @@ export async function persistChatSession(fundName: string, sessionId: string): P
 
 /** Load the active session ID (chat or daemon) for resumption.
  * Returns undefined if no session exists (ENOENT). Other errors propagate. */
-export async function loadActiveSessionId(fundName: string): Promise<string | undefined> {
+export async function loadActiveSessionId(fundName: string | null): Promise<string | undefined> {
+  if (!fundName) return undefined;
   const active = await readActiveSession(fundName);
   return active?.session_id;
 }
 
-/** Build MCP servers config for chat */
+/** Build MCP servers config for chat.
+ * In workspace mode (null fundName) only market-data is included — no broker, no telegram. */
 export async function buildChatMcpServers(
-  fundName: string,
+  fundName: string | null,
 ): Promise<Record<string, { command: string; args: string[]; env: Record<string, string> }>> {
-  return buildMcpServers(fundName);
+  if (fundName) return buildMcpServers(fundName);
+
+  const globalConfig = await loadGlobalConfig();
+  const marketDataEnv: Record<string, string> = {};
+  if (globalConfig.broker.api_key) marketDataEnv.ALPACA_API_KEY = globalConfig.broker.api_key;
+  if (globalConfig.broker.secret_key) marketDataEnv.ALPACA_SECRET_KEY = globalConfig.broker.secret_key;
+  if (globalConfig.market_data?.fmp_api_key) marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
+  marketDataEnv.ALPACA_MODE = globalConfig.broker.mode ?? "paper";
+
+  return {
+    "market-data": {
+      command: "node",
+      args: [MCP_SERVERS.marketData],
+      env: marketDataEnv,
+    },
+  };
+}
+
+/** Complete fund initialization after Claude has written a fund_config.yaml.
+ * Idempotent — safe to call even if state was already initialized. */
+export async function completeFundSetup(fundName: string): Promise<void> {
+  const config = await loadFundConfig(fundName);
+  const paths = fundPaths(fundName);
+
+  const claudeMdExists = await access(paths.claudeMd).then(() => true).catch(() => false);
+  if (!claudeMdExists) {
+    await generateFundClaudeMd(config);
+  }
+
+  const portfolioExists = await access(paths.state.portfolio).then(() => true).catch(() => false);
+  if (!portfolioExists) {
+    await initFundState(fundName, config.capital.initial, config.objective.type);
+  }
+
+  await ensureFundSkillFiles(paths.claudeDir);
 }

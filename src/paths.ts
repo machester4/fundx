@@ -22,6 +22,18 @@ export const DAEMON_LOG = join(WORKSPACE, "daemon.log");
 /** Shared directory */
 export const SHARED_DIR = join(WORKSPACE, "shared");
 
+/** Workspace-level CLAUDE.md (loaded automatically by Agent SDK via settingSources: ["project"]) */
+export const WORKSPACE_CLAUDE_MD = join(WORKSPACE, "CLAUDE.md");
+
+/** Workspace-level .claude directory */
+export const WORKSPACE_CLAUDE_DIR = join(WORKSPACE, ".claude");
+
+/** Workspace-level skills directory (.claude/skills/<name>/SKILL.md) */
+export const WORKSPACE_SKILLS_DIR = join(WORKSPACE, ".claude", "skills");
+
+/** Workspace-level rules directory (.claude/rules/*.md) */
+export const WORKSPACE_RULES_DIR = join(WORKSPACE, ".claude", "rules");
+
 /** MCP server executables (resolved from dist/mcp at runtime) */
 export const MCP_SERVERS = {
   brokerAlpaca: join(__dirname, "mcp", "broker-alpaca.js"),
@@ -38,6 +50,8 @@ export function fundPaths(fundName: string) {
     claudeMd: join(root, "CLAUDE.md"),
     claudeDir: join(root, ".claude"),
     claudeSettings: join(root, ".claude", "settings.json"),
+    claudeSkillsDir: join(root, ".claude", "skills"),
+    claudeRulesDir: join(root, ".claude", "rules"),
     state: {
       dir: join(root, "state"),
       portfolio: join(root, "state", "portfolio.json"),

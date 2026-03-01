@@ -11,10 +11,12 @@ vi.mock("node:fs", () => ({
 
 import {
   BUILTIN_SKILLS,
+  WORKSPACE_SKILL,
   getAllSkillNames,
   getSkillContent,
-  getSkillsSummaryForTemplate,
   ensureSkillFiles,
+  ensureFundSkillFiles,
+  ensureWorkspaceSkillFiles,
 } from "../src/skills.js";
 import { writeFile, mkdir } from "node:fs/promises";
 
@@ -26,14 +28,15 @@ beforeEach(() => {
 });
 
 describe("BUILTIN_SKILLS", () => {
-  it("has 6 skills", () => {
+  it("has 6 fund trading skills", () => {
     expect(BUILTIN_SKILLS).toHaveLength(6);
   });
 
   it("each skill has required fields", () => {
     for (const skill of BUILTIN_SKILLS) {
       expect(skill.name).toBeTruthy();
-      expect(skill.filename).toMatch(/\.md$/);
+      expect(skill.dirName).toMatch(/^[a-z][a-z0-9-]+$/);
+      expect(skill.description).toBeTruthy();
       expect(skill.content).toBeTruthy();
     }
   });
@@ -59,6 +62,7 @@ describe("BUILTIN_SKILLS", () => {
   it("includes Investment Debate skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Investment Debate");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("investment-debate");
     expect(skill!.content).toContain("Bull Case");
     expect(skill!.content).toContain("Bear Case");
     expect(skill!.content).toContain("Judge");
@@ -67,6 +71,7 @@ describe("BUILTIN_SKILLS", () => {
   it("includes Risk Assessment Matrix skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Risk Assessment Matrix");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("risk-matrix");
     expect(skill!.content).toContain("Aggressive Perspective");
     expect(skill!.content).toContain("Conservative Perspective");
     expect(skill!.content).toContain("Balanced Perspective");
@@ -75,12 +80,14 @@ describe("BUILTIN_SKILLS", () => {
   it("includes Trade Journal Review skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Journal Review");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("trade-memory");
     expect(skill!.content).toContain("trade_journal.sqlite");
   });
 
   it("includes Market Regime Detection skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Market Regime Detection");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("market-regime");
     expect(skill!.content).toContain("Risk-On");
     expect(skill!.content).toContain("Risk-Off");
   });
@@ -88,18 +95,40 @@ describe("BUILTIN_SKILLS", () => {
   it("includes Position Sizing skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Position Sizing");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("position-sizing");
     expect(skill!.content).toContain("Conviction Level");
   });
 
   it("includes Session Reflection skill", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Session Reflection");
     expect(skill).toBeDefined();
+    expect(skill!.dirName).toBe("session-reflection");
     expect(skill!.content).toContain("Bias Audit");
   });
 });
 
+describe("WORKSPACE_SKILL", () => {
+  it("has required fields", () => {
+    expect(WORKSPACE_SKILL.name).toBe("Create Fund");
+    expect(WORKSPACE_SKILL.dirName).toBe("create-fund");
+    expect(WORKSPACE_SKILL.description).toBeTruthy();
+    expect(WORKSPACE_SKILL.content).toBeTruthy();
+  });
+
+  it("includes fund_config.yaml schema", () => {
+    expect(WORKSPACE_SKILL.content).toContain("fund_config.yaml");
+    expect(WORKSPACE_SKILL.content).toContain("personality");
+    expect(WORKSPACE_SKILL.content).toContain("decision_framework");
+  });
+
+  it("includes creation steps", () => {
+    expect(WORKSPACE_SKILL.content).toContain("## Process");
+    expect(WORKSPACE_SKILL.content).toContain("## When to Use");
+  });
+});
+
 describe("getAllSkillNames", () => {
-  it("returns names of all 6 skills", () => {
+  it("returns names of all 6 fund skills", () => {
     const names = getAllSkillNames();
     expect(names).toHaveLength(6);
     expect(names).toContain("Investment Debate");
@@ -124,48 +153,50 @@ describe("getSkillContent", () => {
   });
 });
 
-describe("getSkillsSummaryForTemplate", () => {
-  it("returns markdown with skills header", () => {
-    const summary = getSkillsSummaryForTemplate();
-    expect(summary).toContain("## Advanced Analysis Skills");
-  });
-
-  it("includes all skill names in summary list", () => {
-    const summary = getSkillsSummaryForTemplate();
+describe("ensureSkillFiles", () => {
+  it("creates a subdirectory per skill", async () => {
+    await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
+    // Each skill should create its own subdirectory
+    expect(mockedMkdir).toHaveBeenCalledTimes(6);
     for (const skill of BUILTIN_SKILLS) {
-      expect(summary).toContain(`**${skill.name}**`);
+      expect(mockedMkdir).toHaveBeenCalledWith(
+        expect.stringContaining(skill.dirName),
+        expect.any(Object),
+      );
     }
   });
 
-  it("includes full skill content", () => {
-    const summary = getSkillsSummaryForTemplate();
-    expect(summary).toContain("## When to Use");
-    expect(summary).toContain("## Technique");
+  it("writes SKILL.md inside each skill directory", async () => {
+    await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
+    expect(mockedWriteFile).toHaveBeenCalledTimes(6);
+    const writtenPaths = mockedWriteFile.mock.calls.map((c) => c[0] as string);
+    for (const skill of BUILTIN_SKILLS) {
+      expect(writtenPaths.some((p) => p.endsWith(`${skill.dirName}/SKILL.md`))).toBe(true);
+    }
   });
 
-  it("includes usage guidance", () => {
-    const summary = getSkillsSummaryForTemplate();
-    expect(summary).toContain("at your discretion");
-    expect(summary).toContain("do NOT need to");
+  it("writes SKILL.md with YAML frontmatter", async () => {
+    await ensureSkillFiles("/test/.claude", [BUILTIN_SKILLS[0]]);
+    const content = mockedWriteFile.mock.calls[0][1] as string;
+    expect(content).toMatch(/^---\n/);
+    expect(content).toContain("name:");
+    expect(content).toContain("description:");
+    expect(content).toContain("---");
   });
 });
 
-describe("ensureSkillFiles", () => {
-  it("creates skills directory", async () => {
-    await ensureSkillFiles();
-    expect(mockedMkdir).toHaveBeenCalled();
-  });
-
-  it("writes all 6 skill files", async () => {
-    await ensureSkillFiles();
+describe("ensureFundSkillFiles", () => {
+  it("writes all 6 fund skills", async () => {
+    await ensureFundSkillFiles("/test/fund/.claude");
     expect(mockedWriteFile).toHaveBeenCalledTimes(6);
   });
+});
 
-  it("writes files with correct filenames", async () => {
-    await ensureSkillFiles();
-    const writtenPaths = mockedWriteFile.mock.calls.map((c) => c[0] as string);
-    for (const skill of BUILTIN_SKILLS) {
-      expect(writtenPaths.some((p) => p.endsWith(skill.filename))).toBe(true);
-    }
+describe("ensureWorkspaceSkillFiles", () => {
+  it("writes only the create-fund skill", async () => {
+    await ensureWorkspaceSkillFiles();
+    expect(mockedWriteFile).toHaveBeenCalledTimes(1);
+    const writtenPath = mockedWriteFile.mock.calls[0][0] as string;
+    expect(writtenPath).toContain("create-fund/SKILL.md");
   });
 });

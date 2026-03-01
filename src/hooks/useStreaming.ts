@@ -13,7 +13,7 @@ interface StreamingState {
 
 interface UseStreamingReturn extends StreamingState {
   send: (
-    fundName: string,
+    fundName: string | null,
     sessionId: string | undefined,
     message: string,
     context: string,
@@ -40,7 +40,7 @@ export function useStreaming(): UseStreamingReturn {
 
   const send = useCallback(
     async (
-      fundName: string,
+      fundName: string | null,
       sessionId: string | undefined,
       message: string,
       context: string,

@@ -6,6 +6,7 @@ import { FUNDS_DIR, fundPaths } from "../paths.js";
 import { initFundState } from "../state.js";
 import { generateFundClaudeMd } from "../template.js";
 import { loadGlobalConfig } from "../config.js";
+import { ensureFundSkillFiles } from "../skills.js";
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ export async function createFund(params: CreateFundParams): Promise<FundConfig> 
   await saveFundConfig(config);
   await initFundState(name, params.initialCapital, params.objectiveType);
   await generateFundClaudeMd(config);
+  await ensureFundSkillFiles(fundPaths(name).claudeDir);
 
   return config;
 }

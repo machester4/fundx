@@ -1,26 +1,48 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { SHARED_DIR } from "./paths.js";
+import { WORKSPACE_CLAUDE_DIR, WORKSPACE } from "./paths.js";
 
-/**
- * Built-in analysis skills derived from the TradingAgents framework (arXiv:2412.20138).
- *
- * Skills are markdown instructions that get injected into the per-fund CLAUDE.md.
- * The autonomous agent reads them at session start and decides when/how to apply
- * each technique — replacing the rigid 5-stage pipeline with agent-directed reasoning.
- */
+// ── Types ─────────────────────────────────────────────────────
 
 export interface Skill {
+  /** Human-readable name (e.g., "Investment Debate") */
   name: string;
-  filename: string;
+  /** Directory name under .claude/skills/ (e.g., "investment-debate") */
+  dirName: string;
+  /** One-line description — Claude uses this to decide when to invoke the skill */
+  description: string;
+  /** SKILL.md body (without frontmatter) */
   content: string;
 }
 
+/** Build a complete SKILL.md with YAML frontmatter */
+function buildSkillMd(skill: Skill): string {
+  return `---
+name: ${skill.dirName}
+description: ${skill.description}
+---
+
+${skill.content.trim()}
+`;
+}
+
+// ── Fund trading skills ────────────────────────────────────────
+
+/**
+ * Built-in trading analysis skills derived from the TradingAgents framework (arXiv:2412.20138).
+ *
+ * These go in each fund's .claude/skills/<dirName>/SKILL.md and are loaded
+ * automatically by the Agent SDK via settingSources: ["project"].
+ *
+ * The autonomous agent reads skill descriptions at session start and invokes
+ * full skill content when needed — no rigid pipeline, agent-directed reasoning.
+ */
 export const BUILTIN_SKILLS: Skill[] = [
   {
     name: "Investment Debate",
-    filename: "investment-debate.md",
+    dirName: "investment-debate",
+    description: "Conduct a bull vs bear dialectical debate before any significant trade decision",
     content: `# Investment Debate (Bull vs Bear)
 
 ## When to Use
@@ -69,7 +91,8 @@ In your analysis report, document the debate under a "## Investment Debate" sect
   },
   {
     name: "Risk Assessment Matrix",
-    filename: "risk-matrix.md",
+    dirName: "risk-matrix",
+    description: "Evaluate a proposed trade from aggressive, conservative, and balanced risk perspectives before executing",
     content: `# Risk Assessment Matrix (Multi-Perspective)
 
 ## When to Use
@@ -120,7 +143,8 @@ In your analysis report, include a "## Risk Assessment" section with:
   },
   {
     name: "Trade Journal Review",
-    filename: "trade-memory.md",
+    dirName: "trade-memory",
+    description: "Query trade journal history to apply past lessons before trading or during post-session reflection",
     content: `# Trade Journal Review (Historical Memory)
 
 ## When to Use
@@ -157,7 +181,8 @@ When referencing trade history, include a "## Trade History Context" section:
   },
   {
     name: "Market Regime Detection",
-    filename: "market-regime.md",
+    dirName: "market-regime",
+    description: "Classify the current market regime (risk-on/off, volatility) to inform all session decisions",
     content: `# Market Regime Detection
 
 ## When to Use
@@ -200,7 +225,8 @@ Start your analysis report with a "## Market Regime" section:
   },
   {
     name: "Position Sizing",
-    filename: "position-sizing.md",
+    dirName: "position-sizing",
+    description: "Determine optimal position size using conviction level, fund objective, and risk constraints",
     content: `# Conviction-Based Position Sizing
 
 ## When to Use
@@ -250,7 +276,8 @@ When sizing a position, document in your analysis:
   },
   {
     name: "Session Reflection",
-    filename: "session-reflection.md",
+    dirName: "session-reflection",
+    description: "End-of-session review: decisions audit, bias check, journal update, and objective progress",
     content: `# Session Reflection (Post-Session Learning)
 
 ## When to Use
@@ -299,69 +326,153 @@ End your analysis report with a "## Session Reflection" section:
   },
 ];
 
-/** Get the names of all built-in skills */
+// ── Workspace skill ────────────────────────────────────────────
+
+/**
+ * The create-fund skill lives in ~/.fundx/.claude/skills/create-fund/SKILL.md.
+ * It is loaded automatically by the Agent SDK in workspace mode (cwd = ~/.fundx).
+ */
+export const WORKSPACE_SKILL: Skill = {
+  name: "Create Fund",
+  dirName: "create-fund",
+  description: "Create a complete FundX investment fund from a natural language description by writing fund_config.yaml and initializing the fund directory",
+  content: `# Create Fund
+
+## When to Use
+When the user describes an investment goal, strategy, or objective and wants to set up a fund.
+
+## Process
+1. Ask clarifying questions if any of these are missing: initial capital, time horizon, risk tolerance, target assets
+2. Write the complete \`fund_config.yaml\` to \`${WORKSPACE}/funds/<name>/fund_config.yaml\`
+3. Create required subdirectories: \`state/\`, \`analysis/\`, \`scripts/\`, \`reports/\`, \`.claude/\`
+4. The app auto-detects the new fund and completes initialization (state files, CLAUDE.md)
+5. Tell the user: "Type \`/fund <name>\` to start chatting with your new fund's AI manager."
+
+## fund_config.yaml Schema
+
+\`\`\`yaml
+fund:
+  name: my-fund                    # lowercase letters, digits, hyphens, underscores only
+  display_name: "My Fund"
+  description: "One-line description"
+  created: "YYYY-MM-DD"            # today's date
+  status: active
+
+capital:
+  initial: 10000                   # in USD
+  currency: USD
+
+objective:
+  # Use 'custom' for complex or narrative goals (recommended):
+  type: custom
+  description: |
+    Full objective: assets, strategy, macro thesis, deployment approach, success criteria.
+    Be specific — this is read at every trading session.
+  success_criteria: "What success looks like"
+
+  # Alternatively, use a structured type:
+  # type: runway
+  # target_months: 18
+  # monthly_burn: 3000
+  # min_reserve_months: 3
+
+  # type: growth
+  # target_multiple: 2.0
+  # timeframe_months: 24
+
+  # type: accumulation
+  # target_asset: BTC
+  # target_amount: 1.0
+
+  # type: income
+  # target_monthly_income: 500
+
+risk:
+  profile: moderate                # conservative | moderate | aggressive
+  max_drawdown_pct: 15             # conservative=10, moderate=15, aggressive=25
+  max_position_pct: 25             # max % of portfolio in one position
+  stop_loss_pct: 8
+  max_daily_loss_pct: 5
+  custom_rules:
+    - "Rule specific to this fund's strategy"
+
+universe:
+  allowed:
+    - type: etf
+      tickers: [GDXJ, JNUG, AGQ, UGL]
+  forbidden: []
+
+schedule:
+  timezone: America/New_York
+  sessions:
+    pre_market:  { time: "09:00", enabled: true,  focus: "Analyze overnight. Plan trades." }
+    mid_session: { time: "13:00", enabled: false, focus: "Monitor positions." }
+    post_market: { time: "18:00", enabled: true,  focus: "Review day. Update journal." }
+
+broker:
+  provider: alpaca                 # use global config provider
+  mode: paper                      # ALWAYS paper — user enables live with 'fundx live enable'
+
+claude:
+  model: sonnet
+  personality: |
+    Describe the AI manager's full context: who is the investor, what is their background,
+    the macro thesis driving this strategy, key principles, and relevant constraints.
+    This is read at the start of every autonomous trading session — make it rich and specific.
+  decision_framework: |
+    Specific decision rules for this fund: entry criteria, exit criteria, position sizing
+    approach, what macro signals to watch, what to avoid, how to handle drawdowns.
+    These rules govern every trade decision — make them actionable and unambiguous.
+\`\`\`
+
+## Key Principles
+- The \`personality\` and \`decision_framework\` fields are the most important — they are Claude's
+  constitution for every autonomous trading session. Make them detailed, specific, and actionable.
+- Always \`mode: paper\` — live trading requires explicit user confirmation via CLI
+- Use \`objective.type: custom\` for narrative goals; structured types for simple ones
+- \`custom_rules\` should capture any strategy-specific constraints not covered by risk parameters
+`,
+};
+
+// ── Public API ─────────────────────────────────────────────────
+
+/** Names of all built-in fund skills */
 export function getAllSkillNames(): string[] {
   return BUILTIN_SKILLS.map((s) => s.name);
 }
 
-/** Get the content of a specific skill by name */
+/** Content (body without frontmatter) of a fund skill by human-readable name */
 export function getSkillContent(skillName: string): string | undefined {
   return BUILTIN_SKILLS.find((s) => s.name === skillName)?.content;
 }
 
 /**
- * Generate a formatted section for inclusion in per-fund CLAUDE.md.
- *
- * Includes the full content of each skill so Claude has complete instructions
- * available at session start without needing to read external files.
+ * Write skills to `<claudeDir>/skills/<dirName>/SKILL.md`.
+ * Idempotent — skips files that already exist.
  */
-export function getSkillsSummaryForTemplate(): string {
-  const sections: string[] = [
-    `## Advanced Analysis Skills`,
-    ``,
-    `These are analysis techniques you may apply at your discretion during sessions.`,
-    `You decide when each is appropriate based on the situation — you do NOT need to`,
-    `use all of them every session. Use what the situation demands.`,
-    ``,
-    `Available skills:`,
-  ];
-
-  for (const skill of BUILTIN_SKILLS) {
-    const whenMatch = skill.content.match(
-      /## When to Use\n([\s\S]*?)(?=\n## )/,
-    );
-    const whenSummary = whenMatch
-      ? whenMatch[1].trim().split("\n")[0]
-      : "See details below";
-    sections.push(`- **${skill.name}**: ${whenSummary}`);
-  }
-
-  sections.push("");
-
-  for (const skill of BUILTIN_SKILLS) {
-    sections.push(`---`);
-    sections.push(``);
-    sections.push(skill.content.trim());
-    sections.push(``);
-  }
-
-  return sections.join("\n");
-}
-
-/** Path to the shared skills directory */
-const SKILLS_DIR = join(SHARED_DIR, "skills");
-
-/**
- * Write built-in skill files to ~/.fundx/shared/skills/ if they don't exist.
- * Called during `fundx init` to make skills browsable and editable by the user.
- */
-export async function ensureSkillFiles(): Promise<void> {
-  await mkdir(SKILLS_DIR, { recursive: true });
-
-  for (const skill of BUILTIN_SKILLS) {
-    const filePath = join(SKILLS_DIR, skill.filename);
+export async function ensureSkillFiles(claudeDir: string, skills: Skill[]): Promise<void> {
+  for (const skill of skills) {
+    const skillDir = join(claudeDir, "skills", skill.dirName);
+    await mkdir(skillDir, { recursive: true });
+    const filePath = join(skillDir, "SKILL.md");
     if (!existsSync(filePath)) {
-      await writeFile(filePath, skill.content, "utf-8");
+      await writeFile(filePath, buildSkillMd(skill), "utf-8");
     }
   }
+}
+
+/**
+ * Write the 6 trading analysis skills to a fund's .claude/skills/ directory.
+ * Called during fund creation so each fund's Agent SDK session auto-loads them.
+ */
+export async function ensureFundSkillFiles(fundClaudeDir: string): Promise<void> {
+  await ensureSkillFiles(fundClaudeDir, BUILTIN_SKILLS);
+}
+
+/**
+ * Write the create-fund skill to ~/.fundx/.claude/skills/.
+ * Called during workspace initialization.
+ */
+export async function ensureWorkspaceSkillFiles(): Promise<void> {
+  await ensureSkillFiles(WORKSPACE_CLAUDE_DIR, [WORKSPACE_SKILL]);
 }
