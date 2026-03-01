@@ -69,6 +69,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const streaming = useStreaming();
   // Track known fund names to detect when Claude creates a new fund in workspace mode
   const knownFundsRef = useRef<string[]>([]);
+  const [workspaceFunds, setWorkspaceFunds] = useState<string[]>([]);
 
   const addMessage = useCallback((sender: ChatMsg["sender"], content: string, cost?: number, turns?: number) => {
     setMessages((prev) => [...prev, {
@@ -94,6 +95,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           // Workspace mode: no fund data to load
           const allFunds = await listFundNames();
           knownFundsRef.current = allFunds;
+          setWorkspaceFunds(allFunds);
           setPhase("ready");
           return;
         }
@@ -184,6 +186,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             }
           }
           knownFundsRef.current = currentFunds;
+          setWorkspaceFunds(currentFunds);
         } catch (err) {
           console.error("[ChatView] Fund detection failed after response:", err);
           addMessage("system", "Warning: could not check for new funds after this response.");
@@ -344,7 +347,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   // In inline mode the input box uses borderStyle="round" → 3 rows (top border + content + bottom border).
   // In standalone mode the input has no border → 1 row.
   // While streaming the input is hidden → 0 rows.
-  const contextBarHeight = !isInline && welcomeData ? 4 : 0; // border + 2 lines + border
+  const contextBarHeight = !isInline && (welcomeData || isWorkspaceMode) ? 4 : 0; // border + 2 lines + border
   const costBarHeight = !isInline && costTracker.messages > 0 ? 1 : 0;
   const inputHeight = isStreaming ? 0 : isInline ? 3 : 1;
   const bottomHeight = contextBarHeight + costBarHeight + inputHeight;
@@ -440,7 +443,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         {!isInline && messages.length === 0 && !isStreaming && (
           <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
             {isWorkspaceMode ? (
-              <Text dimColor>Type a message or /help for commands. Use /fund to list or switch funds.</Text>
+              <Text dimColor>Type a message or /help for commands.</Text>
             ) : (
               <Text dimColor>
                 Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
@@ -485,6 +488,26 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
       {/* Context bar — always visible at bottom */}
       {!isInline && welcomeData && <FundContextBar welcome={welcomeData} />}
+      {!isInline && isWorkspaceMode && (
+        <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+          <Box gap={1}>
+            <Text bold>FundX</Text>
+            <Text dimColor>·</Text>
+            <Text dimColor>{model}</Text>
+            {workspaceFunds.length > 0 && (
+              <>
+                <Text dimColor>·</Text>
+                <Text dimColor>{workspaceFunds.join(", ")}</Text>
+              </>
+            )}
+          </Box>
+          <Text dimColor>
+            {workspaceFunds.length === 0
+              ? "No funds yet — describe your investment goal to create one"
+              : "No fund selected — /fund <name> to switch"}
+          </Text>
+        </Box>
+      )}
 
       {/* Cost summary */}
       {!isInline && costTracker.messages > 0 && (
