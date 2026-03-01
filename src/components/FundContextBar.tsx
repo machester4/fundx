@@ -5,7 +5,9 @@ import { PnlText } from "./PnlText.js";
 import type { ChatWelcomeData } from "../services/chat.service.js";
 
 interface FundContextBarProps {
-  welcome: ChatWelcomeData;
+  welcome: ChatWelcomeData | null;
+  model: string;
+  workspaceFunds?: string[];
 }
 
 function ProgressBar({ pct, width = 10 }: { pct: number; width?: number }) {
@@ -20,7 +22,31 @@ function ProgressBar({ pct, width = 10 }: { pct: number; width?: number }) {
   );
 }
 
-export function FundContextBar({ welcome: w }: FundContextBarProps) {
+export function FundContextBar({ welcome: w, model, workspaceFunds = [] }: FundContextBarProps) {
+  if (!w) {
+    // Workspace mode — no fund selected
+    return (
+      <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+        <Box justifyContent="space-between">
+          <Box gap={1}>
+            <Text bold>FundX</Text>
+            <Text dimColor>·</Text>
+            <Text dimColor>{model}</Text>
+          </Box>
+        </Box>
+        <Box gap={2}>
+          {workspaceFunds.length > 0 ? (
+            workspaceFunds.map((f) => (
+              <Text key={f} dimColor>{f}</Text>
+            ))
+          ) : (
+            <Text dimColor>No funds yet</Text>
+          )}
+        </Box>
+      </Box>
+    );
+  }
+
   const modeLabel = w.isReadonly ? "READ-ONLY" : w.fundConfig.broker.mode === "live" ? "LIVE" : "PAPER";
   const modeColor = w.isReadonly ? "gray" : w.fundConfig.broker.mode === "live" ? "red" : "yellow";
 
@@ -49,7 +75,7 @@ export function FundContextBar({ welcome: w }: FundContextBarProps) {
           <Text dimColor>·</Text>
           <Text color={modeColor} bold>[{modeLabel}]</Text>
           <Text dimColor>·</Text>
-          <Text dimColor>{w.model}</Text>
+          <Text dimColor>{model}</Text>
         </Box>
         <Box gap={2}>
           {w.portfolio && (
