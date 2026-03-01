@@ -77,7 +77,12 @@ async function detectProvider(): Promise<ProviderInfo> {
     }
 
     return { provider: "yfinance" };
-  } catch {
+  } catch (err) {
+    const isNotFound =
+      err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT";
+    if (!isNotFound) {
+      console.error("[market] Failed to load global config for provider detection:", err);
+    }
     return { provider: "yfinance" };
   }
 }
@@ -99,7 +104,10 @@ async function fetchFmpIndices(apiKey: string): Promise<MarketIndexSnapshot[]> {
     ),
   ]);
 
-  if (!quotesResult.ok) return [];
+  if (!quotesResult.ok) {
+    console.error(`[market] FMP quotes request failed: HTTP ${quotesResult.status}`);
+    return [];
+  }
 
   const quotes = (await quotesResult.json()) as Array<{
     symbol: string;
@@ -116,8 +124,9 @@ async function fetchFmpIndices(apiKey: string): Promise<MarketIndexSnapshot[]> {
     try {
       const bars = (await resp.json()) as Array<{ close: number }>;
       // FMP returns newest first — reverse and take last 12
+      // FMP returns newest first — take the 12 most recent bars then reverse to chronological order
       sparklines.set(symbols[i], bars.slice(0, 12).reverse().map((b) => b.close));
-    } catch { /* skip */ }
+    } catch { /* sparklines are optional */ }
   }
 
   return quotes
@@ -139,7 +148,10 @@ async function fetchFmpNews(apiKey: string, limit = 5): Promise<NewsHeadline[]> 
       { signal: AbortSignal.timeout(5000) },
     );
 
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      console.error(`[market] FMP news request failed: HTTP ${resp.status}`);
+      return [];
+    }
 
     const data = (await resp.json()) as Array<{
       title: string;
@@ -168,7 +180,10 @@ async function fetchFmpMarketClock(apiKey: string): Promise<{ isOpen: boolean }>
       signal: AbortSignal.timeout(3000),
     });
 
-    if (!resp.ok) return { isOpen: false };
+    if (!resp.ok) {
+      console.error(`[market] FMP market clock request failed: HTTP ${resp.status}`);
+      return { isOpen: false };
+    }
 
     const data = (await resp.json()) as { isTheStockMarketOpen: boolean };
     return { isOpen: data.isTheStockMarketOpen };
@@ -184,7 +199,10 @@ async function fetchFmpSectors(apiKey: string): Promise<SectorSnapshot[]> {
       `${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`,
       { signal: AbortSignal.timeout(5000) },
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      console.error(`[market] FMP sectors request failed: HTTP ${resp.status}`);
+      return [];
+    }
 
     const data = (await resp.json()) as Array<{
       symbol: string;
@@ -207,31 +225,36 @@ async function fetchFmpSectors(apiKey: string): Promise<SectorSnapshot[]> {
 // ── Yahoo Finance provider (free fallback) ────────────────────
 
 async function fetchYFinanceIndices(): Promise<MarketIndexSnapshot[]> {
-  const symbols = Object.keys(YFINANCE_INDICES);
-  const quotes = await yf.quote(symbols, { return: "array" });
-  const results: MarketIndexSnapshot[] = [];
-  for (const q of quotes) {
-    if (!q.symbol || YFINANCE_INDICES[q.symbol] === undefined) continue;
-    let sparklineValues: number[] = [];
-    try {
-      const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-      const bars = await yf.historical(q.symbol, {
-        period1: twoWeeksAgo,
-        period2: new Date(),
-        interval: "1d",
+  try {
+    const symbols = Object.keys(YFINANCE_INDICES);
+    const quotes = await yf.quote(symbols, { return: "array" });
+    const results: MarketIndexSnapshot[] = [];
+    for (const q of quotes) {
+      if (!q.symbol || YFINANCE_INDICES[q.symbol] === undefined) continue;
+      let sparklineValues: number[] = [];
+      try {
+        const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+        const bars = await yf.historical(q.symbol, {
+          period1: twoWeeksAgo,
+          period2: new Date(),
+          interval: "1d",
+        });
+        sparklineValues = bars.slice(-12).map((b) => b.close);
+      } catch { /* sparklines are optional */ }
+      results.push({
+        symbol: q.symbol,
+        name: YFINANCE_INDICES[q.symbol],
+        price: q.regularMarketPrice ?? 0,
+        change: q.regularMarketChange ?? 0,
+        changePct: q.regularMarketChangePercent ?? 0,
+        sparklineValues,
       });
-      sparklineValues = bars.slice(-12).map((b) => b.close);
-    } catch { /* sparklines are optional */ }
-    results.push({
-      symbol: q.symbol,
-      name: YFINANCE_INDICES[q.symbol],
-      price: q.regularMarketPrice ?? 0,
-      change: q.regularMarketChange ?? 0,
-      changePct: q.regularMarketChangePercent ?? 0,
-      sparklineValues,
-    });
+    }
+    return results;
+  } catch (err) {
+    console.error("[market] YFinance indices fetch failed:", err);
+    return [];
   }
-  return results;
 }
 
 async function fetchYFinanceSectors(): Promise<SectorSnapshot[]> {
@@ -301,7 +324,10 @@ async function fetchAlpacaIndices(
       `${ALPACA_DATA_URL}/v2/stocks/snapshots?${params.toString()}`,
       { headers, signal: AbortSignal.timeout(5000) },
     );
-    if (!snapResp.ok) return [];
+    if (!snapResp.ok) {
+      console.error(`[market] Alpaca snapshots request failed: HTTP ${snapResp.status}`);
+      return [];
+    }
 
     const snapData = (await snapResp.json()) as Record<
       string,
@@ -355,7 +381,9 @@ async function fetchAlpacaIndices(
         sparklineValues,
       });
     }
-  } catch { /* return empty on network failure */ }
+  } catch (err) {
+    console.error("[market] Alpaca indices fetch failed:", err);
+  }
 
   return results;
 }
@@ -372,7 +400,10 @@ async function fetchAlpacaSectors(
       `${ALPACA_DATA_URL}/v2/stocks/snapshots?${params.toString()}`,
       { headers, signal: AbortSignal.timeout(5000) },
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      console.error(`[market] Alpaca sectors request failed: HTTP ${resp.status}`);
+      return [];
+    }
 
     const snapData = (await resp.json()) as Record<
       string,
@@ -405,7 +436,10 @@ async function fetchAlpacaNews(
       `${ALPACA_DATA_URL}/v1beta1/news?${params.toString()}`,
       { headers: alpacaHeaders(apiKey, secretKey), signal: AbortSignal.timeout(5000) },
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      console.error(`[market] Alpaca news request failed: HTTP ${resp.status}`);
+      return [];
+    }
 
     const data = (await resp.json()) as {
       news: Array<{
@@ -440,7 +474,10 @@ async function fetchAlpacaMarketClock(
       headers: alpacaHeaders(apiKey, secretKey),
       signal: AbortSignal.timeout(3000),
     });
-    if (!resp.ok) return { isOpen: false };
+    if (!resp.ok) {
+      console.error(`[market] Alpaca market clock request failed: HTTP ${resp.status}`);
+      return { isOpen: false };
+    }
 
     const data = (await resp.json()) as { is_open: boolean };
     return { isOpen: data.is_open };
