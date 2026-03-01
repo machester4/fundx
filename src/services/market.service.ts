@@ -13,6 +13,10 @@ const FMP_INDICES: Record<string, string> = {
   "^GSPC": "S&P 500",
   "^IXIC": "NASDAQ",
   "^VIX": "VIX",
+  "XAUUSD": "Gold",
+  "XAGUSD": "Silver",
+  "BTCUSD": "BTC",
+  "CLUSD": "WTI",
 };
 
 const SECTOR_ETFS: Record<string, string> = {
@@ -33,12 +37,20 @@ const ALPACA_INDICES: Record<string, string> = {
   SPY: "S&P 500",
   QQQ: "NASDAQ",
   VIXY: "VIX",
+  GLD: "Gold",
+  SLV: "Silver",
+  IBIT: "BTC",
+  USO: "WTI",
 };
 
 const YFINANCE_INDICES: Record<string, string> = {
   "^GSPC": "S&P 500",
   "^IXIC": "NASDAQ",
   "^VIX": "VIX",
+  "GC=F": "Gold",
+  "SI=F": "Silver",
+  "BTC-USD": "BTC",
+  "CL=F": "WTI",
 };
 
 // ── Provider detection ───────────────────────────────────────
@@ -437,21 +449,35 @@ async function fetchAlpacaMarketClock(
   }
 }
 
+// ── Ordering ─────────────────────────────────────────────────
+
+const INDEX_ORDER = ["S&P 500", "NASDAQ", "BTC", "VIX", "Gold", "Silver", "WTI"];
+
+function sortIndices(indices: MarketIndexSnapshot[]): MarketIndexSnapshot[] {
+  return [...indices].sort((a, b) => {
+    const ai = INDEX_ORDER.indexOf(a.name);
+    const bi = INDEX_ORDER.indexOf(b.name);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 /** Fetch market index snapshots for dashboard display */
 export async function fetchMarketIndices(): Promise<MarketIndexSnapshot[]> {
   const info = await detectProvider();
+  let results: MarketIndexSnapshot[] = [];
   if (info.provider === "fmp") {
-    return fetchFmpIndices(info.fmpApiKey).catch(() => []);
+    results = await fetchFmpIndices(info.fmpApiKey).catch(() => []);
+  } else if (info.provider === "alpaca") {
+    results = await fetchAlpacaIndices(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
+  } else if (info.provider === "yfinance") {
+    results = await fetchYFinanceIndices().catch(() => []);
   }
-  if (info.provider === "alpaca") {
-    return fetchAlpacaIndices(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
-  }
-  if (info.provider === "yfinance") {
-    return fetchYFinanceIndices().catch(() => []);
-  }
-  return [];
+  return sortIndices(results);
 }
 
 /** Fetch sector ETF snapshots for heatmap display */
