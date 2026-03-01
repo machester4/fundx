@@ -26,9 +26,33 @@ function ProgressBar({ pct, barWidth = 8 }: { pct: number; barWidth?: number }) 
   );
 }
 
+function FundListSummary({ funds, height }: { funds: FundStatusData[]; height?: number }) {
+  const maxRows = (height ?? 5) - 2; // subtract border rows
+  const visible = funds.slice(0, maxRows);
+  const overflow = funds.length - visible.length;
+
+  return (
+    <>
+      {visible.map((f) => (
+        <Box key={f.name} justifyContent="space-between">
+          <Box gap={1}>
+            <StatusBadge status={f.status} />
+            <Text>{f.displayName}</Text>
+            <Text bold color={f.brokerMode === "live" ? "red" : "yellow"}>
+              [{f.brokerMode === "live" ? "LIVE" : "PAPER"}]
+            </Text>
+            <Text dimColor>${f.currentValue.toLocaleString()}</Text>
+          </Box>
+          <PnlText value={f.pnl} percentage={f.pnlPct} />
+        </Box>
+      ))}
+      {overflow > 0 && <Text dimColor>+{overflow} more</Text>}
+    </>
+  );
+}
+
 export function FundsOverviewPanel({ funds, fundExtras, activeFund, width, height }: FundsOverviewPanelProps) {
-  // Find the active fund or fall back to first fund
-  const fund = funds.find((f) => f.name === activeFund) ?? funds[0];
+  const fund = activeFund ? funds.find((f) => f.name === activeFund) : undefined;
   const extras = fund ? fundExtras.get(fund.name) : undefined;
 
   return (
@@ -40,9 +64,7 @@ export function FundsOverviewPanel({ funds, fundExtras, activeFund, width, heigh
       height={height}
       paddingX={1}
     >
-      {!fund ? (
-        <Text dimColor>Run fundx fund create</Text>
-      ) : (
+      {fund ? (
         <>
           {/* Line 1: status + name + mode badge + value + P&L */}
           <Box justifyContent="space-between">
@@ -86,6 +108,10 @@ export function FundsOverviewPanel({ funds, fundExtras, activeFund, width, heigh
             )}
           </Box>
         </>
+      ) : funds.length > 0 ? (
+        <FundListSummary funds={funds} height={height} />
+      ) : (
+        <Text dimColor>No funds yet — ask Claude to create one</Text>
       )}
     </Box>
   );
