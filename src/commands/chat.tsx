@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import zod from "zod";
-import { Box, Text, useApp } from "ink";
-import { Spinner, Select } from "@inkjs/ui";
+import { Text, useApp } from "ink";
+import { Spinner } from "@inkjs/ui";
 import { resolveChatFund } from "../services/chat.service.js";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { ChatView } from "../components/ChatView.js";
@@ -19,7 +19,6 @@ type Props = { options: zod.infer<typeof options> };
 
 type Phase =
   | { type: "resolving" }
-  | { type: "selecting-fund"; funds: string[] }
   | { type: "ready"; fundName: string | null }
   | { type: "error"; message: string };
 
@@ -31,14 +30,14 @@ export default function Chat({ options: opts }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const { fundName, allFunds } = await resolveChatFund(opts.fund);
-        if (fundName === null && allFunds.length > 1) {
-          // Multiple funds — prompt user to select (or create new)
-          setPhase({ type: "selecting-fund", funds: allFunds });
-          return;
+        if (opts.fund) {
+          // Validate the specified fund exists
+          const { fundName } = await resolveChatFund(opts.fund);
+          setPhase({ type: "ready", fundName });
+        } else {
+          // No fund specified — open chat directly, fund can be selected from within
+          setPhase({ type: "ready", fundName: null });
         }
-        // fundName is null (no funds) or a resolved name
-        setPhase({ type: "ready", fundName });
       } catch (err: unknown) {
         setPhase({ type: "error", message: err instanceof Error ? err.message : String(err) });
       }
@@ -46,29 +45,11 @@ export default function Chat({ options: opts }: Props) {
   }, []);
 
   if (phase.type === "resolving") {
-    return <Spinner label="Resolving fund..." />;
+    return <Spinner label="Loading..." />;
   }
 
   if (phase.type === "error") {
     return <Text color="red">Error: {phase.message}</Text>;
-  }
-
-  if (phase.type === "selecting-fund") {
-    const options = [
-      ...phase.funds.map((f) => ({ label: f, value: f })),
-      { label: "+ Create new fund (describe your goal to Claude)", value: "__new__" },
-    ];
-    return (
-      <Box flexDirection="column">
-        <Text>Select a fund:</Text>
-        <Select
-          options={options}
-          onChange={(value) => {
-            setPhase({ type: "ready", fundName: value === "__new__" ? null : value });
-          }}
-        />
-      </Box>
-    );
   }
 
   return (
@@ -77,6 +58,7 @@ export default function Chat({ options: opts }: Props) {
       width={columns}
       height={rows}
       onExit={() => exit()}
+      onSwitchFund={(name) => setPhase({ type: "ready", fundName: name })}
       options={{
         model: opts.model,
         readonly: opts.readonly,

@@ -440,11 +440,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         {!isInline && messages.length === 0 && !isStreaming && (
           <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
             {isWorkspaceMode ? (
-              <>
-                <Text bold color="yellow">FundX Setup Assistant</Text>
-                <Text dimColor>Describe your investment goal and I'll create a complete fund configuration for you.</Text>
-                <Text dimColor>Example: "I want to invest in precious metals ETFs with a systematic 4-tranche deployment strategy..."</Text>
-              </>
+              <Text dimColor>Type a message or /help for commands. Use /fund to list or switch funds.</Text>
             ) : (
               <Text dimColor>
                 Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
