@@ -7,8 +7,11 @@ import {
   buildChatContext,
   buildCompactContext,
   loadChatWelcomeData,
+  persistChatSession,
+  loadActiveSessionId,
 } from "../services/chat.service.js";
 import { listFundNames } from "../services/fund.service.js";
+import { clearActiveSession, readChatHistory, writeChatHistory, clearChatHistory } from "../state.js";
 import { getPortfolioDisplay } from "../services/portfolio.service.js";
 import { getTradesDisplay } from "../services/trades.service.js";
 import { useStreaming } from "../hooks/useStreaming.js";
@@ -85,6 +88,28 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         setModel(resolvedModel);
         setMcpServers(servers);
         setWelcomeData(welcome);
+
+        // Resume from a previous chat or daemon session if one exists
+        const activeSessionId = await loadActiveSessionId(fundName);
+        if (activeSessionId) {
+          setSessionId(activeSessionId);
+          setTurnCount(1); // Skip full context injection since history is in the resumed session
+
+          // Restore persisted messages that belong to this session
+          const history = await readChatHistory(fundName).catch(() => null);
+          if (history && history.session_id === activeSessionId && history.messages.length > 0) {
+            setMessages(
+              history.messages.map((m) => ({
+                ...m,
+                timestamp: new Date(m.timestamp),
+              })),
+            );
+            // Derive the next ID from the maximum stored ID to avoid duplicates
+            const maxId = history.messages.reduce((max, m) => Math.max(max, m.id), 0);
+            setNextId(maxId + 1);
+          }
+        }
+
         setPhase("ready");
       } catch (err: unknown) {
         setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -108,6 +133,14 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       });
 
       setSessionId(result.sessionId);
+      if (result.sessionId) {
+        try {
+          await persistChatSession(fundName, result.sessionId);
+        } catch (err) {
+          console.error("[ChatView] Failed to persist session:", err);
+          addMessage("system", "Warning: could not save session state — conversation will not resume after restart.");
+        }
+      }
       setTurnCount((c) => c + 1);
       setCostTracker((t) => ({
         total_cost_usd: t.total_cost_usd + result.cost_usd,
@@ -153,6 +186,17 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       setTurnCount(0);
       setMessages([]);
       setNextId(1);
+      streaming.reset();
+      try {
+        await clearActiveSession(fundName);
+      } catch (err) {
+        addMessage("system", `Warning: could not clear session state. (${err instanceof Error ? err.message : String(err)})`);
+      }
+      try {
+        await clearChatHistory(fundName);
+      } catch (err) {
+        addMessage("system", `Warning: could not clear chat history. (${err instanceof Error ? err.message : String(err)})`);
+      }
       return;
     }
     if (trimmed === "/portfolio") {
@@ -219,7 +263,32 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     // Regular message
     addMessage("you", trimmed);
     await sendMessage(trimmed);
-  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage]);
+  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage, streaming]);
+
+  // Persist chat history to disk whenever messages or sessionId change.
+  // Write errors are logged but not surfaced — persistence is best-effort and must not interrupt the UI.
+  useEffect(() => {
+    if (!sessionId || messages.length === 0) return;
+    const persistable = messages.filter(
+      (m): m is ChatMsg & { sender: "you" | "claude" } =>
+        m.sender === "you" || m.sender === "claude",
+    );
+    if (persistable.length === 0) return;
+    writeChatHistory(fundName, {
+      session_id: sessionId,
+      messages: persistable.map((m) => ({
+        id: m.id,
+        sender: m.sender,
+        content: m.content,
+        timestamp: m.timestamp.toISOString(),
+        cost: m.cost,
+        turns: m.turns,
+      })),
+      updated_at: new Date().toISOString(),
+    }).catch((err) => {
+      console.error("[ChatView] Failed to write chat history:", err);
+    });
+  }, [messages, sessionId, fundName]);
 
   // Reset scroll to bottom when new messages arrive or streaming updates
   useEffect(() => {

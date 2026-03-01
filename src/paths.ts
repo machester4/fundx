@@ -44,6 +44,8 @@ export function fundPaths(fundName: string) {
       tracker: join(root, "state", "objective_tracker.json"),
       journal: join(root, "state", "trade_journal.sqlite"),
       sessionLog: join(root, "state", "session_log.json"),
+      activeSession: join(root, "state", "active_session.json"),
+      chatHistory: join(root, "state", "chat_history.json"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),
