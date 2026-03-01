@@ -456,6 +456,41 @@ export const nextCronInfoSchema = z.object({
 
 export type NextCronInfo = z.infer<typeof nextCronInfoSchema>;
 
+// ── Chat History Schema ──────────────────────────────────────
+
+export const chatMessageRecordSchema = z.object({
+  id: z.number(),
+  sender: z.enum(["you", "claude", "system"]),
+  content: z.string(),
+  timestamp: z.string().datetime(),
+  cost: z.number().optional(),
+  turns: z.number().optional(),
+});
+
+// Schema for messages written to disk — excludes ephemeral system messages
+const persistedChatMessageSchema = chatMessageRecordSchema.extend({
+  sender: z.enum(["you", "claude"]),
+});
+
+export const chatHistorySchema = z.object({
+  session_id: z.string().min(1),
+  messages: z.array(persistedChatMessageSchema),
+  updated_at: z.string().datetime(),
+});
+
+export type ChatMessageRecord = z.infer<typeof chatMessageRecordSchema>;
+export type ChatHistory = z.infer<typeof chatHistorySchema>;
+
+// ── Active Session Schema ────────────────────────────────────
+
+export const activeSessionSchema = z.object({
+  session_id: z.string().min(1),
+  updated_at: z.string().datetime(),
+  source: z.enum(["chat", "daemon"]),
+});
+
+export type ActiveSession = z.infer<typeof activeSessionSchema>;
+
 // ── Phase 6: Agent SDK Schemas ──────────────────────────────
 
 /** Extended session log with SDK cost/token metadata */

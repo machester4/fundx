@@ -1,12 +1,16 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   portfolioSchema,
   objectiveTrackerSchema,
   sessionLogSchema,
+  activeSessionSchema,
+  chatHistorySchema,
   type Portfolio,
   type ObjectiveTracker,
   type SessionLog,
+  type ActiveSession,
+  type ChatHistory,
 } from "./types.js";
 import { fundPaths } from "./paths.js";
 
@@ -82,6 +86,64 @@ export async function writeSessionLog(
 ): Promise<void> {
   const paths = fundPaths(fundName);
   await writeJsonAtomic(paths.state.sessionLog, log);
+}
+
+// ── Active Session ─────────────────────────────────────────────
+
+export async function readActiveSession(fundName: string): Promise<ActiveSession | null> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.activeSession);
+    return activeSessionSchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function writeActiveSession(fundName: string, data: ActiveSession): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.activeSession, data);
+}
+
+export async function clearActiveSession(fundName: string): Promise<void> {
+  const paths = fundPaths(fundName);
+  try {
+    await unlink(paths.state.activeSession);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return;
+    throw err;
+  }
+}
+
+// ── Chat History ───────────────────────────────────────────────
+
+export async function readChatHistory(fundName: string): Promise<ChatHistory | null> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.chatHistory);
+    return chatHistorySchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+export async function writeChatHistory(fundName: string, history: ChatHistory): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.chatHistory, history);
+}
+
+export async function clearChatHistory(fundName: string): Promise<void> {
+  const paths = fundPaths(fundName);
+  try {
+    await unlink(paths.state.chatHistory);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return;
+    throw err;
+  }
 }
 
 // ── Initialize state for a new fund ────────────────────────────

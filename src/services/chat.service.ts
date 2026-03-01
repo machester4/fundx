@@ -4,7 +4,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { loadFundConfig, listFundNames } from "./fund.service.js";
 import { loadGlobalConfig } from "../config.js";
-import { readPortfolio, readTracker, readSessionLog } from "../state.js";
+import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession } from "../state.js";
 import { openJournal, getTradeSummary } from "../journal.js";
 import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
@@ -404,6 +404,22 @@ export async function resolveChatModel(
     globalConfig.default_model ??
     "sonnet"
   );
+}
+
+/** Persist the current chat session ID so the daemon can resume it */
+export async function persistChatSession(fundName: string, sessionId: string): Promise<void> {
+  await writeActiveSession(fundName, {
+    session_id: sessionId,
+    updated_at: new Date().toISOString(),
+    source: "chat",
+  });
+}
+
+/** Load the active session ID (chat or daemon) for resumption.
+ * Returns undefined if no session exists (ENOENT). Other errors propagate. */
+export async function loadActiveSessionId(fundName: string): Promise<string | undefined> {
+  const active = await readActiveSession(fundName);
+  return active?.session_id;
 }
 
 /** Build MCP servers config for chat */

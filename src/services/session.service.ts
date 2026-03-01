@@ -1,6 +1,6 @@
 import { loadFundConfig } from "./fund.service.js";
-import { writeSessionLog } from "../state.js";
-import { runAgentQuery } from "../agent.js";
+import { writeSessionLog, readActiveSession, writeActiveSession } from "../state.js";
+import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import type { SessionLogV2 } from "../types.js";
 
@@ -56,14 +56,35 @@ export async function runFundSession(
 
   const startedAt = new Date().toISOString();
 
-  const result = await runAgentQuery({
+  const activeSession = await readActiveSession(fundName).catch(() => null);
+
+  let result = await runAgentQuery({
     fundName,
     prompt,
     model,
     maxTurns: DEFAULT_MAX_TURNS,
     timeoutMs: timeout,
     agents,
+    resumeSessionId: activeSession?.session_id,
   });
+
+  // If resumption failed (expired session), retry without resume
+  if (
+    result.status === "error" &&
+    activeSession?.session_id &&
+    result.error &&
+    SESSION_EXPIRED_PATTERN.test(result.error)
+  ) {
+    console.warn(`[session] Session ${activeSession.session_id} expired, starting fresh`);
+    result = await runAgentQuery({
+      fundName,
+      prompt,
+      model,
+      maxTurns: DEFAULT_MAX_TURNS,
+      timeoutMs: timeout,
+      agents,
+    });
+  }
 
   const log: SessionLogV2 = {
     fund: fundName,
@@ -82,6 +103,21 @@ export async function runFundSession(
   };
 
   await writeSessionLog(fundName, log);
+
+  if (result.session_id && result.status === "success") {
+    try {
+      await writeActiveSession(fundName, {
+        session_id: result.session_id,
+        updated_at: new Date().toISOString(),
+        source: "daemon",
+      });
+    } catch (err) {
+      console.error(
+        `[session] Failed to persist active session for '${fundName}':`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
 }
 
 

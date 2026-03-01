@@ -9,6 +9,9 @@ import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
 import { fundPaths, MCP_SERVERS } from "./paths.js";
 
+/** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
+export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
+
 // ── Types ────────────────────────────────────────────────────
 
 /** Options for running a Claude Agent SDK query scoped to a fund */
@@ -29,6 +32,8 @@ export interface AgentQueryOptions {
   onMessage?: (message: SDKMessage) => void;
   /** Sub-agent definitions available via the Task tool */
   agents?: Record<string, AgentDefinition>;
+  /** Session ID to resume (from a previous chat or daemon session) */
+  resumeSessionId?: string;
 }
 
 /** Result from a Claude Agent SDK query */
@@ -191,6 +196,7 @@ export async function runAgentQuery(
         allowDangerouslySkipPermissions: true,
         abortController,
         agents: options.agents,
+        ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
       },
     })) {
       // Forward to optional callback
