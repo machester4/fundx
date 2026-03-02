@@ -9,7 +9,7 @@ import { openJournal, getTradeSummary } from "../journal.js";
 import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
 import { generateFundClaudeMd } from "../template.js";
-import { ensureFundSkillFiles } from "../skills.js";
+import { ensureFundSkillFiles, ensureFundRules } from "../skills.js";
 import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS } from "../paths.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 
@@ -497,4 +497,5 @@ export async function completeFundSetup(fundName: string): Promise<void> {
   }
 
   await ensureFundSkillFiles(paths.claudeDir);
+  await ensureFundRules(paths.claudeDir);
 }

@@ -28,13 +28,16 @@ to a directory that contains a `.claude/` folder or `CLAUDE.md`:
 ├── CLAUDE.md                          # fund AI manager identity (generated from fund_config.yaml)
 └── .claude/
     ├── settings.json
+    ├── rules/
+    │   └── state-consistency.md       # config ↔ state sync rules
     └── skills/
         ├── investment-debate/SKILL.md
         ├── risk-matrix/SKILL.md
         ├── trade-memory/SKILL.md
         ├── market-regime/SKILL.md
         ├── position-sizing/SKILL.md
-        └── session-reflection/SKILL.md
+        ├── session-reflection/SKILL.md
+        └── investment-brainstorming/SKILL.md
 ```
 
 ## SKILL.md format
@@ -60,21 +63,22 @@ description: One-line description — Claude uses this to decide when to invoke 
 
 ## Where skills are defined in code
 - `src/skills.ts` — source of truth for all built-in skill content
-  - `BUILTIN_SKILLS` — the 6 per-fund trading analysis skills
+  - `BUILTIN_SKILLS` — the 7 per-fund trading analysis skills
   - `WORKSPACE_SKILL` — the `create-fund` workspace skill
   - `ensureFundSkillFiles(fundClaudeDir)` — writes fund skills on fund creation
   - `ensureWorkspaceSkillFiles()` — writes workspace skill on `fundx init`
 
 ## Where rules are defined in code
 - Workspace rules: generated inline in `src/services/init.service.ts` (`ensureWorkspaceRules`)
-- Per-fund rules: not yet implemented — could be generated from `fund_config.yaml` custom_rules
+- Per-fund rules: defined in `src/skills.ts` as `FUND_RULES`, written by `ensureFundRules()`
+  on fund creation and upgrade. Currently includes `state-consistency.md`.
 
 ## Adding a new fund skill
 1. Add a `Skill` object to `BUILTIN_SKILLS` in `src/skills.ts` with a unique `dirName`
 2. Include `## When to Use`, `## Technique`, and `## Output Format` sections
 3. Add a test case in `tests/skills.test.ts`
-4. Existing funds won't get the new skill automatically — run `fundx fund regen <name>` (future feature)
-   or delete `.claude/skills/<dirName>/` to force regeneration
+4. Existing funds won't get the new skill automatically — run `fundx fund upgrade --name <name>`
+   or `fundx fund upgrade --all` to rewrite all skills and rules
 
 ## Adding a new workspace rule
 Edit `ensureWorkspaceRules()` in `src/services/init.service.ts` or add a new file entry.

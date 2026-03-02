@@ -60,7 +60,7 @@ vi.mock("../src/config.js", () => ({
 }));
 
 import { upgradeFund } from "../src/services/fund.service.js";
-import { BUILTIN_SKILLS } from "../src/skills.js";
+import { BUILTIN_SKILLS, getFundRuleCount } from "../src/skills.js";
 
 const VALID_FUND_YAML = `
 fund:
@@ -121,13 +121,13 @@ describe("upgradeFund", () => {
     );
   });
 
-  it("rewrites all builtin skills", async () => {
+  it("rewrites all builtin skills and rules", async () => {
     await upgradeFund("test-fund");
 
-    // mkdir is called once per skill
-    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length);
-    // writeFile is called once per skill (SKILL.md) — CLAUDE.md is handled by mocked generateFundClaudeMd
-    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length);
+    // mkdir is called once per skill + once for rules dir
+    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + 1);
+    // writeFile is called once per skill (SKILL.md) + once per rule file
+    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + getFundRuleCount());
   });
 
   it("returns fund name and skill count", async () => {

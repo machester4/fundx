@@ -6,7 +6,7 @@ import { FUNDS_DIR, fundPaths } from "../paths.js";
 import { initFundState } from "../state.js";
 import { generateFundClaudeMd } from "../template.js";
 import { loadGlobalConfig } from "../config.js";
-import { ensureFundSkillFiles, BUILTIN_SKILLS } from "../skills.js";
+import { ensureFundSkillFiles, ensureFundRules, BUILTIN_SKILLS } from "../skills.js";
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -127,6 +127,7 @@ export async function createFund(params: CreateFundParams): Promise<FundConfig> 
   await initFundState(name, params.initialCapital, params.objectiveType);
   await generateFundClaudeMd(config);
   await ensureFundSkillFiles(fundPaths(name).claudeDir);
+  await ensureFundRules(fundPaths(name).claudeDir);
 
   return config;
 }
@@ -202,6 +203,9 @@ export async function upgradeFund(fundName: string): Promise<UpgradeResult> {
   // Wipe and rewrite all skills with latest builtin content
   await rm(paths.claudeSkillsDir, { recursive: true, force: true });
   await ensureFundSkillFiles(paths.claudeDir);
+
+  // Write/overwrite per-fund rules
+  await ensureFundRules(paths.claudeDir);
 
   return { fundName, skillCount: BUILTIN_SKILLS.length };
 }
