@@ -483,12 +483,12 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               <Box flexDirection="column">
                 <Box gap={1}>
                   <Text bold color="blue">claude</Text>
-                  <StreamingIndicator charCount={streaming.charCount} />
+                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
                 </Box>
                 <MarkdownView content={streaming.buffer} />
               </Box>
             ) : (
-              <StreamingIndicator charCount={0} />
+              <StreamingIndicator charCount={0} activity={streaming.activity} />
             )}
           </Box>
         )}
