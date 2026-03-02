@@ -11,7 +11,7 @@ import {
   loadActiveSessionId,
   completeFundSetup,
 } from "../services/chat.service.js";
-import { listFundNames } from "../services/fund.service.js";
+import { listFundNames, upgradeFund } from "../services/fund.service.js";
 import { clearActiveSession, readChatHistory, writeChatHistory, clearChatHistory } from "../state.js";
 import { getPortfolioDisplay } from "../services/portfolio.service.js";
 import { getTradesDisplay } from "../services/trades.service.js";
@@ -210,7 +210,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       return;
     }
     if (trimmed === "/help") {
-      addMessage("system", "**Chat Commands**\n- `/help` — Show this help\n- `/cost` — Show session cost\n- `/clear` — Reset conversation\n- `/portfolio` — Show portfolio\n- `/trades` — Show recent trades\n- `/fund` — List funds\n- `/fund <name>` — Switch to fund\n- `/q` — Exit");
+      addMessage("system", "**Chat Commands**\n- `/help` — Show this help\n- `/cost` — Show session cost\n- `/clear` — Reset conversation\n- `/portfolio` — Show portfolio\n- `/trades` — Show recent trades\n- `/upgrade` — Regenerate CLAUDE.md & skills\n- `/fund` — List funds\n- `/fund <name>` — Switch to fund\n- `/q` — Exit");
       return;
     }
     if (trimmed === "/cost") {
@@ -269,6 +269,21 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         addMessage("system", lines.join("\n"));
       } catch {
         addMessage("system", "Trade data unavailable");
+      }
+      return;
+    }
+
+    // /upgrade — regenerate CLAUDE.md and skills for current fund
+    if (trimmed === "/upgrade") {
+      if (!fundName) {
+        addMessage("system", "No fund selected. Switch to a fund first with `/fund <name>`.");
+        return;
+      }
+      try {
+        const result = await upgradeFund(fundName);
+        addMessage("system", `**Upgraded ${result.fundName}** — CLAUDE.md regenerated, ${result.skillCount} skills written.`);
+      } catch (err) {
+        addMessage("system", `Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
       }
       return;
     }
