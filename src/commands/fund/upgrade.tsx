@@ -10,22 +10,21 @@ import type { UpgradeResult } from "../../services/fund.service.js";
 
 export const description = "Upgrade fund(s): regenerate CLAUDE.md and rewrite skills from latest code";
 
-export const args = zod.tuple([
-  zod.string().optional().describe("Fund name (omit if using --all)"),
-]);
-
 export const options = zod.object({
+  name: zod.string().optional().describe(
+    option({ description: "Fund name to upgrade", alias: "n" }),
+  ),
   all: zod.boolean().default(false).describe(
     option({ description: "Upgrade all funds", alias: "a" }),
   ),
 });
 
 type Props = {
-  args: zod.infer<typeof args>;
   options: zod.infer<typeof options>;
 };
 
-export default function FundUpgrade({ args: [name], options: opts }: Props) {
+export default function FundUpgrade({ options: opts }: Props) {
+  const name = opts.name;
   const { data, isLoading, error } = useAsyncAction(async () => {
     if (opts.all) {
       const names = await listFundNames();
@@ -37,7 +36,7 @@ export default function FundUpgrade({ args: [name], options: opts }: Props) {
       return results;
     }
 
-    if (!name) throw new Error("Provide a fund name or use --all.");
+    if (!name) throw new Error("Provide a fund name or use --all (-a).");
     return [await upgradeFund(name)];
   }, [name, opts.all]);
 

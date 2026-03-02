@@ -154,7 +154,7 @@ src/
     performance.tsx     # fundx performance <fund>
     logs.tsx            # fundx logs
     correlation.tsx     # fundx correlation
-    fund/               # fundx fund {create,list,info,delete,clone}
+    fund/               # fundx fund {create,list,info,delete,clone,upgrade}
     session/            # fundx session {run,agents}
     gateway/            # fundx gateway {start,test}
     live/               # fundx live {enable,disable}
