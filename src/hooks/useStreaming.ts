@@ -3,10 +3,25 @@ import { runChatTurn } from "../services/chat.service.js";
 import type { ChatTurnResult } from "../services/chat.service.js";
 import { SESSION_EXPIRED_PATTERN } from "../agent.js";
 
+export interface StreamingActivity {
+  thinking: boolean;
+  toolName: string | null;
+  toolElapsed: number;
+  taskLabel: string | null;
+}
+
+const IDLE_ACTIVITY: StreamingActivity = {
+  thinking: false,
+  toolName: null,
+  toolElapsed: 0,
+  taskLabel: null,
+};
+
 interface StreamingState {
   isStreaming: boolean;
   buffer: string;
   charCount: number;
+  activity: StreamingActivity;
   result: ChatTurnResult | null;
   error: Error | null;
 }
@@ -33,6 +48,7 @@ export function useStreaming(): UseStreamingReturn {
     isStreaming: false,
     buffer: "",
     charCount: 0,
+    activity: IDLE_ACTIVITY,
     result: null,
     error: null,
   });
@@ -56,6 +72,7 @@ export function useStreaming(): UseStreamingReturn {
         isStreaming: true,
         buffer: "",
         charCount: 0,
+        activity: IDLE_ACTIVITY,
         result: null,
         error: null,
       });
@@ -71,7 +88,31 @@ export function useStreaming(): UseStreamingReturn {
           }
         },
         onStreamEnd: () => {
-          if (!cancelledRef.current) setState((s) => ({ ...s, isStreaming: false }));
+          if (!cancelledRef.current) setState((s) => ({ ...s, isStreaming: false, activity: IDLE_ACTIVITY }));
+        },
+        onThinkingStart: () => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, thinking: true } }));
+        },
+        onThinkingEnd: () => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, thinking: false } }));
+        },
+        onToolStart: (toolName: string) => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, toolName, toolElapsed: 0 } }));
+        },
+        onToolProgress: (toolName: string, elapsedSeconds: number) => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, toolName, toolElapsed: elapsedSeconds } }));
+        },
+        onToolEnd: () => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, toolName: null, toolElapsed: 0 } }));
+        },
+        onTaskStart: (_taskId: string, description: string) => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, taskLabel: description } }));
+        },
+        onTaskProgress: (_taskId: string, description: string) => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, taskLabel: description } }));
+        },
+        onTaskEnd: (_taskId: string, _summary: string) => {
+          if (!cancelledRef.current) setState((s) => ({ ...s, activity: { ...s.activity, taskLabel: null } }));
         },
       };
 
@@ -130,6 +171,7 @@ export function useStreaming(): UseStreamingReturn {
       isStreaming: false,
       buffer: "",
       charCount: 0,
+      activity: IDLE_ACTIVITY,
       result: null,
       error: null,
     });

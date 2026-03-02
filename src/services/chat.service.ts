@@ -1,7 +1,13 @@
 import { readFile, access } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKResultMessage,
+  SDKToolProgressMessage,
+  SDKTaskStartedMessage,
+  SDKTaskProgressMessage,
+  SDKTaskNotificationMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { loadFundConfig, listFundNames } from "./fund.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession, initFundState } from "../state.js";
@@ -10,6 +16,7 @@ import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
 import { generateFundClaudeMd } from "../template.js";
 import { ensureFundSkillFiles, ensureFundRules } from "../skills.js";
+import { buildAnalystAgents } from "../subagent.js";
 import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS } from "../paths.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 
@@ -300,6 +307,14 @@ export async function runChatTurn(
     onStreamStart?: () => void;
     onStreamDelta?: (text: string, totalChars: number) => void;
     onStreamEnd?: () => void;
+    onThinkingStart?: () => void;
+    onThinkingEnd?: () => void;
+    onToolStart?: (toolName: string) => void;
+    onToolProgress?: (toolName: string, elapsedSeconds: number) => void;
+    onToolEnd?: () => void;
+    onTaskStart?: (taskId: string, description: string) => void;
+    onTaskProgress?: (taskId: string, description: string) => void;
+    onTaskEnd?: (taskId: string, summary: string) => void;
   },
 ): Promise<ChatTurnResult> {
   const cwd = fundName ? fundPaths(fundName).root : WORKSPACE;
@@ -337,6 +352,11 @@ export async function runChatTurn(
   callbacks?.onStreamStart?.();
   let responseBuffer = "";
   let charCount = 0;
+  // Track the type of the currently active content block for stop events
+  let activeBlockType: "thinking" | "tool_use" | null = null;
+
+  // Build analyst sub-agents so the Task tool is available in chat sessions
+  const agents = fundName ? buildAnalystAgents(fundName) : undefined;
 
   for await (const msg of query({
     prompt,
@@ -351,6 +371,7 @@ export async function runChatTurn(
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       includePartialMessages: true,
+      agents,
       ...(sessionId ? { resume: sessionId } : {}),
     },
   })) {
@@ -366,13 +387,50 @@ export async function runChatTurn(
       const event = msg.event as {
         type?: string;
         delta?: { type?: string; text?: string };
+        content_block?: { type?: string; name?: string };
       };
-      if (event.type === "content_block_delta") {
+
+      if (event.type === "content_block_start") {
+        if (event.content_block?.type === "thinking") {
+          activeBlockType = "thinking";
+          callbacks?.onThinkingStart?.();
+        } else if (event.content_block?.type === "tool_use" && event.content_block.name) {
+          activeBlockType = "tool_use";
+          callbacks?.onToolStart?.(event.content_block.name);
+        }
+      } else if (event.type === "content_block_delta") {
         if (event.delta?.type === "text_delta" && event.delta.text) {
           responseBuffer += event.delta.text;
           charCount += event.delta.text.length;
           callbacks?.onStreamDelta?.(event.delta.text, charCount);
         }
+      } else if (event.type === "content_block_stop") {
+        if (activeBlockType === "thinking") {
+          callbacks?.onThinkingEnd?.();
+        } else if (activeBlockType === "tool_use") {
+          callbacks?.onToolEnd?.();
+        }
+        activeBlockType = null;
+      }
+    }
+
+    // Tool progress (elapsed time updates during tool execution)
+    if (msg.type === "tool_progress") {
+      const tp = msg as SDKToolProgressMessage;
+      callbacks?.onToolProgress?.(tp.tool_name, tp.elapsed_time_seconds);
+    }
+
+    // Sub-agent task lifecycle
+    if (msg.type === "system" && "subtype" in msg) {
+      if (msg.subtype === "task_started") {
+        const ts = msg as SDKTaskStartedMessage;
+        callbacks?.onTaskStart?.(ts.task_id, ts.description);
+      } else if (msg.subtype === "task_progress") {
+        const tp = msg as SDKTaskProgressMessage;
+        callbacks?.onTaskProgress?.(tp.task_id, tp.description);
+      } else if (msg.subtype === "task_notification") {
+        const tn = msg as SDKTaskNotificationMessage;
+        callbacks?.onTaskEnd?.(tn.task_id, tn.summary);
       }
     }
 
