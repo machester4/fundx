@@ -1182,11 +1182,69 @@ export async function ensureSkillFiles(claudeDir: string, skills: Skill[]): Prom
 }
 
 /**
- * Write the 6 trading analysis skills to a fund's .claude/skills/ directory.
+ * Write the trading analysis skills to a fund's .claude/skills/ directory.
  * Called during fund creation so each fund's Agent SDK session auto-loads them.
  */
 export async function ensureFundSkillFiles(fundClaudeDir: string): Promise<void> {
   await ensureSkillFiles(fundClaudeDir, BUILTIN_SKILLS);
+}
+
+// ── Per-Fund Rules ─────────────────────────────────────────────
+
+const FUND_RULES: { fileName: string; content: string }[] = [
+  {
+    fileName: "state-consistency.md",
+    content: `# State & Config Consistency
+
+When the user provides information that changes fund parameters (capital, risk limits,
+allowed assets, objective, etc.), you MUST update ALL affected files — not just one.
+
+## Files that must stay in sync
+
+| File | Contains |
+|------|----------|
+| \`fund_config.yaml\` | Declared fund parameters (source of truth for configuration) |
+| \`state/portfolio.json\` | Current cash, total_value, and positions |
+| \`state/objective_tracker.json\` | Progress toward the fund's goal |
+| \`CLAUDE.md\` | Generated from fund_config.yaml — do NOT edit directly |
+
+## Rules
+
+1. **Capital changes** — If the user corrects \`capital.initial\`:
+   - Update \`fund_config.yaml\`
+   - If the fund has NO open positions, also update \`portfolio.json\` so that
+     \`cash\` and \`total_value\` match the new initial capital
+   - If the fund HAS positions, warn the user that existing positions won't be
+     adjusted and ask how to proceed
+
+2. **Never edit only one side** — A change to \`fund_config.yaml\` without the
+   corresponding state update (or vice-versa) will cause the dashboard to show
+   incorrect P&L, wrong cash percentages, or phantom gains/losses
+
+3. **CLAUDE.md is derived** — Never edit it by hand. If config changes, tell the
+   user to run \`fundx fund upgrade --name <fund>\` to regenerate it
+
+4. **Atomic updates** — When updating multiple files, update them all in the same
+   response. Do not leave the fund in an inconsistent state between messages
+`,
+  },
+];
+
+/**
+ * Write behavioral rules to a fund's .claude/rules/ directory.
+ * Called during fund creation and upgrade.
+ */
+export async function ensureFundRules(fundClaudeDir: string): Promise<void> {
+  const rulesDir = join(fundClaudeDir, "rules");
+  await mkdir(rulesDir, { recursive: true });
+  for (const rule of FUND_RULES) {
+    await writeFile(join(rulesDir, rule.fileName), rule.content, "utf-8");
+  }
+}
+
+/** Returns the number of per-fund rules */
+export function getFundRuleCount(): number {
+  return FUND_RULES.length;
 }
 
 /**
