@@ -116,6 +116,8 @@ fundx fund pause <name>             Pause a fund (keeps state)
 fundx fund resume <name>            Resume a paused fund
 fundx fund delete <name>            Delete a fund (requires confirmation)
 fundx fund clone <source> <name>    Clone fund configuration
+fundx fund upgrade -n <name>        Regenerate CLAUDE.md and rewrite skills
+fundx fund upgrade --all            Upgrade all funds at once
 ```
 
 ### Analysis & Interaction
