@@ -397,6 +397,14 @@ export async function runChatTurn(
         } else if (event.content_block?.type === "tool_use" && event.content_block.name) {
           activeBlockType = "tool_use";
           callbacks?.onToolStart?.(event.content_block.name);
+        } else if (event.content_block?.type === "text") {
+          // Separate consecutive text blocks with a newline (e.g. text → tool → text)
+          if (responseBuffer.length > 0 && !responseBuffer.endsWith("\n")) {
+            responseBuffer += "\n";
+            charCount += 1;
+            callbacks?.onStreamDelta?.("\n", charCount);
+          }
+          activeBlockType = null;
         }
       } else if (event.type === "content_block_delta") {
         if (event.delta?.type === "text_delta" && event.delta.text) {
