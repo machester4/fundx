@@ -7,7 +7,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
-import { fundPaths, MCP_SERVERS } from "./paths.js";
+import { fundPaths, MCP_SERVERS, MCP_COMMAND } from "./paths.js";
 
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
@@ -91,12 +91,12 @@ export async function buildMcpServers(
 
   const servers: Record<string, McpStdioConfig> = {
     "broker-alpaca": {
-      command: "node",
+      command: MCP_COMMAND,
       args: [MCP_SERVERS.brokerAlpaca],
       env: brokerEnv,
     },
     "market-data": {
-      command: "node",
+      command: MCP_COMMAND,
       args: [MCP_SERVERS.marketData],
       env: marketDataEnv,
     },
@@ -126,7 +126,7 @@ export async function buildMcpServers(
       telegramEnv.QUIET_HOURS_ALLOW_CRITICAL = String(qh.allow_critical);
     }
     servers["telegram-notify"] = {
-      command: "node",
+      command: MCP_COMMAND,
       args: [MCP_SERVERS.telegramNotify],
       env: telegramEnv,
     };
