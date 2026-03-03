@@ -34,12 +34,23 @@ export const WORKSPACE_SKILLS_DIR = join(WORKSPACE, ".claude", "skills");
 /** Workspace-level rules directory (.claude/rules/*.md) */
 export const WORKSPACE_RULES_DIR = join(WORKSPACE, ".claude", "rules");
 
-/** MCP server executables (resolved from dist/mcp at runtime) */
+/**
+ * Whether we're running in dev mode (tsx) vs production (compiled JS).
+ * In dev, __dirname is src/ and MCP files are .ts; in prod, __dirname is dist/ and files are .js.
+ */
+export const IS_DEV = __dirname.endsWith("/src") || __dirname.endsWith("\\src");
+
+/** MCP server executables (resolved relative to __dirname) */
 export const MCP_SERVERS = {
-  brokerAlpaca: join(__dirname, "mcp", "broker-alpaca.js"),
-  marketData: join(__dirname, "mcp", "market-data.js"),
-  telegramNotify: join(__dirname, "mcp", "telegram-notify.js"),
+  brokerAlpaca: join(__dirname, "mcp", IS_DEV ? "broker-alpaca.ts" : "broker-alpaca.js"),
+  marketData: join(__dirname, "mcp", IS_DEV ? "market-data.ts" : "market-data.js"),
+  telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
 };
+
+/** Command to run MCP server files (tsx for .ts in dev, node for .js in prod) */
+export const MCP_COMMAND = IS_DEV
+  ? join(__dirname, "..", "node_modules", ".bin", "tsx")
+  : "node";
 
 /** Paths relative to a fund directory */
 export function fundPaths(fundName: string) {

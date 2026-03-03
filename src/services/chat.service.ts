@@ -17,7 +17,7 @@ import { buildMcpServers } from "../agent.js";
 import { generateFundClaudeMd } from "../template.js";
 import { ensureFundSkillFiles, ensureFundRules } from "../skills.js";
 import { buildAnalystAgents } from "../subagent.js";
-import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS } from "../paths.js";
+import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS, MCP_COMMAND } from "../paths.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -531,7 +531,7 @@ export async function buildChatMcpServers(
 
   return {
     "market-data": {
-      command: "node",
+      command: MCP_COMMAND,
       args: [MCP_SERVERS.marketData],
       env: marketDataEnv,
     },
