@@ -21,6 +21,8 @@ vi.mock("node:fs", () => ({
 
 vi.mock("../src/paths.js", () => ({
   FUNDS_DIR: "/home/test/.fundx/funds",
+  WORKSPACE: "/home/test/.fundx",
+  WORKSPACE_CLAUDE_DIR: "/home/test/.fundx/.claude",
   fundPaths: (name: string) => ({
     root: `/home/test/.fundx/funds/${name}`,
     config: `/home/test/.fundx/funds/${name}/fund_config.yaml`,

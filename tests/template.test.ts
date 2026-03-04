@@ -48,8 +48,8 @@ describe("generateFundClaudeMd", () => {
     expect(mockedWriteFile).toHaveBeenCalledOnce();
     const content = mockedWriteFile.mock.calls[0][1] as string;
 
-    expect(content).toContain("# Fund: test-fund");
-    expect(content).toContain("Test Fund");
+    expect(content).toContain("# Test Fund");
+    expect(content).toContain("senior portfolio manager running Test Fund");
     expect(content).toContain("Cautious and analytical.");
   });
 
@@ -123,17 +123,22 @@ describe("generateFundClaudeMd", () => {
     expect(content).not.toContain("Risk Assessment Matrix");
   });
 
-  it("Decision Framework section comes before Session Protocol with no skills section between them", async () => {
-    const config = makeConfig();
+  it("Mental Models section comes before Session Protocol with no skills section between them", async () => {
+    const config = makeConfig({
+      claude: { model: "sonnet", personality: "", decision_framework: "Value-driven analysis." },
+    });
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
-    const frameworkIdx = content.indexOf("## Decision Framework");
+    const philosophyIdx = content.indexOf("## Investment Philosophy");
+    const mentalIdx = content.indexOf("## Mental Models");
     const protocolIdx = content.indexOf("## Session Protocol");
 
-    expect(frameworkIdx).toBeGreaterThan(-1);
+    expect(philosophyIdx).toBeGreaterThan(-1);
+    expect(mentalIdx).toBeGreaterThan(-1);
     expect(protocolIdx).toBeGreaterThan(-1);
-    expect(frameworkIdx).toBeLessThan(protocolIdx);
+    expect(philosophyIdx).toBeLessThan(mentalIdx);
+    expect(mentalIdx).toBeLessThan(protocolIdx);
     // No skills section between them
     expect(content.indexOf("## Advanced Analysis Skills")).toBe(-1);
   });

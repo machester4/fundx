@@ -182,7 +182,7 @@ describe("daemon cron callback", () => {
 
   it("calls syncPortfolio at 09:30 on trading days", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T09:30:00")); // Monday
+    vi.setSystemTime(new Date("2026-02-23T09:30:00Z")); // Monday UTC
     await capturedCronCallback!();
 
     expect(syncPortfolio).toHaveBeenCalledWith("test-fund");
@@ -190,7 +190,7 @@ describe("daemon cron callback", () => {
 
   it("does NOT call syncPortfolio at other times", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:00:00")); // Monday 10:00
+    vi.setSystemTime(new Date("2026-02-23T10:00:00Z")); // Monday 10:00 UTC
     await capturedCronCallback!();
 
     expect(syncPortfolio).not.toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe("daemon cron callback", () => {
 
   it("calls checkStopLosses every 5 min during market hours", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:00:00")); // Monday 10:00
+    vi.setSystemTime(new Date("2026-02-23T10:00:00Z")); // Monday 10:00 UTC
     await capturedCronCallback!();
 
     expect(checkStopLosses).toHaveBeenCalledWith("test-fund");
@@ -206,7 +206,7 @@ describe("daemon cron callback", () => {
 
   it("calls checkStopLosses at 09:30 (market open, minute % 5 === 0)", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T09:30:00"));
+    vi.setSystemTime(new Date("2026-02-23T09:30:00Z")); // UTC
     await capturedCronCallback!();
 
     expect(checkStopLosses).toHaveBeenCalledWith("test-fund");
@@ -214,7 +214,7 @@ describe("daemon cron callback", () => {
 
   it("does NOT call checkStopLosses before market open", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T09:25:00"));
+    vi.setSystemTime(new Date("2026-02-23T09:25:00Z")); // UTC
     await capturedCronCallback!();
 
     expect(checkStopLosses).not.toHaveBeenCalled();
@@ -222,7 +222,7 @@ describe("daemon cron callback", () => {
 
   it("does NOT call checkStopLosses after market close", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T16:00:00"));
+    vi.setSystemTime(new Date("2026-02-23T16:00:00Z")); // UTC
     await capturedCronCallback!();
 
     expect(checkStopLosses).not.toHaveBeenCalled();
@@ -230,7 +230,7 @@ describe("daemon cron callback", () => {
 
   it("does NOT call checkStopLosses on non-5-minute intervals", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:03:00"));
+    vi.setSystemTime(new Date("2026-02-23T10:03:00Z")); // UTC
     await capturedCronCallback!();
 
     expect(checkStopLosses).not.toHaveBeenCalled();
@@ -251,7 +251,7 @@ describe("daemon cron callback", () => {
     vi.mocked(checkStopLosses).mockResolvedValue(triggered);
 
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:00:00"));
+    vi.setSystemTime(new Date("2026-02-23T10:00:00Z")); // UTC
     await capturedCronCallback!();
 
     // Flush microtask queue for the .then() chain
@@ -264,7 +264,7 @@ describe("daemon cron callback", () => {
     vi.mocked(checkStopLosses).mockResolvedValue([]);
 
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:00:00"));
+    vi.setSystemTime(new Date("2026-02-23T10:00:00Z")); // UTC
     await capturedCronCallback!();
 
     await vi.advanceTimersByTimeAsync(0);
@@ -285,7 +285,7 @@ describe("daemon cron callback", () => {
     );
 
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T09:30:00"));
+    vi.setSystemTime(new Date("2026-02-23T09:30:00Z")); // UTC
     await capturedCronCallback!();
 
     expect(syncPortfolio).not.toHaveBeenCalled();
@@ -294,7 +294,7 @@ describe("daemon cron callback", () => {
 
   it("skips non-trading days for sync and stoploss", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-22T09:30:00")); // Sunday
+    vi.setSystemTime(new Date("2026-02-22T09:30:00Z")); // Sunday UTC
     await capturedCronCallback!();
 
     expect(syncPortfolio).not.toHaveBeenCalled();
@@ -303,7 +303,7 @@ describe("daemon cron callback", () => {
 
   it("still calls dailyReport at 18:30", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T18:30:00")); // Monday 18:30
+    vi.setSystemTime(new Date("2026-02-23T18:30:00Z")); // Monday 18:30 UTC
     await capturedCronCallback!();
 
     expect(generateDailyReport).toHaveBeenCalledWith("test-fund");

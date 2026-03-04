@@ -3,18 +3,17 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 /**
- * Tests for src/session.ts — session runner that calls runAgentQuery.
+ * Tests for src/services/session.service.ts — session runner that calls runAgentQuery.
  *
  * We mock:
- * - ../src/agent.js (runAgentQuery, buildMcpServers)
+ * - ../src/agent.js (runAgentQuery, buildMcpServers, SESSION_EXPIRED_PATTERN)
  * - ../src/services/fund.service.js (loadFundConfig)
- * - ../src/state.js (writeSessionLog)
- * - ../src/subagent.js (runSubAgents, etc.)
+ * - ../src/state.js (writeSessionLog, readActiveSession, writeActiveSession)
+ * - ../src/subagent.js (buildAnalystAgents)
  * - node:fs/promises (for file writes)
  *
  * We test:
  * - runFundSession: prompt construction, model/timeout, session log writing
- * - runFundSessionWithSubAgents: sub-agent invocation, combined prompt, log
  */
 
 const _WORKSPACE = join(homedir(), ".fundx");
@@ -23,30 +22,24 @@ const _WORKSPACE = join(homedir(), ".fundx");
 
 const mockRunAgentQuery = vi.fn();
 const mockWriteSessionLog = vi.fn();
-const mockRunSubAgents = vi.fn();
-const mockSaveSubAgentAnalysis = vi.fn();
 
 vi.mock("../src/agent.js", () => ({
   runAgentQuery: (...args: unknown[]) => mockRunAgentQuery(...args),
   buildMcpServers: vi.fn(async () => ({})),
+  SESSION_EXPIRED_PATTERN: /session.*(expired|not found|invalid)/i,
 }));
 
 vi.mock("../src/state.js", () => ({
   writeSessionLog: (...args: unknown[]) => mockWriteSessionLog(...args),
+  readActiveSession: vi.fn().mockResolvedValue(null),
+  writeActiveSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/subagent.js", () => ({
-  getDefaultSubAgents: vi.fn(() => [
-    { type: "macro", name: "Macro Analyst", prompt: "test macro", max_turns: 10 },
-    { type: "technical", name: "Technical Analyst", prompt: "test tech", max_turns: 10 },
-  ]),
   buildAnalystAgents: vi.fn(() => ({
-    "macro-analyst": { description: "Macro", prompt: "test", model: "haiku" },
-    "technical-analyst": { description: "Technical", prompt: "test", model: "haiku" },
+    "macro-analyst": { description: "Macro", prompt: "test", model: "sonnet" },
+    "technical-analyst": { description: "Technical", prompt: "test", model: "sonnet" },
   })),
-  runSubAgents: (...args: unknown[]) => mockRunSubAgents(...args),
-  mergeSubAgentResults: vi.fn(() => "# Combined Analysis\nMACRO_SIGNAL: bullish"),
-  saveSubAgentAnalysis: (...args: unknown[]) => mockSaveSubAgentAnalysis(...args),
 }));
 
 vi.mock("node:fs/promises", () => ({
@@ -94,7 +87,7 @@ vi.mock("../src/services/fund.service.js", () => ({
   listFundNames: vi.fn(async () => ["test-fund"]),
 }));
 
-import { runFundSession, runFundSessionWithSubAgents } from "../src/services/session.service.js";
+import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 
 const mockedLoadFundConfig = vi.mocked(loadFundConfig);
@@ -123,11 +116,6 @@ beforeEach(() => {
     status: "success",
   });
   mockWriteSessionLog.mockResolvedValue(undefined);
-  mockRunSubAgents.mockResolvedValue([
-    { type: "macro", name: "Macro Analyst", started_at: "2026-02-25T09:00:00Z", ended_at: "2026-02-25T09:02:00Z", status: "success", output: "Bullish outlook" },
-    { type: "technical", name: "Technical Analyst", started_at: "2026-02-25T09:00:00Z", ended_at: "2026-02-25T09:01:30Z", status: "success", output: "Neutral signals" },
-  ]);
-  mockSaveSubAgentAnalysis.mockResolvedValue("/tmp/analysis.md");
 });
 
 // ── runFundSession ────────────────────────────────────────────
@@ -241,67 +229,6 @@ describe("runFundSession", () => {
     const opts = mockRunAgentQuery.mock.calls[0][0];
     // Empty string is falsy, so model should be undefined (let agent.ts resolve)
     expect(opts.model).toBeUndefined();
-  });
-});
-
-// ── runFundSessionWithSubAgents ───────────────────────────────
-
-describe("runFundSessionWithSubAgents", () => {
-  it("runs sub-agents first, then main session with combined analysis", async () => {
-    await runFundSessionWithSubAgents("test-fund", "pre_market");
-
-    // Sub-agents should be called first
-    expect(mockRunSubAgents).toHaveBeenCalledTimes(1);
-    const [fundName, agents, opts] = mockRunSubAgents.mock.calls[0];
-    expect(fundName).toBe("test-fund");
-    expect(agents).toHaveLength(2); // macro + technical from mock
-    expect(opts.timeoutMinutes).toBe(8);
-
-    // Then main session should be called
-    expect(mockRunAgentQuery).toHaveBeenCalledTimes(1);
-    const queryOpts = mockRunAgentQuery.mock.calls[0][0];
-    expect(queryOpts.prompt).toContain("Sub-Agent Analysis");
-    expect(queryOpts.prompt).toContain("Combined Analysis");
-    expect(queryOpts.prompt).toContain("MACRO_SIGNAL: bullish");
-  });
-
-  it("saves sub-agent analysis to file", async () => {
-    await runFundSessionWithSubAgents("test-fund", "pre_market");
-
-    expect(mockSaveSubAgentAnalysis).toHaveBeenCalledTimes(1);
-    const [fundName, results, sessionType] = mockSaveSubAgentAnalysis.mock.calls[0];
-    expect(fundName).toBe("test-fund");
-    expect(results).toHaveLength(2);
-    expect(sessionType).toBe("pre_market");
-  });
-
-  it("writes session log with parallel suffix and sub-agent counts", async () => {
-    await runFundSessionWithSubAgents("test-fund", "pre_market");
-
-    expect(mockWriteSessionLog).toHaveBeenCalledTimes(1);
-    const [, log] = mockWriteSessionLog.mock.calls[0];
-    expect(log.session_type).toBe("pre_market_parallel");
-    expect(log.summary).toContain("Sub-agents: 2/2 OK");
-    expect(log.analysis_file).toBe("/tmp/analysis.md");
-    expect(log.cost_usd).toBe(0.03);
-  });
-
-  it("throws when session type not found", async () => {
-    await expect(
-      runFundSessionWithSubAgents("test-fund", "nonexistent"),
-    ).rejects.toThrow("Session type 'nonexistent' not found");
-  });
-
-  it("counts failed sub-agents in summary", async () => {
-    mockRunSubAgents.mockResolvedValue([
-      { type: "macro", name: "Macro", started_at: "t0", ended_at: "t1", status: "success", output: "ok" },
-      { type: "technical", name: "Technical", started_at: "t0", ended_at: "t1", status: "error", output: "", error: "timeout" },
-    ]);
-
-    await runFundSessionWithSubAgents("test-fund", "pre_market");
-
-    const [, log] = mockWriteSessionLog.mock.calls[0];
-    expect(log.summary).toContain("Sub-agents: 1/2 OK");
   });
 });
 
