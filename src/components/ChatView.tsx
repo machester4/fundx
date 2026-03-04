@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { Spinner, TextInput } from "@inkjs/ui";
+import { basename } from "node:path";
 import {
   resolveChatModel,
   buildChatMcpServers,
@@ -10,7 +11,10 @@ import {
   persistChatSession,
   loadActiveSessionId,
   completeFundSetup,
+  extractImagePaths,
+  loadImageAttachment,
 } from "../services/chat.service.js";
+import type { ImageAttachment } from "../services/chat.service.js";
 import { listFundNames, upgradeFund } from "../services/fund.service.js";
 import { clearActiveSession, readChatHistory, writeChatHistory, clearChatHistory } from "../state.js";
 import { getPortfolioDisplay } from "../services/portfolio.service.js";
@@ -132,7 +136,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     })();
   }, [fundName]);
 
-  const sendMessage = useCallback(async (message: string) => {
+  const sendMessage = useCallback(async (message: string, images?: ImageAttachment[]) => {
     setPhase("streaming");
     try {
       const context = turnCount === 0
@@ -144,6 +148,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         maxBudgetUsd: options.maxBudget ? parseFloat(options.maxBudget) : undefined,
         readonly: options.readonly,
         mcpServers,
+        images,
       });
 
       setSessionId(result.sessionId);
@@ -321,9 +326,26 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       return;
     }
 
-    // Regular message
-    addMessage("you", trimmed);
-    await sendMessage(trimmed);
+    // Check for image file paths (drag-and-drop from macOS Finder)
+    const { cleanText, imagePaths } = extractImagePaths(trimmed);
+    let images: ImageAttachment[] | undefined;
+
+    if (imagePaths.length > 0) {
+      const loaded: ImageAttachment[] = [];
+      for (const imgPath of imagePaths) {
+        try {
+          loaded.push(await loadImageAttachment(imgPath));
+          addMessage("system", `Attached: ${basename(imgPath)}`);
+        } catch (err) {
+          addMessage("system", `Could not attach ${basename(imgPath)}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      if (loaded.length > 0) images = loaded;
+    }
+
+    const messageText = cleanText || (images ? "Analyze this image." : trimmed);
+    addMessage("you", messageText);
+    await sendMessage(messageText, images);
   }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage, streaming]);
 
   // Persist chat history to disk whenever messages or sessionId change.

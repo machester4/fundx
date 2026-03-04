@@ -1,5 +1,6 @@
-import { readFile, access } from "node:fs/promises";
+import { readFile, access, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { basename, extname } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   SDKResultMessage,
@@ -7,6 +8,7 @@ import type {
   SDKTaskStartedMessage,
   SDKTaskProgressMessage,
   SDKTaskNotificationMessage,
+  SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadFundConfig, listFundNames } from "./fund.service.js";
 import { loadGlobalConfig } from "../config.js";
@@ -73,6 +75,85 @@ export const LOGO_LINES = [
   " \u2588       \u2588  \u2588 \u2588  \u2588\u2588 \u2588   \u2588  \u2588 \u2588 ",
   " \u2588        \u2588\u2588  \u2588   \u2588 \u2588\u2588\u2588\u2588  \u2588   \u2588",
 ];
+
+// ── Image Attachments ───────────────────────────────────────
+
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
+
+const MEDIA_TYPE_MAP: Record<string, ImageAttachment["mediaType"]> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+export interface ImageAttachment {
+  path: string;
+  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+  data: string; // base64
+}
+
+/**
+ * Detect and extract image file paths from user input.
+ * macOS terminals paste dragged paths as text — bare, single-quoted, or double-quoted.
+ */
+export function extractImagePaths(text: string): { cleanText: string; imagePaths: string[] } {
+  const imagePaths: string[] = [];
+  let remaining = text;
+
+  // 1. Match quoted paths: '/path/to/img.png' or "/path/to/img.png"
+  //    Two alternations so each quote type only excludes its own delimiter.
+  const quotedRe = /'([^']+\.(png|jpe?g|gif|webp))'|"([^"]+\.(png|jpe?g|gif|webp))"/gi;
+  let match: RegExpExecArray | null;
+  while ((match = quotedRe.exec(text)) !== null) {
+    imagePaths.push(match[1] ?? match[3]);
+    remaining = remaining.replace(match[0], "");
+  }
+
+  // 2. If no quoted paths found, check if the entire trimmed input (or individual lines)
+  //    is a bare file path ending in an image extension
+  if (imagePaths.length === 0) {
+    const lines = remaining.split("\n");
+    const nonImageLines: string[] = [];
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      const ext = extname(trimmedLine).toLowerCase();
+      if (trimmedLine.startsWith("/") && IMAGE_EXTENSIONS.includes(ext)) {
+        imagePaths.push(trimmedLine);
+      } else {
+        nonImageLines.push(line);
+      }
+    }
+    remaining = nonImageLines.join("\n");
+  }
+
+  const cleanText = remaining.trim();
+  return { cleanText, imagePaths };
+}
+
+/** Read an image file and return base64-encoded data with media type. */
+export async function loadImageAttachment(filePath: string): Promise<ImageAttachment> {
+  const ext = extname(filePath).toLowerCase();
+  const mediaType = MEDIA_TYPE_MAP[ext];
+  if (!mediaType) {
+    throw new Error(`Unsupported image format: ${ext}`);
+  }
+  // Verify file exists, is a regular file, and isn't too large (20 MB limit)
+  const info = await stat(filePath);
+  if (!info.isFile()) {
+    throw new Error(`Not a regular file: ${filePath}`);
+  }
+  if (info.size > 20 * 1024 * 1024) {
+    throw new Error(`Image too large (${(info.size / 1024 / 1024).toFixed(1)} MB). Max 20 MB.`);
+  }
+  const buffer = await readFile(filePath);
+  return {
+    path: filePath,
+    mediaType,
+    data: buffer.toString("base64"),
+  };
+}
 
 // ── Data Helpers ─────────────────────────────────────────────
 
@@ -302,6 +383,7 @@ export async function runChatTurn(
     maxBudgetUsd?: number;
     readonly: boolean;
     mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
+    images?: ImageAttachment[];
   },
   callbacks?: {
     onStreamStart?: () => void;
@@ -323,7 +405,7 @@ export async function runChatTurn(
     ? "\nIMPORTANT: This is a READ-ONLY session. Do NOT execute trades or modify state files."
     : "";
 
-  const prompt = sessionId
+  const textPrompt = sessionId
     ? `${context}\n${readonlyNote}\n\n${message}`
     : fundName
     ? [
@@ -344,6 +426,35 @@ export async function runChatTurn(
         "## User Message",
         message,
       ].join("\n");
+
+  // When images are attached, build a multimodal prompt via AsyncIterable<SDKUserMessage>
+  const images = opts.images;
+  let prompt: string | AsyncIterable<SDKUserMessage>;
+  if (images && images.length > 0) {
+    const contentBlocks: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+    > = [{ type: "text", text: textPrompt }];
+    for (const img of images) {
+      contentBlocks.push({
+        type: "image",
+        source: { type: "base64", media_type: img.mediaType, data: img.data },
+      });
+    }
+    async function* imagePromptGenerator(): AsyncIterable<SDKUserMessage> {
+      // session_id is required by the SDKUserMessage type but populated by the SDK
+      // at runtime. For new sessions (no sessionId) we pass "" as a placeholder.
+      yield {
+        type: "user",
+        message: { role: "user" as const, content: contentBlocks },
+        parent_tool_use_id: null,
+        session_id: sessionId ?? "",
+      } as SDKUserMessage;
+    }
+    prompt = imagePromptGenerator();
+  } else {
+    prompt = textPrompt;
+  }
 
   let resultSessionId = sessionId ?? "";
   let costUsd = 0;
