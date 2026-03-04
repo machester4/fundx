@@ -42,104 +42,89 @@ describe("BUILTIN_SKILLS", () => {
   });
 
   it("each trading skill has When to Use section", () => {
-    const tradingSkills = BUILTIN_SKILLS.filter((s) => s.dirName !== "investment-brainstorming");
-    for (const skill of tradingSkills) {
+    for (const skill of BUILTIN_SKILLS) {
       expect(skill.content).toContain("## When to Use");
     }
   });
 
   it("each trading skill has Technique section", () => {
-    const tradingSkills = BUILTIN_SKILLS.filter((s) => s.dirName !== "investment-brainstorming");
-    for (const skill of tradingSkills) {
+    for (const skill of BUILTIN_SKILLS) {
       expect(skill.content).toContain("## Technique");
     }
   });
 
-  it("each trading skill has Output Format section", () => {
-    const tradingSkills = BUILTIN_SKILLS.filter((s) => s.dirName !== "investment-brainstorming");
-    for (const skill of tradingSkills) {
-      expect(skill.content).toContain("## Output Format");
+  it("each trading skill has Output section", () => {
+    for (const skill of BUILTIN_SKILLS) {
+      expect(skill.content).toContain("## Output");
     }
   });
 
-  it("includes Investment Debate skill with multi-round structure", () => {
-    const skill = BUILTIN_SKILLS.find((s) => s.name === "Investment Debate");
+  it("includes Investment Thesis skill with bull/bear dialectical analysis", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Investment Thesis");
     expect(skill).toBeDefined();
-    expect(skill!.dirName).toBe("investment-debate");
+    expect(skill!.dirName).toBe("investment-thesis");
     expect(skill!.content).toContain("Bull Case");
     expect(skill!.content).toContain("Bear Case");
-    expect(skill!.content).toContain("Round 1");
-    expect(skill!.content).toContain("Round 2 — Rebuttals");
-    expect(skill!.content).toContain("Round 3 — Devil's Advocate");
-    expect(skill!.content).toContain("Round 4 — Quantitative Judgment");
-    expect(skill!.content).toContain("Round 5 — Risk Integration");
-    expect(skill!.content).toContain("HARD-GATE");
-    expect(skill!.content).toContain("Confidence Calibration");
+    expect(skill!.content).toContain("Devil's Advocate");
+    expect(skill!.content).toContain("Historical Parallel");
+    expect(skill!.content).toContain("Conviction Assessment");
   });
 
-  it("includes Risk Assessment Matrix skill with quantitative approach", () => {
-    const skill = BUILTIN_SKILLS.find((s) => s.name === "Risk Assessment Matrix");
+  it("includes Risk Assessment skill with expected value and hard constraints", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Risk Assessment");
     expect(skill).toBeDefined();
-    expect(skill!.dirName).toBe("risk-matrix");
-    expect(skill!.content).toContain("Expected Value Calculation");
-    expect(skill!.content).toContain("Portfolio Impact Analysis");
-    expect(skill!.content).toContain("Correlation Check");
-    expect(skill!.content).toContain("Hard Constraint Validation");
-    expect(skill!.content).toContain("BLOCK the trade");
+    expect(skill!.dirName).toBe("risk-assessment");
+    expect(skill!.content).toContain("Expected Value");
+    expect(skill!.content).toContain("Portfolio Impact");
+    expect(skill!.content).toContain("Hard Constraints");
+    expect(skill!.content).toContain("Order Specification");
   });
 
-  it("includes Trade Journal Review skill with SQL queries", () => {
-    const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Journal Review");
+  it("includes Trade Memory skill with SQL queries", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Memory");
     expect(skill).toBeDefined();
     expect(skill!.dirName).toBe("trade-memory");
     expect(skill!.content).toContain("trade_journal.sqlite");
-    expect(skill!.content).toContain("Database Schema");
     expect(skill!.content).toContain("trades_fts");
-    expect(skill!.content).toContain("FTS5 Semantic Search");
-    expect(skill!.content).toContain("Win Rate by Trade Type");
+    expect(skill!.content).toContain("Decision Rules");
   });
 
-  it("includes Market Regime Detection skill with scoring", () => {
-    const skill = BUILTIN_SKILLS.find((s) => s.name === "Market Regime Detection");
+  it("includes Market Regime skill with classification table", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Market Regime");
     expect(skill).toBeDefined();
     expect(skill!.dirName).toBe("market-regime");
     expect(skill!.content).toContain("Risk-On");
     expect(skill!.content).toContain("Risk-Off");
-    expect(skill!.content).toContain("HARD-GATE");
-    expect(skill!.content).toContain("Score Each Indicator");
-    expect(skill!.content).toContain("Regime Score");
-    expect(skill!.content).toContain("Persist Regime");
+    expect(skill!.content).toContain("Crisis");
+    expect(skill!.content).toContain("Regime Classifications");
   });
 
   it("includes Position Sizing skill with Kelly criterion", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Position Sizing");
     expect(skill).toBeDefined();
     expect(skill!.dirName).toBe("position-sizing");
-    expect(skill!.content).toContain("Debate confidence");
     expect(skill!.content).toContain("Kelly Criterion");
     expect(skill!.content).toContain("Fund Type Adjustment");
-    expect(skill!.content).toContain("Regime Adjustment");
+    expect(skill!.content).toContain("Regime Multiplier");
   });
 
-  it("includes Session Reflection skill with grading system", () => {
+  it("includes Session Reflection skill with decision audit and bias check", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Session Reflection");
     expect(skill).toBeDefined();
     expect(skill!.dirName).toBe("session-reflection");
     expect(skill!.content).toContain("Decision Audit");
-    expect(skill!.content).toContain("Bias Audit");
-    expect(skill!.content).toContain("Benchmark Comparison");
-    expect(skill!.content).toContain("Thesis Validation");
-    expect(skill!.content).toContain("lessons_learned must be specific");
+    expect(skill!.content).toContain("Bias Check");
+    expect(skill!.content).toContain("Journal Updates");
+    expect(skill!.content).toContain("Objective Progress");
   });
 
-  it("includes Investment Brainstorming skill", () => {
-    const skill = BUILTIN_SKILLS.find((s) => s.name === "Investment Brainstorming");
+  it("includes Portfolio Review skill", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Portfolio Review");
     expect(skill).toBeDefined();
-    expect(skill!.dirName).toBe("investment-brainstorming");
-    expect(skill!.content).toContain("HARD-GATE");
-    expect(skill!.content).toContain("## Process");
-    expect(skill!.content).toContain("## Key Principles");
-    expect(skill!.content).toContain("## Autonomous Mode Behavior");
+    expect(skill!.dirName).toBe("portfolio-review");
+    expect(skill!.content).toContain("Position-by-Position Review");
+    expect(skill!.content).toContain("Portfolio-Level Analysis");
+    expect(skill!.content).toContain("Rebalancing Recommendations");
   });
 });
 
@@ -167,21 +152,21 @@ describe("getAllSkillNames", () => {
   it("returns names of all 7 fund skills", () => {
     const names = getAllSkillNames();
     expect(names).toHaveLength(7);
-    expect(names).toContain("Investment Debate");
-    expect(names).toContain("Risk Assessment Matrix");
-    expect(names).toContain("Trade Journal Review");
-    expect(names).toContain("Market Regime Detection");
+    expect(names).toContain("Investment Thesis");
+    expect(names).toContain("Risk Assessment");
+    expect(names).toContain("Trade Memory");
+    expect(names).toContain("Market Regime");
     expect(names).toContain("Position Sizing");
     expect(names).toContain("Session Reflection");
-    expect(names).toContain("Investment Brainstorming");
+    expect(names).toContain("Portfolio Review");
   });
 });
 
 describe("getSkillContent", () => {
   it("returns content for an existing skill", () => {
-    const content = getSkillContent("Investment Debate");
+    const content = getSkillContent("Investment Thesis");
     expect(content).toBeDefined();
-    expect(content).toContain("Bull vs Bear");
+    expect(content).toContain("Bull Case");
   });
 
   it("returns undefined for non-existent skill", () => {

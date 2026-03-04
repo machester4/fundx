@@ -93,7 +93,7 @@ vi.mock("../src/services/fund.service.js", () => ({
 import { buildMcpServers, runAgentQuery } from "../src/agent.js";
 import { loadGlobalConfig } from "../src/config.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
-import { MCP_SERVERS } from "../src/paths.js";
+import { MCP_SERVERS, MCP_COMMAND } from "../src/paths.js";
 
 const mockedGlobalConfig = vi.mocked(loadGlobalConfig);
 const mockedFundConfig = vi.mocked(loadFundConfig);
@@ -113,9 +113,9 @@ describe("buildMcpServers", () => {
     const servers = await buildMcpServers("test-fund");
 
     expect(Object.keys(servers)).toEqual(["broker-alpaca", "market-data"]);
-    expect(servers["broker-alpaca"].command).toBe("node");
+    expect(servers["broker-alpaca"].command).toBe(MCP_COMMAND);
     expect(servers["broker-alpaca"].args).toEqual([MCP_SERVERS.brokerAlpaca]);
-    expect(servers["market-data"].command).toBe("node");
+    expect(servers["market-data"].command).toBe(MCP_COMMAND);
     expect(servers["market-data"].args).toEqual([MCP_SERVERS.marketData]);
   });
 

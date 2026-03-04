@@ -30,7 +30,7 @@ ${skill.content.trim()}
 // ── Fund trading skills ────────────────────────────────────────
 
 /**
- * Built-in trading analysis skills derived from the TradingAgents framework (arXiv:2412.20138).
+ * Built-in fund skills — concise, principle-driven guides for autonomous trading.
  *
  * These go in each fund's .claude/skills/<dirName>/SKILL.md and are loaded
  * automatically by the Agent SDK via settingSources: ["project"].
@@ -40,1008 +40,444 @@ ${skill.content.trim()}
  */
 export const BUILTIN_SKILLS: Skill[] = [
   {
-    name: "Investment Debate",
-    dirName: "investment-debate",
-    description: "Conduct a structured bull vs bear dialectical debate with data, rebuttals, and quantitative scoring before any significant trade decision",
-    content: `# Investment Debate (Bull vs Bear)
-
-Based on the TradingAgents framework (arXiv:2412.20138) — adapted for single-agent
-dialectical reasoning with multi-round structure, quantitative scoring, and
-devil's advocate discipline.
+    name: "Investment Thesis",
+    dirName: "investment-thesis",
+    description:
+      "Develop, stress-test, and validate investment theses before any significant trade. Combines idea generation with bull/bear dialectical analysis.",
+    content: `# Investment Thesis
 
 ## When to Use
-Before any significant trade decision — opening a new position, substantially increasing
-an existing one, or making a major allocation change. Skip for minor rebalances or
-stop-loss exits where speed matters.
-
-## Prerequisites — Data Before Debate
-<HARD-GATE>
-Do NOT begin the debate without real data. You must have gathered at least:
-1. Current price, recent price action, and key technical levels (from market-data MCP)
-2. Relevant news or catalysts from the last 7 days (from market-data or web search)
-3. Current portfolio state (from state/portfolio.json)
-4. Fund objective progress (from state/objective_tracker.json)
-
-If sub-agent analyst reports are available (macro, technical, sentiment, news, risk),
-use them as primary input. The debate must argue from evidence, not assumptions.
-</HARD-GATE>
+Before any significant trade: opening a new position, materially increasing an existing one,
+or making a major allocation shift. Skip for mechanical actions (stop-loss exits, scheduled
+rebalances, minor trims).
 
 ## Technique
 
-### Round 1 — Opening Arguments
+### 1. The Idea
+State the thesis in one sentence: what you are buying/selling, why, and the expected time
+horizon. If you cannot articulate it in one sentence, the idea is not ready.
 
-**Step 1A — Bull Case**
-Argue FOR the trade. Every argument must cite a specific data point:
-- Price action evidence: exact levels, % moves, volume (from market-data)
-- Fundamental catalyst: specific event, date, expected impact
-- How this trade advances the fund's objective — quantify if possible
-- Historical precedent: query trade journal for similar setups and their outcomes
+**Good:** "Buy GDXJ because gold miners are trading at 0.8x NAV while gold is above $2,300,
+with a 3-6 month horizon targeting a reversion to 1.0x NAV."
 
-Score each argument on strength (1-5):
-- 5: Hard data directly supports the claim
-- 4: Strong indirect evidence
-- 3: Reasonable inference from available data
-- 2: Plausible but relies on assumptions
-- 1: Speculative, no supporting data
+**Bad:** "Gold miners look interesting and could go up."
 
-**Step 1B — Bear Case**
-Argue AGAINST the trade. For every bull argument, provide a specific counter:
-- For each bull point, identify what data it ignores or misreads
-- Quantify the downside: what is the max realistic loss?
-- Identify the most likely failure scenario (not worst-case, most probable)
-- Check: has the fund been wrong in similar setups before? (query trade journal)
-- What would need to be true for this trade to fail? How likely is that?
+### 2. Bull Case
+Build the strongest affirmative case using specific data:
+- **Valuation:** Concrete multiples, discounts, or spreads vs. history
+- **Catalyst:** Identifiable event or trend with a timeline
+- **Technical:** Price action confirming or at least not contradicting the thesis
+- **Macro alignment:** Consistent with current regime (see Market Regime skill)
 
-Score each argument on strength (1-5) using the same scale.
+Every claim must reference a number, date, or source. No unsupported assertions.
 
-### Round 2 — Rebuttals
+### 3. Bear Case
+Attack the bull case with equal rigor. Steelman the opposing view:
+- What is the market pricing in that you think is wrong? Why might the market be right?
+- What macro or sector risk could overwhelm the thesis?
+- What is the worst realistic drawdown, and can the fund absorb it?
 
-**Step 2A — Bull Rebuttal**
-Address the bear case's strongest point (highest-scored argument):
-- Can you refute it with additional data?
-- If you cannot refute it, explicitly concede and adjust your thesis
-- Does the bear's strongest concern change the risk/reward materially?
+### 4. Devil's Advocate
+Assume you are already wrong. Identify:
+- The single data point that would invalidate the thesis entirely
+- Whether you are anchored to a prior trade or narrative (check trade journal)
+- Whether this idea feels urgent — urgency is usually a red flag
 
-**Step 2B — Bear Rebuttal**
-Address the bull case's strongest point (highest-scored argument):
-- Is the bull's best evidence as strong as it appears?
-- What alternative explanation exists for the same data?
-- If the bull's strongest point holds, is it sufficient to justify the trade?
+### 5. Historical Parallel
+Query the trade journal for similar past trades (same sector, similar setup, comparable
+regime). What happened? What was learned? If no history exists, note that explicitly — first
+trades in a new area deserve smaller sizing.
 
-### Round 3 — Devil's Advocate
+### 6. Conviction Assessment
+Rate conviction 1-5 based on evidence quality, not gut feeling:
 
-Before judging, attempt to destroy your own preferred conclusion:
-- If you're leaning bullish: generate the single most devastating bear argument
-  you haven't considered yet. A scenario that would make this trade a clear loss.
-- If you're leaning bearish: generate the single strongest bull argument you
-  haven't considered. A scenario that would make skipping this trade a clear mistake.
-- If this new argument scores 4+ on the strength scale, you must incorporate it
-  into your final judgment.
+| Score | Meaning | Typical sizing |
+|-------|---------|----------------|
+| 1 | Speculative, thin evidence | 1-2% of portfolio |
+| 2 | Reasonable but unconfirmed catalyst | 2-4% |
+| 3 | Solid data, clear catalyst, manageable risk | 4-6% |
+| 4 | Strong multi-factor alignment | 6-8% |
+| 5 | Exceptional, rare setup — all signals aligned | 8-10% |
 
-### Round 4 — Quantitative Judgment
+## Quality Standards
+- Every factual claim has a number or source
+- Bull and bear cases are roughly equal in depth
+- A specific invalidation trigger is defined (not "if things get worse")
+- Conviction score maps to a position size, not the other way around
 
-Do NOT use vague language like "the bull case was stronger." Use this framework:
-
-**Evidence Score** = (sum of bull argument scores) vs (sum of bear argument scores)
-- Bull total significantly higher (>30% gap): Bullish
-- Bear total significantly higher (>30% gap): Bearish
-- Within 30%: Genuinely contested — default to caution
-
-**Concession Impact**: Did either side concede a major point in rebuttals?
-- Bull conceded: subtract 3 from bull total
-- Bear conceded: subtract 3 from bear total
-- Both conceded: both weaker — increase caution
-
-**Devil's Advocate Impact**: Did the Round 3 argument score 4+?
-- Yes: reduce confidence by one level regardless of direction
-
-**Confidence Calibration** (0.0 to 1.0):
-- 0.8-1.0: Overwhelming evidence one direction, no concessions, devil's advocate failed
-- 0.6-0.8: Strong evidence, minor concessions, thesis intact after rebuttals
-- 0.4-0.6: Genuinely contested, meaningful points on both sides
-- 0.2-0.4: Weak thesis, significant concessions, devil's advocate scored high
-- 0.0-0.2: Should not trade — no clear edge
-
-**Decision Threshold by Fund Type:**
-- Runway funds: Only trade if confidence >= 0.7 (capital preservation priority)
-- Growth funds: Trade if confidence >= 0.5 (accept more uncertainty for upside)
-- Income funds: Only trade if confidence >= 0.6 (protect income streams)
-- Accumulation funds: Trade if confidence >= 0.5 (focus on target asset acquisition)
-
-### Round 5 — Risk Integration
-
-Before finalizing, apply the risk assessment (invoke risk-matrix skill or evaluate inline):
-- Does the position size respect max_position_pct?
-- Would a loss breach max_drawdown_pct?
-- What is the max dollar loss if stop-loss triggers?
-- Does the portfolio become too concentrated after this trade?
-
-If any constraint is violated, the trade fails regardless of debate outcome.
-
-## Trade Journal Integration
-Before AND after the debate:
-- **Before**: Query \`state/trade_journal.sqlite\` for past trades in the same symbol
-  or similar setups. What happened? What lessons were recorded?
-- **After**: If the trade proceeds, log the debate verdict, confidence score, and
-  key arguments so future sessions can reference this debate's quality.
-
-## Output Format
-In your analysis report, document the debate under a "## Investment Debate" section:
-
-\`\`\`
-### Round 1 — Opening Arguments
-**Bull Case** (total score: X/Y)
-1. [Argument] — strength: N/5
-2. [Argument] — strength: N/5
-...
-
-**Bear Case** (total score: X/Y)
-1. [Argument] — strength: N/5
-2. [Argument] — strength: N/5
-...
-
-### Round 2 — Rebuttals
-**Bull rebuttal** to bear's strongest point: [response]
-**Bear rebuttal** to bull's strongest point: [response]
-Concessions: [any conceded points]
-
-### Round 3 — Devil's Advocate
-Preferred direction: [bullish/bearish]
-Counter-argument: [the strongest argument against your preference]
-Counter strength: N/5
-
-### Round 4 — Verdict
-Evidence score: Bull X vs Bear Y
-Concession adjustments: [if any]
-Devil's advocate impact: [if any]
-**Direction: [bullish / bearish / neutral]**
-**Confidence: [0.0-1.0]**
-**Decision: [TRADE / NO TRADE / REDUCE SIZE]**
-Fund objective alignment: [how this serves the fund's goal]
-
-### Round 5 — Risk Check
-Position size: X% (max: Y%)
-Stop-loss: X% (limit: Y%)
-Max dollar loss: $X
-Constraint compliance: [PASS/FAIL]
-\`\`\`
+## Output
+Structured markdown with sections: Thesis, Bull Case, Bear Case, Devil's Advocate,
+Historical Parallel, Conviction (1-5), Recommended Action, Invalidation Trigger.
 `,
   },
   {
-    name: "Risk Assessment Matrix",
-    dirName: "risk-matrix",
-    description: "Quantitative pre-execution risk check: expected value calculation, portfolio impact analysis, correlation check, and hard constraint validation before any trade",
-    content: `# Risk Assessment Matrix (Quantitative Pre-Execution)
-
-This is the FINAL gate between decision and execution. The investment-debate decides
-IF you should trade. This skill decides the exact SIZE, STOP, and whether portfolio
-constraints allow it.
+    name: "Risk Assessment",
+    dirName: "risk-assessment",
+    description:
+      "Quantitative pre-execution risk check before placing any trade order. Validates position sizing, portfolio impact, and hard constraints.",
+    content: `# Risk Assessment
 
 ## When to Use
-After investment-debate produces a TRADE or REDUCE SIZE verdict, BEFORE placing
-any order. This skill produces the exact order parameters.
-
-## Prerequisites
-You must have before starting:
-1. The investment-debate verdict and confidence score (0.0-1.0)
-2. Current portfolio from \`state/portfolio.json\` (positions, cash, total value)
-3. Current price and recent volatility for the target symbol (from market-data MCP)
-4. Fund risk constraints from CLAUDE.md (max_drawdown_pct, max_position_pct, stop_loss_pct)
+Immediately before placing any trade order — after the investment thesis is formed but
+before execution. This is a final gate, not a substitute for thesis quality. Every order
+passes through this check. No exceptions.
 
 ## Technique
 
-### Step 1 — Expected Value Calculation
+### 1. Expected Value
+Estimate the trade's expected value:
+- **Upside target:** Price level and % gain if thesis plays out
+- **Downside stop:** Price level and % loss if thesis fails
+- **Probability estimate:** Rough odds of success (be honest, not optimistic)
+- **EV = (P(win) x gain) - (P(loss) x loss)** — must be positive
 
-Estimate the trade's expected value using debate outputs:
+If EV is negative or unclear, do not trade. "I think it will go up" is not a valid EV
+calculation.
 
-\`\`\`
-Define:
-  P(win)  = debate confidence score (e.g. 0.7)
-  P(loss) = 1 - P(win)
-  R(win)  = estimated gain if thesis plays out (in $ or %)
-  R(loss) = loss at stop-loss level (in $ or %)
+### 2. Position Size
+Validate the proposed size against fund constraints:
+- Does it exceed \`risk.max_position_pct\`? → Reduce
+- Does it create a concentrated sector/factor bet? → Flag
+- Is it appropriate for the conviction level? (See Position Sizing skill)
+- Would a full loss at the stop violate \`risk.max_daily_loss_pct\`? → Reduce
 
-Expected Value = P(win) × R(win) - P(loss) × R(loss)
-Risk/Reward Ratio = R(win) / R(loss)
-\`\`\`
+### 3. Portfolio Impact
+Assess what happens to the whole portfolio:
+- **Cash remaining:** After this trade, is cash above the fund's minimum reserve?
+- **Correlation:** Does this position move with existing holdings? If adding a gold miner
+  when you already hold gold ETFs, you are concentrating, not diversifying.
+- **Drawdown budget:** Current drawdown + worst-case loss on this trade — does it breach
+  \`risk.max_drawdown_pct\`?
 
-**Decision rules:**
-- EV must be positive to proceed
-- Risk/Reward must be >= 2:1 for runway/income funds, >= 1.5:1 for growth/accumulation
-- If EV is positive but Risk/Reward is below threshold → reduce size or widen target
+### 4. Hard Constraints
+Check every item — any failure is a veto:
+- [ ] Ticker is in \`universe.allowed\` and not in \`universe.forbidden\`
+- [ ] Broker mode matches intent (paper vs. live)
+- [ ] Position size ≤ \`risk.max_position_pct\` of portfolio
+- [ ] Stop-loss is defined and entered with the order
+- [ ] Post-trade cash ≥ minimum reserve for fund type
+- [ ] No earnings/FOMC/CPI within 24h unless thesis explicitly accounts for it
 
-### Step 2 — Position Sizing (invoke position-sizing skill)
+### 5. Order Specification
+Only after all checks pass, specify the exact order:
+- Symbol, side (buy/sell), quantity, order type (limit/market)
+- Stop-loss price and type
+- Take-profit level (if applicable)
 
-Use the position-sizing skill to determine the base allocation. This step produces
-the initial position size before portfolio-level adjustments.
-
-### Step 3 — Portfolio Impact Analysis
-
-Calculate how the new position changes the portfolio:
-
-\`\`\`
-Current positions: read from state/portfolio.json
-New allocation = proposed_size / total_portfolio_value
-
-After-trade portfolio:
-- Cash remaining = current_cash - (proposed_size)
-- Cash % = cash_remaining / total_portfolio_value
-- Largest position % = max(existing_position_pcts, new_allocation)
-- Number of positions = current_count + 1
-\`\`\`
-
-**Checks:**
-- Cash % after trade >= 10% for runway funds, >= 5% for others
-- No single position > max_position_pct from fund config
-- Total invested (non-cash) <= 90% for runway, 95% for others
-
-### Step 4 — Correlation Check
-
-Assess overlap with existing positions:
-- Is the new symbol in the same sector as an existing position?
-- Do existing holdings move in the same direction (correlated)?
-- If adding a position correlated with existing ones:
-  combined_exposure = existing_pct + new_pct
-  If combined_exposure > max_position_pct × 1.5 → reduce or skip
-
-Use \`get_company_profile\` from market-data MCP to check sector/industry.
-If the fund holds sector ETFs, check for underlying overlap.
-
-### Step 5 — Hard Constraint Validation
-
-Every item must PASS or the trade is BLOCKED:
-
-| Constraint | Formula | Source |
-|-----------|---------|--------|
-| Max position size | new_allocation <= max_position_pct | fund_config.yaml |
-| Max drawdown headroom | current_drawdown + max_loss < max_drawdown_pct | fund_config.yaml |
-| Stop-loss set | stop_price is defined and <= stop_loss_pct below entry | fund_config.yaml |
-| Max daily loss | today's realized losses + max_loss < max_daily_loss_pct | fund_config.yaml |
-| Cash reserve | cash_after >= minimum per fund type | Step 3 |
-
-If ANY constraint fails → **BLOCK the trade**. Do not override. Log which constraint
-failed and what adjustment would be needed to pass.
-
-### Step 6 — Final Order Parameters
-
-If all checks pass, output exact order details:
-
-\`\`\`
-Symbol: [ticker]
-Side: [buy/sell]
-Quantity: [shares] (= position_size / current_price, rounded down)
-Order type: [market/limit]
-Limit price: [if limit order]
-Stop-loss: $[price] ([X]% below entry)
-Max loss: $[amount] ([X]% of portfolio)
-Expected value: $[EV]
-Risk/Reward: [X]:1
-\`\`\`
-
-## Output Format
-Document under a "## Risk Assessment" section:
-
-\`\`\`
-### Expected Value
-P(win): X | R(win): X% | P(loss): X | R(loss): X%
-EV: $X (X%) | Risk/Reward: X:1 | PASS/FAIL
-
-### Position Size
-[From position-sizing skill output]
-
-### Portfolio Impact
-Cash after: $X (X%) | Largest position: X% | Positions: N
-Correlation flag: [none / moderate / high]
-
-### Constraint Validation
-| Constraint | Value | Limit | Status |
-|-----------|-------|-------|--------|
-| Position size | X% | Y% | PASS |
-| Drawdown room | X% | Y% | PASS |
-| Stop-loss | X% | Y% | PASS |
-| Daily loss | X% | Y% | PASS |
-| Cash reserve | X% | Y% | PASS |
-
-### Order
-[Exact order parameters if all PASS, or BLOCKED with reason]
-\`\`\`
+## Output
+Structured checklist: EV calculation, size validation, portfolio impact summary,
+hard constraint pass/fail, and final order specification or rejection with reason.
 `,
   },
   {
-    name: "Trade Journal Review",
+    name: "Trade Memory",
     dirName: "trade-memory",
-    description: "Query trade journal SQLite database and FTS5 search to find relevant past trades, calculate win rates, and apply historical lessons before making a new trade",
-    content: `# Trade Journal Review (Historical Memory)
-
-This skill is about LOOKING UP history before trading. It is not about writing
-journal entries — that happens in session-reflection.
+    description:
+      "Query trade journal for relevant past trades, win rates, and historical lessons before making a new trade decision.",
+    content: `# Trade Memory
 
 ## When to Use
-- Before any trade: check if you have traded this symbol or a similar setup before
-- When the investment-debate needs historical evidence
-- When market conditions remind you of a past scenario
-- To calculate your actual win rate for a specific trade type
-
-## Database Schema
-
-The trade journal lives at \`state/trade_journal.sqlite\` with this schema:
-
-\`\`\`sql
-trades (
-  id INTEGER PRIMARY KEY,
-  timestamp TEXT,          -- ISO 8601
-  fund TEXT,               -- fund name
-  symbol TEXT,             -- ticker
-  side TEXT,               -- 'buy' or 'sell'
-  quantity REAL,
-  price REAL,
-  total_value REAL,
-  order_type TEXT,         -- 'market', 'limit', 'stop', etc.
-  session_type TEXT,       -- 'pre_market', 'mid_session', 'post_market'
-  reasoning TEXT,          -- why the trade was made
-  analysis_ref TEXT,       -- path to analysis file
-  closed_at TEXT,          -- when position was closed (NULL if open)
-  close_price REAL,
-  pnl REAL,               -- realized P&L in dollars
-  pnl_pct REAL,           -- realized P&L in percent
-  lessons_learned TEXT,    -- post-mortem notes
-  market_context TEXT      -- regime, VIX, etc. at time of trade
-)
-
--- FTS5 full-text search index (auto-synced via triggers):
-trades_fts (trade_id, symbol, side, reasoning, market_context, lessons_learned)
-\`\`\`
+Before any trade decision, query the trade journal to learn from history. Also use when
+reviewing a sector, ticker, or strategy you have traded before. The journal is in
+\`state/trade_journal.sqlite\` with a \`trades\` table and \`trades_fts\` FTS5 index.
 
 ## Technique
 
-### Query 1 — Same Symbol History
+### Queries to Run
 
-Before trading a symbol, run:
-
+**1. Same-ticker history:**
 \`\`\`sql
-SELECT symbol, side, price, close_price, pnl, pnl_pct,
-       reasoning, lessons_learned, timestamp, closed_at
-FROM trades
-WHERE symbol = '{SYMBOL}' AND fund = '{FUND}'
-ORDER BY timestamp DESC
-LIMIT 10;
+SELECT symbol, side, entry_price, exit_price, pnl_pct, reasoning, lessons_learned,
+       entry_date, exit_date
+FROM trades WHERE symbol = ? ORDER BY entry_date DESC LIMIT 10
 \`\`\`
+What was your track record? Win rate? Average gain vs. average loss?
 
-**Extract:**
-- How many times have you traded this? Win/loss record?
-- What was your reasoning last time? Was it correct?
-- Any lessons_learned that apply to the current situation?
-
-### Query 2 — Win Rate by Trade Type
-
-If you can classify your trade type (momentum, mean-reversion, breakout, earnings play):
-
+**2. Similar-setup search (FTS5):**
 \`\`\`sql
-SELECT
-  COUNT(*) as total,
-  SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
-  SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END) as losses,
-  AVG(pnl_pct) as avg_return,
-  AVG(CASE WHEN pnl > 0 THEN pnl_pct ELSE NULL END) as avg_win,
-  AVG(CASE WHEN pnl <= 0 THEN pnl_pct ELSE NULL END) as avg_loss
-FROM trades
-WHERE fund = '{FUND}' AND closed_at IS NOT NULL
-  AND reasoning LIKE '%{TRADE_TYPE}%';
+SELECT symbol, reasoning, lessons_learned, pnl_pct
+FROM trades_fts WHERE trades_fts MATCH ?
+ORDER BY rank LIMIT 10
 \`\`\`
+Use keywords from the current thesis: sector, catalyst type, regime, strategy name.
 
-**Use this to calibrate conviction:** If your win rate on momentum trades is 40%,
-don't assign 0.8 confidence to a new momentum trade.
-
-### Query 3 — FTS5 Semantic Search
-
-For finding trades with similar reasoning or market context, use full-text search:
-
+**3. Recent performance:**
 \`\`\`sql
-SELECT t.symbol, t.side, t.reasoning, t.lessons_learned,
-       t.pnl, t.pnl_pct, t.market_context
-FROM trades_fts fts
-JOIN trades t ON t.id = CAST(fts.trade_id AS INTEGER)
-WHERE trades_fts MATCH '"rising VIX" OR "defensive rotation"'
-  AND t.fund = '{FUND}'
-ORDER BY fts.rank
-LIMIT 5;
+SELECT COUNT(*) as total,
+       SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
+       AVG(pnl_pct) as avg_pnl,
+       MIN(pnl_pct) as worst
+FROM trades WHERE exit_date > date('now', '-30 days')
 \`\`\`
+Are you in a winning or losing streak? Adjust sizing accordingly.
 
-**Use this when:** You want to find trades made in similar market conditions,
-regardless of symbol. For example, "what happened last time I traded during
-a VIX spike?" or "how did my breakout trades perform in low-vol regimes?"
-
-### Query 4 — Overall Fund Performance
-
-Get the big picture before making decisions:
-
+**4. Pattern detection:**
 \`\`\`sql
-SELECT
-  COUNT(*) as total_trades,
-  SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
-  ROUND(100.0 * SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_rate,
-  ROUND(SUM(pnl), 2) as total_pnl,
-  ROUND(AVG(pnl_pct), 2) as avg_return_pct
-FROM trades
-WHERE fund = '{FUND}' AND closed_at IS NOT NULL;
+SELECT symbol, side, pnl_pct, reasoning, lessons_learned
+FROM trades WHERE pnl_pct < -5 ORDER BY pnl_pct ASC LIMIT 5
 \`\`\`
-
-## Similarity Criteria
-
-Two trades are "similar" when they share 2+ of these:
-1. **Same sector** (e.g., both tech stocks)
-2. **Same trade type** (momentum, mean-reversion, breakout, earnings)
-3. **Same market regime** (both during Risk-Off, both during high vol)
-4. **Similar reasoning** (FTS5 match score > 0.5)
-5. **Similar time horizon** (both intraday, both swing, both position)
+What do your worst trades have in common? Are you about to repeat a pattern?
 
 ## Decision Rules
+- **Win rate < 40% on ticker** → Reduce size by 50% or skip
+- **3+ consecutive losses recently** → Reduce all sizing by one tier
+- **Past lesson directly applies** → Quote it in the thesis and adjust
+- **No history on this ticker/sector** → Treat as first trade, use minimum sizing
+- **Repeated same mistake** → Veto the trade until the pattern is addressed
 
-After gathering history:
-
-- **Win rate < 40% on this trade type?** → Lower conviction by one level
-- **Lost money on this exact symbol last time?** → Read lessons_learned carefully.
-  If the current setup repeats the same pattern that caused the loss, skip.
-- **No history at all?** → That's fine, but note it. First trades in a symbol
-  deserve smaller sizing (50-75% of normal).
-- **Strong lessons_learned entry matches current situation?** → Apply the lesson
-  explicitly. Quote it in your analysis.
-
-## Output Format
-Include a "## Trade History Context" section in your analysis:
-
-\`\`\`
-### Symbol History: {SYMBOL}
-Trades found: N | Win rate: X% | Avg return: X%
-Last trade: [date] [side] @ $X → P&L: $X (X%)
-Last lesson: "[quoted lessons_learned]"
-
-### Similar Setups (FTS5)
-- [date] [symbol] [side]: [reasoning summary] → P&L: X%
-  Lesson: "[quoted]"
-- ...
-
-### Win Rate for This Trade Type
-Type: [momentum/breakout/etc] | Trades: N | Win rate: X%
-Avg win: +X% | Avg loss: -X%
-
-### Historical Adjustment
-[How history influenced your conviction / sizing / decision]
-\`\`\`
+## Output
+Summary of relevant past trades, key lessons that apply, win rate stats, and a
+clear recommendation: proceed (with adjustments), reduce size, or skip.
 `,
   },
   {
-    name: "Market Regime Detection",
+    name: "Market Regime",
     dirName: "market-regime",
-    description: "Classify the current market regime using concrete data from MCP tools, score indicators quantitatively, and persist the regime for cross-session tracking",
-    content: `# Market Regime Detection
+    description:
+      "Classify the current market environment to calibrate position sizing and strategy. Run at the start of every trading session.",
+    content: `# Market Regime Classification
 
 ## When to Use
-At the start of every session, especially pre-market. The regime classification must
-be completed BEFORE any trading analysis or decisions. Other skills (investment-debate,
-position-sizing) reference the current regime.
-
-## Prerequisites — Data Gathering
-<HARD-GATE>
-You must gather real data before classifying. Do NOT guess the regime from memory
-or assumptions. Use the market-data MCP tools listed below for each indicator.
-</HARD-GATE>
+At the start of every trading session before making any decisions. Also re-run when a major
+macro event occurs (FOMC, CPI, NFP, geopolitical shock). The regime determines baseline
+position sizing, cash levels, and which strategies are appropriate.
 
 ## Technique
 
-### Step 1 — Gather Indicator Data
+Assess five dimensions using market data MCP:
 
-For each indicator, use the specified MCP tool and record the raw value:
+### 1. Volatility
+- VIX level and trend (rising, stable, falling)
+- VIX term structure (contango = calm, backwardation = stress)
+- Realized vs. implied vol spread
 
-| Indicator | MCP Tool | What to Get |
-|-----------|----------|-------------|
-| VIX level | \`get_quote\` symbol="^VIX" (or \`get_bars\` for trend) | Current level + 5-day direction |
-| S&P 500 trend | \`get_bars\` symbol="SPY" timeframe="1Day" limit=200 | Price vs 50-day and 200-day SMA |
-| Market breadth | \`get_market_movers\` | Ratio of gainers vs losers, volume distribution |
-| Sector rotation | \`get_sector_performance\` | Which sectors lead (cyclical vs defensive) |
-| Volatility trend | \`get_bars\` symbol="SPY" timeframe="1Day" limit=20 | Calculate 20-day realized vol (stddev of daily returns × √252) |
-| News catalyst | \`get_economic_calendar\` | Upcoming FOMC, CPI, NFP in next 7 days |
+### 2. Trend
+- S&P 500 vs. 50-day and 200-day moving averages
+- Trend direction and strength (strong up, weak up, range, weak down, strong down)
+- Key support/resistance levels nearby
 
-### Step 2 — Score Each Indicator
+### 3. Breadth
+- Advance-decline ratio
+- % of stocks above 200-day MA
+- Sector rotation patterns (defensive vs. cyclical leadership)
 
-Rate each indicator on a -2 to +2 scale:
+### 4. Rotation
+- Which sectors are leading and lagging?
+- Growth vs. value performance
+- Large cap vs. small cap spread
 
-| Score | Meaning | Example |
-|-------|---------|---------|
-| +2 | Strongly risk-on | VIX < 15 and falling |
-| +1 | Mildly risk-on | SPY above 50-day SMA, cyclicals leading |
-| 0 | Neutral / mixed | Mixed signals, no clear direction |
-| -1 | Mildly risk-off | VIX 25-35, defensive sectors outperforming |
-| -2 | Strongly risk-off | VIX > 35, SPY below 200-day SMA, breadth collapsing |
+### 5. Macro Backdrop
+- Fed policy stance and next meeting date
+- Treasury yield curve (inverted, flat, steep)
+- Credit spreads (IG and HY) — widening = stress
+- Dollar strength (DXY trend)
 
-**VIX scoring guide** (compare to its own 20-day average, not fixed thresholds):
-- Current < 80% of 20-day avg → +2 (vol compressing, complacency)
-- Current 80-100% of avg → +1 (normal, calm)
-- Current 100-120% of avg → 0 (slightly elevated)
-- Current 120-150% of avg → -1 (rising fear)
-- Current > 150% of avg → -2 (crisis / panic)
+## Regime Classifications
 
-**Trend scoring guide:**
-- Price > 50-day SMA > 200-day SMA → +2 (strong uptrend)
-- Price > 50-day SMA, 50-day > 200-day → +1 (uptrend)
-- Price between 50-day and 200-day → 0 (mixed)
-- Price < 50-day SMA, 50-day < 200-day → -1 (downtrend)
-- Price < 200-day SMA and falling → -2 (strong downtrend)
+| Regime | VIX | Trend | Breadth | Sizing Multiplier | Cash Floor |
+|--------|-----|-------|---------|-------------------|------------|
+| **Risk-On** | <18, falling | Above 50/200 MA | >60% above 200d | 1.0x | Per fund min |
+| **Transition** | 18-25 or rising | Mixed signals | 40-60% | 0.7x | +10% cash |
+| **Risk-Off** | 25-35 | Below 50 MA | <40% | 0.5x | +20% cash |
+| **Crisis** | >35, backwardation | Below 200 MA | <25% | 0.25x | +40% cash |
 
-### Step 3 — Classify Regime
-
-Sum all indicator scores to get the Regime Score:
-
-| Regime Score | Classification | Description |
-|-------------|---------------|-------------|
-| +8 to +12 | **Strong Risk-On** | All signals aligned bullish |
-| +3 to +7 | **Risk-On** | Most signals bullish, minor concerns |
-| -2 to +2 | **Transition** | Mixed signals, regime unclear |
-| -7 to -3 | **Risk-Off** | Most signals bearish, caution warranted |
-| -12 to -8 | **Strong Risk-Off** | All signals aligned bearish, capital preservation mode |
-
-**Volatility overlay** (independent of direction):
-- 20-day realized vol > 25% annualized → add "High Volatility" tag
-- 20-day realized vol < 10% annualized → add "Low Volatility" tag
-- Upcoming major macro event in next 48h → add "Event Risk" tag
-
-### Step 4 — Strategy Implications
-
-Based on the regime, set session-level constraints:
-
-| Regime | Max New Position Size | Max Total Deployment | Action Bias |
-|--------|----------------------|---------------------|-------------|
-| Strong Risk-On | max_position_pct | 90% of portfolio | Build positions |
-| Risk-On | max_position_pct × 0.75 | 80% of portfolio | Normal trading |
-| Transition | max_position_pct × 0.5 | 60% of portfolio | Small or no new positions |
-| Risk-Off | max_position_pct × 0.25 | 40% of portfolio | Reduce exposure |
-| Strong Risk-Off | No new longs | 20% of portfolio | Raise cash, defensive only |
-
-**Fund type adjustments:**
-- Runway funds: shift one level more conservative (Risk-On → Transition behavior)
-- Growth funds: use table as-is
-- Income funds: shift one level more conservative
-- Accumulation funds: use table as-is (DCA through regimes)
-
-### Step 5 — Persist Regime
-
-Write the regime classification to the session analysis file so:
-- Other skills can reference it (investment-debate, position-sizing)
-- Future sessions can track regime transitions
-- The session reflection can compare today's regime vs. yesterday's
-
-Include in the analysis file header:
-\`\`\`
-Regime: [classification] (score: [X])
-Volatility tag: [High/Low/Normal]
-Event risk: [Yes/No — event name if yes]
-Previous regime: [from last session analysis, if available]
-Regime change: [Yes/No]
-\`\`\`
-
-## Output Format
-Start your analysis report with a "## Market Regime" section:
-
-\`\`\`
-### Indicator Scores
-| Indicator | Raw Value | Score | Notes |
-|-----------|-----------|-------|-------|
-| VIX | 18.5 (avg: 16.2) | -1 | 14% above avg |
-| S&P trend | Above 50d, above 200d | +2 | Strong uptrend |
-| Breadth | 65% advancers | +1 | Broad participation |
-| Sectors | Tech +1.2%, Utils -0.5% | +1 | Cyclicals leading |
-| Realized vol | 14% ann. | 0 | Normal range |
-| Events | CPI in 3 days | 0 | Event risk flagged |
-
-### Classification
-Regime Score: +3 → **Risk-On**
-Tags: Event Risk (CPI Thursday)
-Previous: Risk-On (no change)
-
-### Session Constraints
-Max new position: X% | Max deployment: 80% | Bias: Normal trading
-\`\`\`
+## Output
+Current regime classification with supporting data for each dimension, sizing multiplier
+to apply for the session, recommended cash floor adjustment, and any regime-specific
+warnings (e.g., "VIX term structure just inverted — monitor for escalation").
 `,
   },
   {
     name: "Position Sizing",
     dirName: "position-sizing",
-    description: "Calculate exact position size from debate confidence score, fund type adjustments, portfolio state, and Kelly criterion cross-check",
-    content: `# Position Sizing (Quantitative)
+    description:
+      "Calculate exact position size from conviction level, fund type, portfolio state, market regime, and Kelly criterion cross-check.",
+    content: `# Position Sizing
 
 ## When to Use
-Whenever determining how much capital to allocate to a trade. This skill is
-invoked by the risk-matrix skill as Step 2, or standalone if doing a quick sizing.
-
-## Input Required
-You must have before starting:
-1. **Debate confidence score** (0.0-1.0) from the investment-debate skill
-2. **Current portfolio** from \`state/portfolio.json\` (cash, positions, total value)
-3. **Fund risk constraints** from CLAUDE.md (max_position_pct, max_drawdown_pct, stop_loss_pct)
-4. **Current market regime** from market-regime skill (affects sizing caps)
+After forming a thesis and conviction score but before placing the order. This skill
+translates conviction into exact dollar amounts and share counts.
 
 ## Technique
 
-### Step 1 — Map Confidence to Base Size
+### Step 1: Base Size from Conviction
 
-Use the investment-debate confidence score directly (do NOT re-assess conviction):
+| Conviction | Base % of Portfolio |
+|------------|---------------------|
+| 1 — Speculative | 1-2% |
+| 2 — Reasonable | 2-4% |
+| 3 — Solid | 4-6% |
+| 4 — Strong | 6-8% |
+| 5 — Exceptional | 8-10% |
 
-| Confidence | Base Size (% of portfolio) | Rationale |
-|-----------|--------------------------|-----------|
-| 0.8 - 1.0 | 12-15% | Overwhelming evidence, all signals aligned |
-| 0.6 - 0.8 | 6-12% | Strong evidence, minor concerns |
-| 0.5 - 0.6 | 3-6% | Minimum for a trade — borderline conviction |
-| < 0.5 | 0% | Do not trade — below minimum threshold |
+### Step 2: Fund Type Adjustment
 
-Interpolate within ranges: confidence 0.7 → ~9% base size.
+| Fund Type | Adjustment |
+|-----------|------------|
+| Runway | x0.7 (capital preservation priority) |
+| Growth | x1.0 (standard) |
+| Accumulation | x1.0 for target asset, x0.5 for others |
+| Income | x0.8 (yield stability priority) |
+| Custom | Use fund's custom_rules if specified |
 
-### Step 2 — Fund Type Adjustment
+### Step 3: Regime Multiplier
+Apply the market regime sizing multiplier from the Market Regime skill:
+- Risk-On: 1.0x
+- Transition: 0.7x
+- Risk-Off: 0.5x
+- Crisis: 0.25x
 
-Apply a multiplier based on fund objective:
+### Step 4: Portfolio Concentration Check
+- After this trade, would any single position exceed \`max_position_pct\`? → Cap it
+- Would total exposure in one sector exceed 30%? → Flag and reduce
+- Would correlated positions (e.g., multiple gold instruments) exceed 40% combined? → Reduce
 
-| Fund Type | Multiplier | Hard Cap | Rationale |
-|-----------|-----------|----------|-----------|
-| Runway | × 0.5 | max_loss ≤ 1 month of burn | Capital preservation is primary |
-| Growth | × 1.0 | None beyond constraints | Accept risk for upside |
-| Income | × 0.7 | Size by yield contribution | Protect income streams |
-| Accumulation | × 1.0 | Size by target asset qty | Focus on accumulation pace |
+### Step 5: Kelly Criterion Cross-Check
+Kelly % = (win_prob x avg_win / avg_loss) - (1 - win_prob) / (avg_win / avg_loss)
 
-**Runway special rule:** Calculate:
+Use half-Kelly (divide by 2) as the practical maximum. If the Kelly-optimal size is
+significantly smaller than your conviction-based size, trust Kelly — your conviction
+may be overconfident. Pull historical win rate from trade journal.
+
+### Step 6: Final Calculation
 \`\`\`
-monthly_burn = from fund_config.yaml objective.monthly_burn
-max_risk_per_trade = monthly_burn × 1.0
-max_position = max_risk_per_trade / stop_loss_pct
-If adjusted_size > max_position → use max_position
-\`\`\`
-
-### Step 3 — Portfolio State Adjustment
-
-Apply multipliers based on current conditions:
-
-| Condition | Check | Adjustment |
-|-----------|-------|-----------|
-| Near max drawdown | current_drawdown > max_drawdown_pct × 0.7 | × 0.5 |
-| High deployment | invested > 75% of portfolio | × 0.7 |
-| Concentrated | any position > max_position_pct × 0.8 | × 0.8 |
-| Correlated exposure | new + existing same-sector > 20% | × 0.6 |
-| Objective nearly achieved | progress > 80% | × 0.5 |
-
-**Apply all that match** — multipliers stack:
-\`\`\`
-adjusted_size = base_size × fund_multiplier × state_adj1 × state_adj2 × ...
-\`\`\`
-
-### Step 4 — Regime Adjustment
-
-Apply the session constraint from market-regime skill:
-
-| Regime | Max New Position |
-|--------|-----------------|
-| Strong Risk-On | max_position_pct |
-| Risk-On | max_position_pct × 0.75 |
-| Transition | max_position_pct × 0.5 |
-| Risk-Off | max_position_pct × 0.25 |
-| Strong Risk-Off | 0% (no new longs) |
-
-If adjusted_size > regime cap → use regime cap.
-
-### Step 5 — Kelly Criterion Cross-Check (Optional)
-
-If you have enough trade history (20+ closed trades), calculate Kelly:
-
-\`\`\`
-Query from trade journal:
-  win_rate = winning_trades / total_closed_trades
-  avg_win = average pnl_pct of winning trades
-  avg_loss = average |pnl_pct| of losing trades
-  b = avg_win / avg_loss  (win/loss ratio)
-
-Kelly fraction: f* = win_rate - (1 - win_rate) / b
-Half-Kelly (safer): f*/2
-
-If adjusted_size > half_Kelly × portfolio_value → flag as oversized
+final_pct = min(
+  base_size x fund_adj x regime_mult,
+  half_kelly,
+  max_position_pct
+)
+shares = floor((portfolio_value x final_pct) / current_price)
+dollar_amount = shares x current_price
 \`\`\`
 
-Kelly is a CROSS-CHECK, not the primary sizing method. If your conviction-based
-size exceeds half-Kelly by more than 2×, reduce to half-Kelly.
+Verify: dollar_amount ≤ available cash. If not, reduce to what cash allows.
 
-If fewer than 20 closed trades, skip this step — not enough data.
-
-### Step 6 — Final Calculation
-
-\`\`\`
-final_size_pct = min(adjusted_size, max_position_pct, regime_cap)
-position_dollars = final_size_pct × total_portfolio_value
-shares = floor(position_dollars / current_price)
-actual_allocation = (shares × current_price) / total_portfolio_value
-
-stop_price = current_price × (1 - stop_loss_pct / 100)
-max_loss_dollars = shares × (current_price - stop_price)
-max_loss_pct = max_loss_dollars / total_portfolio_value × 100
-\`\`\`
-
-## Output Format
-Document under a "## Position Sizing" section:
-
-\`\`\`
-### Sizing Calculation
-Debate confidence: 0.72
-Base size: 9.6%
-Fund adjustment (runway × 0.5): 4.8%
-State adjustments: × 0.7 (high deployment) = 3.4%
-Regime cap (Risk-On): 18.75% → no reduction
-Kelly cross-check: f*/2 = 5.1% → no flag (3.4% < 5.1%)
-
-### Final Position
-Size: 3.4% ($3,400 of $100,000 portfolio)
-Shares: 17 @ $198.50
-Actual allocation: 3.38%
-Stop-loss: $182.62 (8% below entry)
-Max loss: $270 (0.27% of portfolio)
-\`\`\`
+## Output
+Table showing: base size, each adjustment, final %, dollar amount, share count, and
+the binding constraint (conviction, Kelly, max position, or cash).
 `,
   },
   {
     name: "Session Reflection",
     dirName: "session-reflection",
-    description: "End-of-session review: grade every decision, audit biases with specific tests, write journal entries, compare vs benchmark, and update objective progress",
-    content: `# Session Reflection (Post-Session Learning)
+    description:
+      "End-of-session review: audit decisions honestly, detect biases, update trade journal with actionable lessons, and track objective progress. Non-negotiable final action of every session.",
+    content: `# Session Reflection
 
 ## When to Use
-At the end of every session, after all trades and analysis are complete.
-This is the LAST thing you do before the session ends. Non-negotiable.
-
-## Prerequisites
-Before starting reflection, gather:
-1. Read today's analysis file from \`analysis/\` (compare intentions vs. actions)
-2. Read \`state/portfolio.json\` for current positions and values
-3. Read \`state/objective_tracker.json\` for goal progress
-4. Get SPY performance today via \`get_bars\` (benchmark comparison)
+At the end of every trading session — this is non-negotiable. Even if "nothing happened,"
+you reflect on why and whether inaction was the right call.
 
 ## Technique
 
-### Step 1 — Decision Audit
+### 1. Decision Audit
+For every decision made this session (trades, holds, skips):
+- **What was the thesis?** — Restate it in one sentence
+- **What actually happened?** — Price action, news, execution quality
+- **Was the process good?** — Did you follow the thesis → risk check → execute flow?
+- **Grade: A/B/C/D/F** — Based on process quality, not outcome
 
-For each trade executed this session, grade it:
+A good process with a bad outcome is still an A. A lucky win from a sloppy process is a D.
 
-| Dimension | 1 (Poor) | 2 (Okay) | 3 (Good) |
-|-----------|----------|----------|----------|
-| **Thesis quality** | Vague or no clear thesis | Reasonable but incomplete | Specific, data-backed, falsifiable |
-| **Entry timing** | Chased price, entered at resistance | Acceptable but not optimal | Entered at support, waited for confirmation |
-| **Position sizing** | Too large or too small vs. conviction | Reasonable but not calculated | Sized per position-sizing skill |
-| **Risk management** | No stop-loss or violated constraints | Stop set but loose | Tight stop, within all constraints |
+### 2. Bias Check
+Honestly assess whether any of these biases influenced decisions:
 
-**Score = sum of all dimensions (4-12 per trade):**
-- 10-12: Excellent execution
-- 7-9: Acceptable
-- 4-6: Poor — write detailed lessons_learned
+| Bias | Signal | Antidote |
+|------|--------|----------|
+| **Anchoring** | Fixated on a price target or past entry | Re-derive fair value from current data |
+| **Confirmation** | Only sought supporting evidence | Explicitly wrote bear case |
+| **Loss aversion** | Held a loser past the stop, hoping for recovery | Mechanical stop-loss execution |
+| **Recency** | Overweighted today's move vs. the thesis timeframe | Zoom out to thesis horizon |
+| **FOMO** | Chased a move after missing the entry | Missed trades have zero cost |
+| **Sunk cost** | Averaged down without new thesis support | Each add must stand alone as a new trade |
 
-For trades you DECIDED AGAINST — also grade the decision:
-- Was it right not to trade? (Did the price move against the trade thesis?)
-- Was it a missed opportunity? (Did the trade thesis play out?)
-- Action bias check: did you skip because of inertia, not analysis?
+If any bias was present, note it explicitly and describe how it affected the decision.
 
-### Step 2 — Thesis Validation (Active Positions)
+### 3. Journal Updates
+Update the trade journal for every trade executed or closed:
 
-For EVERY active position (not just today's trades):
-
+**Good journal entry:**
 \`\`\`
-Symbol: [ticker]
-Original thesis: [from trade reasoning in journal]
-Still valid? [Yes / Weakened / Invalidated]
-Evidence: [what data supports or contradicts the thesis]
-Action: [Hold / Adjust stop / Reduce / Close]
-\`\`\`
-
-**Hard rule:** If a thesis is "Invalidated" and you don't close the position,
-you must explain why with specific evidence. "Hoping for a bounce" is not evidence.
-
-### Step 3 — Bias Audit
-
-For each bias, apply a specific TEST (not just ask yourself):
-
-| Bias | Test | How to Check |
-|------|------|-------------|
-| **Confirmation** | Did you search for bearish evidence during the debate? | Review Round 2 bear rebuttal — was it substantive or token? |
-| **Anchoring** | Are you holding because of your entry price? | Would you buy this position at today's price? If no → anchored |
-| **Loss aversion** | Did you hold a loser past your stop? | Check: is any position below its stop-loss level right now? |
-| **Recency** | Did a recent win make you oversize? | Compare today's position sizes to your 30-day average |
-| **Action bias** | Did you trade because you "should do something"? | Count trades today. If > 3, question whether all were necessary |
-| **Disposition** | Did you sell winners too early and hold losers? | Compare holding period of winners vs losers in journal |
-
-Score: count how many biases you detected (0 = clean, 1-2 = minor, 3+ = problematic).
-If 3+: next session should trade at HALF normal sizing.
-
-### Step 4 — Benchmark Comparison
-
-Compare today's session performance vs. SPY:
-
-\`\`\`
-Fund P&L today: $X (X%)
-SPY change today: X%
-Alpha: [fund return - SPY return]%
+Bought 50 shares GDXJ at $42.15. Thesis: gold miners undervalued at 0.8x NAV with
+gold above $2,300. Regime: Transition. Conviction: 3. Stop: $38.50 (-8.6%).
+Catalyst: Fed pause expected within 60 days.
 \`\`\`
 
-**Trailing comparison** (if data available):
-- Fund vs SPY over last 7 days
-- Fund vs SPY over last 30 days
-- Is the fund generating alpha, or just riding beta?
-
-If the fund consistently underperforms SPY over 30 days, flag it:
-"Consider whether active trading is adding value vs. holding SPY."
-
-### Step 5 — Journal Updates
-
-For any CLOSED positions this session:
-
-\`\`\`sql
-UPDATE trades
-SET closed_at = '{ISO_TIMESTAMP}',
-    close_price = {PRICE},
-    pnl = {REALIZED_PNL},
-    pnl_pct = {REALIZED_PNL_PCT},
-    lessons_learned = '{SPECIFIC_LESSON}'
-WHERE id = {TRADE_ID};
+**Bad journal entry:**
+\`\`\`
+Bought GDXJ. Looks good.
 \`\`\`
 
-**lessons_learned must be specific and actionable:**
-- BAD: "Should have been more patient"
-- GOOD: "Entry was 3% above 50-day SMA — next time wait for retest of the moving average before entering"
+For closed trades, always record:
+- Final P&L ($ and %)
+- Whether the exit matched the plan (hit target, hit stop, or discretionary)
+- One specific lesson learned
 
-### Step 6 — Objective Progress
+### 4. Objective Progress
+Review the fund's objective tracker:
+- **Runway funds:** Current months of runway vs. target. Burn rate on track?
+- **Growth funds:** Current multiple vs. target. Pace to reach goal?
+- **Accumulation funds:** Units acquired vs. target. Average cost basis trend?
+- **Income funds:** Monthly income rate vs. target. Yield sustainability?
 
-Update \`state/objective_tracker.json\` with:
+Update \`state/objective_tracker.json\` with current progress metrics.
 
-\`\`\`
-Current value: $X
-Starting value: $X
-Progress: X% toward objective
-Pace: [ahead / on track / behind]
-Estimated completion: [date or "N/A"]
-\`\`\`
-
-**If behind pace:**
-- Identify the gap: how much needs to change?
-- Is the strategy working but slowly, or is it fundamentally flawed?
-- Concrete adjustment: "Increase position sizing by 20%" or "Shift to higher-conviction trades only" or "No change — variance is expected"
-
-**If ahead of pace:**
-- Consider reducing risk. Protect gains.
-- For runway funds: extend the runway estimate.
-
-## Output Format
-End your analysis report with a "## Session Reflection" section:
-
-\`\`\`
-### Decision Grades
-| Trade | Thesis | Timing | Sizing | Risk | Total |
-|-------|--------|--------|--------|------|-------|
-| BUY NVDA | 3 | 2 | 3 | 3 | 11/12 |
-| Skipped AMD | Correct — thesis didn't hold |
-
-### Active Position Review
-| Symbol | Thesis Status | Action |
-|--------|--------------|--------|
-| NVDA | Valid | Hold |
-| AAPL | Weakened — earnings miss | Tighten stop to $X |
-
-### Bias Audit
-Biases detected: 1 (minor anchoring on AAPL entry price)
-Next session sizing: Normal
-
-### Benchmark
-Fund today: +0.8% | SPY today: +0.5% | Alpha: +0.3%
-
-### Journal Updates
-- Closed MSFT: +$320 (+4.2%). Lesson: "Breakout above $400 resistance worked — confirm with volume next time"
-
-### Objective Progress
-Value: $32,500 | Progress: 54% | Pace: On track
-No strategy adjustment needed.
-\`\`\`
+## Output
+Structured markdown: Decision Audit (graded), Bias Check (honest), Journal Updates
+(written to DB), Objective Progress (updated), and Next Session Focus (priorities
+for the next trading session).
 `,
   },
   {
-    name: "Investment Brainstorming",
-    dirName: "investment-brainstorming",
+    name: "Portfolio Review",
+    dirName: "portfolio-review",
     description:
-      "You MUST use this before any significant strategy change, new position thesis, portfolio restructuring, or when the user proposes an investment idea. Explores intent, market context, and designs an investment approach before execution.",
-    content: `# Investment Brainstorming — Ideas Into Strategy
+      "Holistic portfolio health check: position-by-position thesis validation, concentration analysis, correlation assessment, and rebalancing recommendations.",
+    content: `# Portfolio Review
 
-## Overview
+## When to Use
+At least once per week during a post-market session. Also trigger when:
+- A position has moved more than 15% since last review
+- Market regime has changed
+- A new position is being considered (to understand fit)
+- The fund is approaching a drawdown limit
 
-Help turn investment ideas into fully formed strategies through structured dialogue.
+## Technique
 
-Start by understanding the fund's current context (portfolio, objective progress, market regime),
-then ask questions one at a time to refine the idea. Once you understand the approach,
-present the strategy and get approval before executing any trades.
+### 1. Position-by-Position Review
+For each open position:
+- **Original thesis:** Is it still valid? Has the catalyst played out or expired?
+- **Current P&L:** Unrealized gain/loss in $ and %
+- **vs. Stop-loss:** How far from the stop? Has the stop been respected?
+- **vs. Target:** How far from the profit target? Is the risk/reward still attractive?
+- **Action:** Hold (thesis intact), Trim (take partial profits), Add (thesis strengthened),
+  Close (thesis invalidated or target reached)
 
-<HARD-GATE>
-Do NOT execute any trade, invoke investment-debate or risk-matrix, or take any position action
-until you have presented a strategy and the user (or your own deliberation in autonomous mode)
-has validated it. This applies to EVERY significant investment decision regardless of perceived simplicity.
-</HARD-GATE>
+Positions without a valid current thesis should be closed. "I'm not sure" is a sell signal.
 
-## Anti-Pattern: "This Trade Is Obvious"
+### 2. Portfolio-Level Analysis
+- **Concentration:** Top 3 positions as % of portfolio — flag if >50%
+- **Sector exposure:** Group positions by sector — flag if any sector >30%
+- **Correlation:** Identify positions that move together (e.g., gold miners + gold ETF).
+  In a drawdown, correlated positions fall together — treat them as one combined position
+  for risk purposes
+- **Cash level:** Current cash % vs. regime-recommended minimum
+- **Drawdown status:** Current drawdown from peak vs. \`max_drawdown_pct\` limit
 
-Every significant strategy goes through this process. A single stock pick, a sector rotation,
-a hedge — all of them. "Obvious" trades are where unexamined assumptions cause the most capital loss.
-The strategy can be short (a few sentences for straightforward positions), but you MUST formulate
-and validate it before acting.
+### 3. Rebalancing Recommendations
+Based on the above analysis:
+- Positions to trim or close (with reasoning)
+- Positions to add to (with thesis update)
+- Cash adjustments needed for regime change
+- New positions to research (gaps in the portfolio)
 
-## Process
+Rebalancing is not about perfection — it is about removing positions that no longer deserve
+capital and right-sizing those that do.
 
-**Step 1 — Explore Fund Context**
-Before anything else, gather the current state:
-- Read portfolio.json — current positions, cash, allocation
-- Read objective_tracker.json — progress toward the fund's goal
-- Check recent session analysis files — what was decided last session?
-- Query trade journal for recent trades and lessons learned
-- Assess current market regime (invoke market-regime skill if not already done)
-
-**Step 2 — Understand the Idea**
-Ask clarifying questions one at a time:
-- What is the investment thesis? What catalyst or signal prompted this idea?
-- What is the time horizon — days, weeks, months?
-- What is the expected outcome? How does it advance the fund's objective?
-- What would invalidate this thesis?
-- Prefer multiple choice questions when possible
-- Only one question per message in interactive mode
-
-**Step 3 — Propose 2-3 Approaches**
-Present different ways to express the idea with trade-offs:
-- **Approach A**: Direct position (e.g., buy the stock outright)
-- **Approach B**: Indirect exposure (e.g., ETF, sector play, pairs trade)
-- **Approach C**: Wait for better entry (e.g., set alerts, scale in gradually)
-
-For each approach:
-- Expected return vs. risk
-- How it interacts with existing positions
-- How it aligns with the fund's objective type and risk profile
-- Recommended approach with clear reasoning
-
-**Step 4 — Present the Strategy**
-Once an approach is selected, present the complete strategy:
-- **Thesis**: One paragraph — why this trade, why now
-- **Instrument(s)**: What to buy/sell
-- **Sizing guidance**: Approximate allocation (exact sizing is done by position-sizing skill)
-- **Entry criteria**: What conditions must be met to enter
-- **Exit criteria**: Target price/condition and stop-loss level
-- **Risk factors**: Top 3 things that could go wrong
-- **Objective alignment**: How this advances the fund's specific goal
-
-Scale each section to complexity — a few sentences if straightforward, more detail if nuanced.
-
-**Step 5 — Document**
-Save the validated strategy to the fund's analysis directory:
-- File: \`analysis/YYYY-MM-DD-<topic>-strategy.md\`
-- Include all sections from Step 4
-- Reference any data or analysis that supported the decision
-
-**Step 6 — Transition to Execution**
-After the strategy is documented and approved:
-1. Invoke **investment-debate** to stress-test the thesis (bull vs bear)
-2. Invoke **risk-matrix** to finalize position sizing and risk checks
-3. Only then proceed to trade execution
-
-Do NOT skip directly to trading. The execution skills are the next step.
-
-## Autonomous Mode Behavior
-
-When running in a scheduled autonomous session (no user interaction):
-- Steps 1-3 happen as internal deliberation — document your reasoning
-- Step 4 becomes a self-assessment: "Does this strategy meet the fund's rules?"
-- Skip Step 2's interactive questions — use the fund's decision_framework as your guide
-- The HARD-GATE still applies: formulate before acting, never trade on impulse
-
-## Key Principles
-
-- **One question at a time** — Don't overwhelm with multiple questions
-- **Objective-first** — Every strategy must connect to the fund's life goal
-- **Explore alternatives** — Always propose 2-3 approaches before settling
-- **YAGNI for trading** — Simpler strategies beat complex ones; avoid over-engineering positions
-- **Incremental validation** — Present strategy, get approval, then execute
-- **Capital preservation** — When in doubt, the default is to NOT trade
+## Output
+Position table (symbol, size, P&L, thesis status, action), portfolio-level metrics
+(concentration, sector, correlation, cash, drawdown), and prioritized rebalancing
+actions with reasoning.
 `,
   },
 ];
@@ -1226,6 +662,286 @@ allowed assets, objective, etc.), you MUST update ALL affected files — not jus
 
 4. **Atomic updates** — When updating multiple files, update them all in the same
    response. Do not leave the fund in an inconsistent state between messages
+`,
+  },
+  {
+    fileName: "decision-quality.md",
+    content: `# Decision Quality Standards
+
+Every trade decision must meet these quality standards. No exceptions for "obvious" trades,
+hot tips, or time pressure. The process exists to protect the fund from its own biases.
+
+## Requirements Before Any Trade
+
+1. **Written thesis required** — No order is placed without a documented investment thesis
+   (see Investment Thesis skill). "It looks like a good setup" is not a thesis.
+
+2. **Positive expected value** — Every trade must have an explicit EV calculation:
+   EV = (P(win) x gain) - (P(loss) x loss). If EV is negative, zero, or "hard to estimate,"
+   do not trade.
+
+3. **Trade history consulted** — Query the trade journal for same-ticker and similar-setup
+   history before every new trade. Past lessons override current intuition.
+
+4. **No FOMO trades** — If the primary motivation is "it already moved and I missed it,"
+   the trade is vetoed. Missed moves have zero cost. Chasing moves has real cost.
+
+5. **No revenge trades** — After a loss, the next trade must meet a higher bar: conviction
+   ≥ 3 and explicit acknowledgment that this is not an attempt to "make it back."
+
+## Decision Hierarchy
+
+When inputs conflict, follow this priority order:
+1. Hard risk limits (max position, max drawdown, stop-loss) — absolute, never override
+2. Fund objective alignment — does this trade serve the fund's goal?
+3. Market regime appropriateness — is this the right trade for the current environment?
+4. Thesis quality and conviction — is the analysis rigorous?
+5. Timing and execution — is this the right moment?
+
+## Red Flags — Pause and Reconsider
+
+- Adding to a losing position without a new, independent thesis
+- Removing or widening a stop-loss after it is set
+- Trading in the first 15 minutes of market open on a volatile day
+- Placing more than 3 trades in a single session (overtrading signal)
+- Conviction score that increased after you already decided to trade (rationalization)
+- Any trade where the reasoning starts with "I feel like..."
+`,
+  },
+  {
+    fileName: "analysis-standards.md",
+    content: `# Analysis Standards
+
+All analysis produced during trading sessions must meet institutional quality standards.
+Vague or superficial analysis leads to vague decisions and real losses.
+
+## Required Standards
+
+### Specific Numbers
+Every analytical claim must include concrete data:
+
+**Good:** "GDXJ is trading at $42.15, down 12% from its 52-week high of $47.90, with RSI at
+38 and approaching the 200-day MA at $40.80."
+
+**Bad:** "GDXJ is oversold and near support."
+
+### Sources Cited
+State where data comes from. When using market-data MCP, note the data point and timestamp.
+When citing a macro trend, reference the specific indicator (e.g., "10Y yield at 4.35%
+per Treasury data" not "yields are high").
+
+### Uncertainty Quantified
+Never present a single scenario as certain. Provide:
+- Base case with probability estimate
+- Upside scenario with probability
+- Downside scenario with probability
+- What would change your mind (specific trigger)
+
+**Good:** "Base case (60%): GDXJ rebounds to $45 within 30 days on mean reversion. Upside
+(20%): breaks above $48 if Fed signals cuts. Downside (20%): breaks below $39 support if
+dollar strengthens above DXY 107."
+
+**Bad:** "GDXJ should go up because gold miners are undervalued."
+
+### Alternatives Considered
+Before recommending any action, explicitly evaluate at least one alternative:
+- Why this ticker and not a competitor?
+- Why trade now and not wait?
+- Why this size and not smaller/larger?
+
+## Forbidden Patterns
+
+1. **Listing facts without synthesis** — A list of data points is not analysis. Every fact
+   must connect to the thesis with "which means..." or "this matters because..."
+
+2. **Vague directional language** — Banned phrases: "could go either way," "looks interesting,"
+   "might be a good opportunity," "the trend seems positive." Replace with specific claims
+   and numbers.
+
+3. **Hedging everything** — If every sentence includes "however" or "on the other hand,"
+   the analysis has no point of view. Take a position and defend it. The bear case belongs
+   in its own section, not diluting every sentence.
+
+4. **Anchoring to round numbers** — Do not set targets at $50, $100, etc. unless there is
+   a specific technical or fundamental reason. Targets come from analysis, not aesthetics.
+
+5. **Recency bias in data selection** — Do not cherry-pick the time frame that supports
+   your thesis. Show multiple time frames and acknowledge when they conflict.
+`,
+  },
+  {
+    fileName: "risk-discipline.md",
+    content: `# Risk Discipline
+
+Risk limits are hard constraints, not guidelines. They exist because the fund's objective
+depends on capital preservation. A 50% drawdown requires a 100% gain to recover — math
+that makes the objective unreachable.
+
+## Position-Level Rules
+
+1. **Stop-loss on every position** — No position is held without a defined stop-loss.
+   The stop is set at entry and recorded in the trade journal. Moving a stop further
+   from entry is prohibited unless the position is in profit and you are trailing the stop.
+
+2. **Stops are executed mechanically** — When a stop is hit, the position is closed. No
+   "let me wait to see if it recovers." The thesis failed; accept the loss.
+
+3. **Never exceed \`max_position_pct\`** — This is a hard cap, not a target. If a position
+   grows into exceeding the limit through appreciation, trim it at the next session.
+
+4. **Each add is a new trade** — Adding to a position requires a new thesis that stands
+   on its own. "Averaging down" without new information is not a strategy; it is denial.
+
+## Portfolio-Level Rules
+
+1. **Drawdown budget is sacred** — Track current drawdown from portfolio peak continuously.
+   When drawdown reaches 50% of \`max_drawdown_pct\`, reduce all new position sizes by half.
+   When drawdown reaches 75% of the limit, stop opening new positions entirely.
+
+2. **Daily loss limit** — If realized + unrealized losses today exceed \`max_daily_loss_pct\`,
+   no new trades for the remainder of the session. Existing stops remain active.
+
+3. **Correlation is concentration** — Two positions with >0.7 correlation count as a single
+   position for concentration purposes. Three gold-related holdings are not "diversified
+   in gold" — they are one concentrated gold bet.
+
+4. **Cash is a position** — Cash earns risk-free return and provides optionality. Holding
+   cash when opportunities are scarce is an active, intelligent decision — not a failure
+   to find trades.
+
+## Never
+
+- Never disable or widen a stop-loss to avoid being stopped out
+- Never exceed position size limits "just this once" for a high-conviction trade
+- Never ignore the daily loss limit because "the market will come back"
+- Never treat unrealized gains as a cushion to take more risk
+- Never hold a position past an invalidation trigger you identified in the thesis
+`,
+  },
+  {
+    fileName: "learning-loop.md",
+    content: `# Learning Loop
+
+The fund's long-term edge comes from compounding knowledge, not just capital. Every session
+must contribute to the learning loop: query history before trading, record lessons after.
+
+## Before Every Trade
+
+1. **Query the journal** — Use the Trade Memory skill to search for same-ticker, same-sector,
+   and similar-setup trades. This is not optional. Ignoring available history is the single
+   most expensive mistake in systematic trading.
+
+2. **Check prediction accuracy** — Review your recent predictions (thesis outcomes, regime
+   calls, price targets). If your hit rate is below 40% in the last 30 days, you are in a
+   cold streak — reduce sizing and increase selectivity.
+
+3. **Look for repeated mistakes** — If the journal shows you have lost money the same way
+   before (e.g., holding through earnings, fighting the trend, adding to losers), that
+   pattern is a hard veto on the current trade if it matches.
+
+## After Every Session
+
+1. **Update the journal** — Every trade executed or closed gets a journal entry with:
+   thesis, entry/exit prices, P&L, what went right, what went wrong, and one actionable
+   lesson. "Good trade" and "bad luck" are not acceptable lessons.
+
+2. **Grade your process** — Rate each decision A-F based on process quality (not outcome).
+   Track the distribution over time. If more than 20% of decisions grade below C, the
+   process needs repair before the next session.
+
+3. **Record regime assessment accuracy** — Compare your session-start regime call with
+   actual market behavior. Over time, this calibrates your regime classification skill.
+
+## Adaptation Principles
+
+- **Win rate < 40% over 20+ trades** → Fundamentally reassess strategy, do not just
+  reduce sizing. Something structural is wrong.
+- **Win rate 40-50%** → Acceptable if average win > 1.5x average loss. Focus on
+  improving entry timing and stop placement.
+- **Win rate > 60%** → Verify you are not just trading in a favorable regime. Check
+  if performance holds across different market conditions.
+- **3 consecutive losses** → Mandatory pause. Review all three trades before the next
+  entry. Reduce next position size by one conviction tier.
+- **Sizing adjustment** — If the last 10 trades show average loss > 2x average win,
+  reduce all sizes by 30% until the ratio improves.
+
+## What the Journal Must Never Become
+
+- A log of what happened (that is just a trade blotter, not learning)
+- A collection of excuses ("market was irrational," "stop-loss was just hit before reversal")
+- Empty ("No trades today" with no reflection on why or what was considered)
+
+Every journal entry must answer: "What will I do differently next time in this situation?"
+`,
+  },
+  {
+    fileName: "market-awareness.md",
+    content: `# Market Awareness
+
+Trading does not happen in a vacuum. The market environment determines what strategies work,
+how to size positions, and when to stay in cash. Ignoring the environment is the fastest
+way to blow up a fund.
+
+## Regime Respect
+
+The Market Regime classification (Risk-On, Transition, Risk-Off, Crisis) is not advisory —
+it is a binding constraint on behavior:
+
+- **Risk-On:** Normal operations. Full conviction-based sizing. Deploy cash when opportunities
+  meet quality standards.
+- **Transition:** Increased caution. Reduce sizing by 30%. Require conviction ≥ 3 for new
+  positions. Widen stop-losses by 20% to avoid noise shakeouts.
+- **Risk-Off:** Defensive posture. Reduce sizing by 50%. Only trade conviction 4-5. Actively
+  look for positions to trim. Raise cash to 30%+ of portfolio.
+- **Crisis:** Capital preservation mode. No new long positions. Trim aggressively. Cash
+  target 50%+. The goal is survival, not returns.
+
+If you find yourself rationalizing why the regime does not apply to your trade, that is
+the regime applying to your trade.
+
+## Correlation Awareness
+
+In normal markets, assets have their usual correlations. In stress markets, correlations
+converge toward 1 — everything falls together. This means:
+
+- Diversification benefits disappear exactly when you need them most
+- A "diversified" portfolio of 5 correlated growth positions is actually one position
+- The only true diversifiers in stress are: cash, short-duration treasuries, and gold
+  (and even gold can fail in liquidity crises)
+
+When regime is Risk-Off or Crisis, recalculate portfolio risk assuming all position
+correlations are 0.8. If this concentrated-correlation portfolio would breach drawdown
+limits, reduce immediately.
+
+## Cash Management
+
+Cash is not "uninvested capital" — it is an active position with specific benefits:
+- Optionality to buy at lower prices if the market declines
+- Reduced portfolio volatility and drawdown
+- Psychological capacity to think clearly without panic
+
+**Minimum cash floors by regime:** per fund baseline + regime adjustment (see Market Regime
+skill table). Never let cash drop below the floor for a new position. If an existing position
+appreciates and pushes cash below the floor, do not act immediately — but do not add
+new positions until cash is replenished.
+
+## Calendar Awareness
+
+Key events that change the risk/reward landscape. Before trading, check if any of these
+are within 24 hours:
+
+| Event | Typical Impact | Action |
+|-------|---------------|--------|
+| **FOMC decision** | Vol spike, trend reversal possible | Reduce size or wait |
+| **CPI/PPI release** | Rate expectations shift | Avoid rate-sensitive trades pre-release |
+| **NFP (jobs report)** | Broad market move | Reduce exposure pre-release |
+| **Earnings (held ticker)** | 5-15% gap possible | Decide before: hold through or exit before |
+| **Options expiration** | Pin risk, gamma squeeze | Be aware of open interest at strikes |
+| **Quad witching** | Elevated volume, whipsaws | Avoid initiating new positions |
+
+If a major event is within 24 hours and the thesis does not explicitly account for it,
+either wait or reduce size by 50%. "I will trade through it" is acceptable only if the
+thesis includes a specific scenario for the event outcome.
 `,
   },
 ];
