@@ -43,6 +43,7 @@ export default function Index({ options: opts }: Props) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
   const [phase, setPhase] = useState<Phase>({ type: "resolving" });
+  const [chatActive, setChatActive] = useState(false);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [marketRefreshKey, setMarketRefreshKey] = useState(0);
 
@@ -109,6 +110,7 @@ export default function Index({ options: opts }: Props) {
     () => ({ model: opts.model, readonly: opts.readonly, maxBudget: opts.maxBudget }),
     [opts.model, opts.readonly, opts.maxBudget],
   );
+  const handleChatStart = useCallback(() => setChatActive(true), []);
 
   // ── Panels block (reused in all states) ─────────────────────
 
@@ -190,6 +192,22 @@ export default function Index({ options: opts }: Props) {
     );
   }
 
+  // ── Chat active (static output mode) ─────────────────────────
+  if (phase.type === "ready" && chatActive) {
+    return (
+      <ChatView
+        key={phase.fundName ?? "__workspace__"}
+        fundName={phase.fundName}
+        width={columns}
+        height={rows}
+        mode="static"
+        onExit={handleExit}
+        onSwitchFund={handleSwitchFund}
+        options={chatOptions}
+      />
+    );
+  }
+
   // ── REPL (main state) ───────────────────────────────────────
 
   const panelsHeight = isShort
@@ -221,6 +239,7 @@ export default function Index({ options: opts }: Props) {
           mode="inline"
           onExit={handleExit}
           onSwitchFund={handleSwitchFund}
+          onChatStart={handleChatStart}
           options={chatOptions}
         />
       </Box>
