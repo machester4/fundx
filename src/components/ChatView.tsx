@@ -380,9 +380,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChat
       streaming.cancel();
       setPhase("ready");
     }
-    if (isStatic && input === "q" && !isStreaming) {
-      onExit?.();
-    }
   });
 
   if (phase === "loading") {
