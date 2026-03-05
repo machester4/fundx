@@ -115,6 +115,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChat
             // Derive the next ID from the maximum stored ID to avoid duplicates
             const maxId = history.messages.reduce((max, m) => Math.max(max, m.id), 0);
             nextIdRef.current = maxId + 1;
+
+            // Transition to static mode for restored sessions
+            onChatStart?.();
           }
         }
 

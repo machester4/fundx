@@ -105,7 +105,10 @@ export default function Index({ options: opts }: Props) {
 
   // Stable references so ChatView's internal callbacks aren't recreated on every dashboard refresh.
   const handleExit = useCallback(() => exit(), [exit]);
-  const handleSwitchFund = useCallback((name: string) => setPhase({ type: "ready", fundName: name }), []);
+  const handleSwitchFund = useCallback((name: string) => {
+    setChatActive(false);
+    setPhase({ type: "ready", fundName: name });
+  }, []);
   const chatOptions = useMemo(
     () => ({ model: opts.model, readonly: opts.readonly, maxBudget: opts.maxBudget }),
     [opts.model, opts.readonly, opts.maxBudget],
@@ -192,22 +195,6 @@ export default function Index({ options: opts }: Props) {
     );
   }
 
-  // ── Chat active (static output mode) ─────────────────────────
-  if (phase.type === "ready" && chatActive) {
-    return (
-      <ChatView
-        key={phase.fundName ?? "__workspace__"}
-        fundName={phase.fundName}
-        width={columns}
-        height={rows}
-        mode="static"
-        onExit={handleExit}
-        onSwitchFund={handleSwitchFund}
-        options={chatOptions}
-      />
-    );
-  }
-
   // ── REPL (main state) ───────────────────────────────────────
 
   const panelsHeight = isShort
@@ -218,34 +205,36 @@ export default function Index({ options: opts }: Props) {
   const chatHeight = Math.max(5, rows - panelsHeight - footerHeight - outerBorderHeight);
 
   return (
-    <Box flexDirection="column" width={columns} height={rows}>
-      {/* Outer border */}
-      <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
-        {panelsBlock}
+    <Box flexDirection="column" width={columns} height={chatActive ? undefined : rows}>
+      {/* Dashboard panels — hidden when chat is active */}
+      {!chatActive && (
+        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
+          {panelsBlock}
 
-        {/* Init error banner (e.g. --fund not found) */}
-        {phase.initError && (
-          <Box paddingX={1}>
-            <Text color="red">{phase.initError} — falling back to workspace mode.</Text>
-          </Box>
-        )}
+          {/* Init error banner (e.g. --fund not found) */}
+          {phase.initError && (
+            <Box paddingX={1}>
+              <Text color="red">{phase.initError} — falling back to workspace mode.</Text>
+            </Box>
+          )}
+        </Box>
+      )}
 
-        {/* Chat REPL — always active */}
-        <ChatView
-          key={phase.fundName ?? "__workspace__"}
-          fundName={phase.fundName}
-          width={innerWidth}
-          height={chatHeight}
-          mode="inline"
-          onExit={handleExit}
-          onSwitchFund={handleSwitchFund}
-          onChatStart={handleChatStart}
-          options={chatOptions}
-        />
-      </Box>
+      {/* Chat — stable tree position preserves state across inline→static transition */}
+      <ChatView
+        key={phase.fundName ?? "__workspace__"}
+        fundName={phase.fundName}
+        width={chatActive ? columns : innerWidth}
+        height={chatActive ? rows : chatHeight}
+        mode={chatActive ? "static" : "inline"}
+        onExit={handleExit}
+        onSwitchFund={handleSwitchFund}
+        onChatStart={handleChatStart}
+        options={chatOptions}
+      />
 
       {/* Footer (outside border) */}
-      {footerBlock}
+      {!chatActive && footerBlock}
     </Box>
   );
 }
