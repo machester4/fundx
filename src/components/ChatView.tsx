@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Box, Text, useInput, Static } from "ink";
 import { Spinner, TextInput } from "@inkjs/ui";
 import { basename } from "node:path";
 import {
@@ -26,25 +26,15 @@ import { FundContextBar } from "./FundContextBar.js";
 import { MarkdownView } from "./MarkdownView.js";
 import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
 
-/** Estimate how many terminal lines a message will occupy. */
-function estimateMessageLines(msg: { sender: string; content: string }, width: number): number {
-  const contentWidth = Math.max(width - 2, 20); // paddingX=1 each side
-  let lines = 1; // sender header line
-  for (const line of msg.content.split("\n")) {
-    lines += Math.max(1, Math.ceil((line.length || 1) / contentWidth));
-  }
-  lines += 1; // marginBottom
-  return lines;
-}
-
 interface ChatViewProps {
   fundName: string | null;
   width: number;
   height: number;
   onExit?: () => void;
   onSwitchFund?: (fundName: string) => void;
+  onChatStart?: () => void;
   options: { model?: string; readonly: boolean; maxBudget?: string };
-  mode?: "standalone" | "inline";
+  mode?: "standalone" | "inline" | "static";
 }
 
 interface ChatMsg {
@@ -56,8 +46,9 @@ interface ChatMsg {
   turns?: number;
 }
 
-export function ChatView({ fundName, width, height, onExit, onSwitchFund, options, mode = "standalone" }: ChatViewProps) {
+export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChatStart, options, mode = "standalone" }: ChatViewProps) {
   const isInline = mode === "inline";
+  const isStatic = mode === "static";
   const isWorkspaceMode = fundName === null;
   const [phase, setPhase] = useState<"loading" | "ready" | "streaming" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
@@ -69,7 +60,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
   const [model, setModel] = useState("sonnet");
   const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[]; env: Record<string, string> }>>({});
-  const [scrollOffset, setScrollOffset] = useState(0); // 0 = pinned to bottom
   const streaming = useStreaming();
   // Track known fund names to detect when Claude creates a new fund in workspace mode
   const knownFundsRef = useRef<string[]>([]);
@@ -344,9 +334,12 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     }
 
     const messageText = cleanText || (images ? "Analyze this image." : trimmed);
+    if (messages.length === 0 && onChatStart) {
+      onChatStart();
+    }
     addMessage("you", messageText);
     await sendMessage(messageText, images);
-  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage, streaming]);
+  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, onChatStart, sendMessage, streaming, messages.length]);
 
   // Persist chat history to disk whenever messages or sessionId change.
   // Write errors are logged but not surfaced — persistence is best-effort and must not interrupt the UI.
@@ -373,95 +366,88 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     });
   }, [messages, sessionId, fundName]);
 
-  // Reset scroll to bottom when new messages arrive or streaming updates
-  useEffect(() => {
-    setScrollOffset(0);
-  }, [messages.length, streaming.buffer]);
-
   const isStreaming = phase === "streaming";
 
-  // Calculate available height for messages area.
-  // In inline mode the input box uses borderStyle="round" → 3 rows (top border + content + bottom border).
-  // In standalone mode the input has no border → 1 row.
-  // While streaming the input is hidden → 0 rows.
-  const contextBarHeight = !isInline && (welcomeData || isWorkspaceMode) ? 4 : 0; // border + 2 lines + border
-  const costBarHeight = !isInline && costTracker.messages > 0 ? 1 : 0;
-  const inputHeight = isStreaming ? 0 : isInline ? 3 : 1;
-  const bottomHeight = contextBarHeight + costBarHeight + inputHeight;
-  const messagesAreaHeight = Math.max(3, height - bottomHeight);
 
-  // Build visible messages with scroll support
-  const visibleMessages = useMemo(() => {
-    const msgLines = messages.map((msg) => ({
-      msg,
-      lines: estimateMessageLines(msg, width),
-    }));
-
-    let streamingLines = 0;
-    if (isStreaming) {
-      if (streaming.buffer) {
-        streamingLines = 2 + streaming.buffer.split("\n").length;
-      } else {
-        streamingLines = 1;
-      }
-    }
-
-    const availableLines = messagesAreaHeight - streamingLines;
-    let usedLines = 0;
-    let startIdx = messages.length;
-
-    // Apply scroll offset (skip messages from the bottom)
-    let skippedLines = 0;
-    let skipEndIdx = messages.length;
-    if (scrollOffset > 0) {
-      for (let i = msgLines.length - 1; i >= 0 && skippedLines < scrollOffset; i--) {
-        skippedLines += msgLines[i].lines;
-        skipEndIdx = i;
-      }
-    }
-
-    // Always include the most recent message even if it exceeds availableLines,
-    // so it is never silently dropped when the response is long.
-    for (let i = skipEndIdx - 1; i >= 0; i--) {
-      const needed = msgLines[i].lines;
-      if (i < skipEndIdx - 1 && usedLines + needed > availableLines) break;
-      usedLines += needed;
-      startIdx = i;
-    }
-
-    return messages.slice(startIdx, skipEndIdx);
-  }, [messages, width, messagesAreaHeight, isStreaming, streaming.buffer, scrollOffset]);
-
-  const isScrolledUp = scrollOffset > 0;
-
-  // Keyboard: Esc to go back (standalone only), arrows + PageUp/Down to scroll
   useInput((input, key) => {
-    if (!isInline && key.escape && phase !== "streaming") {
+    if (!isInline && !isStatic && key.escape && phase !== "streaming") {
       onExit?.();
     }
     if (input === "c" && key.ctrl && streaming.isStreaming) {
       streaming.cancel();
       setPhase("ready");
     }
-    // Arrow keys: scroll 1 line at a time
-    if (key.upArrow) {
-      setScrollOffset((prev) => prev + 1);
-    }
-    if (key.downArrow) {
-      setScrollOffset((prev) => Math.max(0, prev - 1));
-    }
-    // PageUp/Down: scroll by ~1/3 screen
-    const scrollStep = Math.max(3, Math.floor(height / 3));
-    if (key.pageUp) {
-      setScrollOffset((prev) => prev + scrollStep);
-    }
-    if (key.pageDown) {
-      setScrollOffset((prev) => Math.max(0, prev - scrollStep));
+    if (isStatic && input === "q" && !isStreaming) {
+      onExit?.();
     }
   });
 
   if (phase === "loading") {
     return <Spinner label={fundName ? `Loading ${fundName}...` : "Loading FundX..."} />;
+  }
+
+  if (isStatic) {
+    return (
+      <>
+        {/* Completed messages — written permanently to terminal scrollback */}
+        <Static items={messages}>
+          {(msg) => (
+            <Box key={msg.id} paddingX={1}>
+              <ChatMessage
+                sender={msg.sender}
+                content={msg.content}
+                timestamp={msg.timestamp}
+                cost={msg.cost}
+                turns={msg.turns}
+              />
+            </Box>
+          )}
+        </Static>
+
+        {/* Dynamic bottom section — re-renders as streaming progresses */}
+        <Box flexDirection="column">
+          {isStreaming && (
+            <Box paddingX={1} flexDirection="column">
+              {streaming.buffer ? (
+                <Box flexDirection="column">
+                  <Box gap={1}>
+                    <Text bold color="blue">claude</Text>
+                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
+                  </Box>
+                  <MarkdownView content={streaming.buffer} />
+                </Box>
+              ) : (
+                <StreamingIndicator charCount={0} activity={streaming.activity} />
+              )}
+            </Box>
+          )}
+
+          {phase === "error" && (
+            <Box paddingX={1}>
+              <Text color="red">Error: {errorMsg}</Text>
+            </Box>
+          )}
+
+          {costTracker.messages > 0 && !isStreaming && (
+            <Box paddingX={1}>
+              <Text dimColor>
+                ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns | /help
+              </Text>
+            </Box>
+          )}
+
+          {!isStreaming && phase !== "error" && (
+            <Box paddingX={1}>
+              <Text color="green">{"❯ "}</Text>
+              <TextInput
+                placeholder="Message... (/help for commands)"
+                onSubmit={handleSubmit}
+              />
+            </Box>
+          )}
+        </Box>
+      </>
+    );
   }
 
   if (phase === "error") {
@@ -488,7 +474,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             )}
           </Box>
         )}
-        {visibleMessages.map((msg) => (
+        {messages.map((msg) => (
           <Box key={msg.id} paddingX={1}>
             <ChatMessage
               sender={msg.sender}
@@ -499,7 +485,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             />
           </Box>
         ))}
-        {isStreaming && !isScrolledUp && (
+        {isStreaming && (
           <Box paddingX={1} flexDirection="column">
             {streaming.buffer ? (
               <Box flexDirection="column">
@@ -512,11 +498,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             ) : (
               <StreamingIndicator charCount={0} activity={streaming.activity} />
             )}
-          </Box>
-        )}
-        {isScrolledUp && (
-          <Box paddingX={1}>
-            <Text dimColor italic>↑ Scrolled up — PgDn to go back ↓</Text>
           </Box>
         )}
       </Box>
