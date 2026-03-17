@@ -15,6 +15,7 @@ export default defineConfig([
       "src/mcp/broker-alpaca.ts",
       "src/mcp/market-data.ts",
       "src/mcp/telegram-notify.ts",
+      "src/mcp/sws.ts",
     ],
     format: ["esm"],
     target: "node20",
