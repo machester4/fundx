@@ -4,7 +4,7 @@ import { z } from "zod";
 
 // ── Simply Wall St GraphQL client ────────────────────────────
 
-const SWS_GQL_URL = "https://api.simplywall.st/graphql";
+const SWS_GQL_URL = "https://simplywall.st/graphql";
 
 const SWS_HEADERS: Record<string, string> = {
   accept: "*/*",
@@ -104,46 +104,10 @@ interface ScreenerDef {
 }
 
 const SWS_SCREENERS: Record<string, ScreenerDef> = {
-  "undervalued-large-caps": {
-    id: 1,
-    description: "Undervalued large-cap companies with strong fundamentals",
-  },
-  "top-dividend-stocks": {
-    id: 2,
-    description: "High-yield dividend payers with sustainable payouts",
-  },
-  "high-growth-tech": {
-    id: 3,
-    description: "Fast-growing technology companies",
-  },
-  "undervalued-small-caps": {
-    id: 4,
-    description: "Undervalued small-cap companies with growth potential",
-  },
-  "market-leaders": {
-    id: 5,
-    description: "Dominant companies with wide economic moats",
-  },
-  "buffetts-picks": {
-    id: 6,
-    description: "Quality companies matching Warren Buffett-style value criteria",
-  },
-  "cash-rich": {
-    id: 7,
-    description: "Companies with strong cash positions and low debt",
-  },
-  "upcoming-dividends": {
-    id: 8,
-    description: "Companies with upcoming dividend payments",
-  },
-  "strong-balance-sheet": {
-    id: 9,
-    description: "Companies with low debt and high financial health scores",
-  },
-  "beaten-down": {
-    id: 10,
-    description: "Undervalued companies trading well below analyst price targets",
-  },
+  "undiscovered-gems":  { id: 152, description: "Undiscovered gems with strong fundamentals" },
+  "high-growth-tech":   { id: 148, description: "High growth tech stocks" },
+  "dividend-champions": { id: 155, description: "Reliable dividend payers" },
+  "undervalued-large":  { id: 142, description: "Undervalued large caps" },
 };
 
 // ── GraphQL queries ───────────────────────────────────────────
@@ -169,47 +133,26 @@ const SCREENER_GQL = `
 `;
 
 const COMPANY_GQL = `
-  query CompanyByUniqueSymbol($uniqueSymbol: String!) {
-    company(id: $uniqueSymbol) {
-      id name tickerSymbol uniqueSymbol exchangeSymbol
-      primaryIndustry { id slug name }
-      score { dividend future health past value }
-      analysisValue { return1d return7d return1yAbs marketCap lastSharePrice priceTarget pe pb priceToSales }
-      analysisFuture { netIncomeGrowth3Y netIncomeGrowthAnnual revenueGrowthAnnual }
-      analysisDividend { dividendYield }
-      analysisMisc { analystCount }
-      info { shortDescription logoUrl yearFounded }
-    }
+query CompanyBySymbol($symbol: String!) {
+  companyByUniqueSymbol(uniqueSymbol: $symbol) {
+    id name tickerSymbol uniqueSymbol exchangeSymbol
+    primaryIndustry { id slug name }
+    score { dividend future health past value }
+    analysisValue { return1d return7d return1yAbs marketCap lastSharePrice priceTarget pe pb priceToSales }
+    analysisFuture { netIncomeGrowth3Y netIncomeGrowthAnnual revenueGrowthAnnual }
+    analysisDividend { dividendYield }
+    analysisMisc { analystCount }
+    info { shortDescription logoUrl yearFounded }
   }
-`;
-
-const ANALYSIS_GQL = `
-  query CompanyAnalysisByUniqueSymbol($uniqueSymbol: String!) {
-    company(id: $uniqueSymbol) {
-      id name tickerSymbol uniqueSymbol exchangeSymbol
-      score { dividend future health past value }
-      analysis {
-        extended {
-          outlook
-          valuation { description inferredPeRatio priceTarget }
-          future { description revenueGrowth earningsGrowth }
-          past { description earningsGrowth returnOnEquity returnOnAssets }
-          health { description debtLevel interestCoverage }
-          income { description dividendYield dividendPayoutRatio }
-        }
-      }
-    }
-  }
-`;
+}`;
 
 const SEARCH_GQL = `
-  query SearchCompanies($query: String!, $limit: Int!) {
-    searchCompanies(query: $query, limit: $limit) {
-      id name tickerSymbol uniqueSymbol exchangeSymbol
-      score { dividend future health past value }
-    }
+query SearchCompanies($query: String!, $limit: Int!) {
+  searchCompanies(query: $query, first: $limit) {
+    id name tickerSymbol uniqueSymbol exchangeSymbol
+    score { dividend future health past value }
   }
-`;
+}`;
 
 // ── MCP Server ────────────────────────────────────────────────
 
@@ -261,7 +204,7 @@ server.tool(
       offset,
       displayRecentlyAddedCompanies: false,
       returnRecentCompaniesOnly: false,
-      additionalFilters: [{ name: "country_iso", value: country.toUpperCase() }],
+      additionalFilters: [{ field: "country_name", operator: "in", logicalCondition: "aor", values: [country] }],
     });
 
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
@@ -270,7 +213,7 @@ server.tool(
 
 server.tool(
   "sws_company_score",
-  "Get Simply Wall St snowflake scores for a company (value, future, past, health, dividend — each 0–20)",
+  "Get Simply Wall St snowflake scores for a company (value, future, past, health, dividend — each 0–6)",
   {
     symbol: z
       .string()
@@ -279,7 +222,7 @@ server.tool(
       ),
   },
   async ({ symbol }) => {
-    const data = await cachedQuery("score", symbol, COMPANY_GQL, { uniqueSymbol: symbol });
+    const data = await cachedQuery("score", symbol, COMPANY_GQL, { symbol });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
@@ -295,7 +238,7 @@ server.tool(
       ),
   },
   async ({ symbol }) => {
-    const data = await cachedQuery("analysis", symbol, ANALYSIS_GQL, { uniqueSymbol: symbol });
+    const data = await cachedQuery("analysis", symbol, COMPANY_GQL, { symbol });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
