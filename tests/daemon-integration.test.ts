@@ -17,12 +17,15 @@ vi.mock("node:fs", () => ({
   existsSync: vi.fn().mockReturnValue(false),
 }));
 
-// Capture the cron callback directly without actually scheduling
+// Capture cron callbacks by expression without actually scheduling
+const capturedCronCallbacks = new Map<string, (...args: unknown[]) => Promise<void>>();
 let capturedCronCallback: ((...args: unknown[]) => Promise<void>) | null = null;
 vi.mock("node-cron", () => ({
   default: {
-    schedule: vi.fn((_expr: string, cb: (...args: unknown[]) => Promise<void>) => {
-      capturedCronCallback = cb;
+    schedule: vi.fn((expr: string, cb: (...args: unknown[]) => Promise<void>) => {
+      capturedCronCallbacks.set(expr, cb);
+      // Keep backwards compat: capturedCronCallback points to the per-minute schedule
+      if (expr === "* * * * *") capturedCronCallback = cb;
     }),
   },
 }));
@@ -111,6 +114,7 @@ afterAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   capturedCronCallback = null;
+  capturedCronCallbacks.clear();
   // Re-mock process.exit after clearAllMocks
   exitSpy.mockImplementation((() => {}) as never);
 });
@@ -163,6 +167,7 @@ describe("daemon cron callback", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     capturedCronCallback = null;
+    capturedCronCallbacks.clear();
     exitSpy.mockImplementation((() => {}) as never);
 
     const { existsSync } = await import("node:fs");
