@@ -1,7 +1,6 @@
 import { homedir, platform } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
 import { loadGlobalConfig, saveGlobalConfig } from "../config.js";
 import type {
   SwsSnowflake,
@@ -96,6 +95,23 @@ export function findChromePath(): string | undefined {
   return undefined;
 }
 
+// ── Chrome profile directory ─────────────────────────────────
+
+/** Get the user's real Chrome profile directory per platform */
+function getChromeProfileDir(): string {
+  const home = homedir();
+  const os = platform() as string;
+
+  if (os === "darwin") {
+    return join(home, "Library", "Application Support", "Google", "Chrome");
+  }
+  if (os === "win32") {
+    return join(home, "AppData", "Local", "Google", "Chrome", "User Data");
+  }
+  // Linux
+  return join(home, ".config", "google-chrome");
+}
+
 // ── JWT decoding ──────────────────────────────────────────────
 
 /** Decode JWT payload and extract the `exp` claim (Unix timestamp) */
@@ -163,25 +179,34 @@ export async function swsLogin(): Promise<{ token: string; expiresAt: string }> 
     throw new Error("Chrome not found. Set CHROME_PATH environment variable or install Chrome.");
   }
 
-  // Persistent profile so SWS remembers previous sessions and doesn't flag as bot
-  const userDataDir = join(homedir(), ".fundx", "chrome-profile");
-  await mkdir(userDataDir, { recursive: true });
+  // Use the user's real Chrome profile so SWS sees an already-authenticated browser.
+  // If the user is already logged in, the auth cookie is captured immediately.
+  // Chrome must be closed — only one instance can use a profile at a time.
+  const chromeProfileDir = getChromeProfileDir();
 
   // Dynamic import to avoid loading puppeteer-core unless needed
   const puppeteer = await import("puppeteer-core");
 
-  const browser = await puppeteer.launch({
-    executablePath: chromePath,
-    headless: false,
-    userDataDir,
-    args: [
-      "--no-first-run",
-      "--no-default-browser-check",
-      // Anti-bot detection flags
-      "--disable-blink-features=AutomationControlled",
-    ],
-    ignoreDefaultArgs: ["--enable-automation"],
-  });
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath: chromePath,
+      headless: false,
+      userDataDir: chromeProfileDir,
+      args: [
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-blink-features=AutomationControlled",
+      ],
+      ignoreDefaultArgs: ["--enable-automation"],
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("user data directory is already in use") || msg.includes("already running")) {
+      throw new Error("Close Chrome first — only one instance can use the profile at a time. Then re-run `fundx sws login`.");
+    }
+    throw err;
+  }
 
   let disconnected = false;
   browser.on("disconnected", () => { disconnected = true; });
