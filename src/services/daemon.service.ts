@@ -10,6 +10,7 @@ import { checkSpecialSessions } from "./special-sessions.service.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.service.js";
 import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
+import { loadGlobalConfig } from "../config.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -51,6 +52,28 @@ export async function forkDaemon(): Promise<void> {
     { detached: true, stdio: "ignore" },
   );
   child.unref();
+}
+
+async function checkSwsTokenExpiry(): Promise<void> {
+  const config = await loadGlobalConfig();
+  const expiresAt = config.sws?.token_expires_at;
+  if (!expiresAt) return;
+
+  const hoursLeft = (new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60);
+
+  if (!config.telegram.bot_token || !config.telegram.chat_id) return;
+
+  const { sendTelegramNotification } = await import("./gateway.service.js");
+
+  if (hoursLeft <= 0) {
+    await sendTelegramNotification(
+      "⚠️ <b>SWS token expired.</b> Data de Simply Wall St deshabilitada. Ejecuta <code>fundx sws login</code> para renovar.",
+    );
+  } else if (hoursLeft <= 48) {
+    await sendTelegramNotification(
+      `⚠️ SWS token expira en ${Math.round(hoursLeft)} horas. Ejecuta <code>fundx sws login</code> para renovar.`,
+    );
+  }
 }
 
 /** Start the scheduler daemon */
@@ -158,6 +181,13 @@ export async function startDaemon(): Promise<void> {
         await log(`Error checking fund '${name}': ${err}`);
       }
     }
+  });
+
+  // SWS token expiry check — daily at 09:00
+  cron.schedule("0 9 * * *", () => {
+    checkSwsTokenExpiry().catch(async (err) => {
+      await log(`SWS token check error: ${err}`);
+    });
   });
 
   process.on("SIGINT", cleanup);
