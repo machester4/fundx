@@ -225,3 +225,133 @@ describe("swsSearchResultSchema", () => {
     expect(result.score).toBeUndefined();
   });
 });
+
+// ── SWS Service tests ─────────────────────────────────────────
+
+import { vi, describe as vDescribe, it as vIt, expect as vExpect, beforeEach as vBeforeEach } from "vitest";
+
+// Mock config module for service tests
+vi.mock("../src/config.js", () => {
+  return {
+    loadGlobalConfig: vi.fn(),
+    saveGlobalConfig: vi.fn(),
+  };
+});
+
+import { loadGlobalConfig, saveGlobalConfig } from "../src/config.js";
+import {
+  swsTokenStatus,
+  swsLogout,
+  findChromePath,
+  swsListScreeners,
+  decodeJwtExp,
+} from "../src/services/sws.service.js";
+
+const mockLoadGlobalConfig = loadGlobalConfig as ReturnType<typeof vi.fn>;
+const mockSaveGlobalConfig = saveGlobalConfig as ReturnType<typeof vi.fn>;
+
+vDescribe("swsTokenStatus", () => {
+  vBeforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  vIt("returns invalid when no token configured", async () => {
+    mockLoadGlobalConfig.mockResolvedValue({ sws: undefined });
+
+    const status = await swsTokenStatus();
+
+    vExpect(status.configured).toBe(false);
+    vExpect(status.valid).toBe(false);
+  });
+
+  vIt("returns valid when token exists and not expired", async () => {
+    // Create a JWT with exp 1 hour in the future
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ exp: futureExp, sub: "user123" })).toString("base64url");
+    const fakeToken = `${header}.${payload}.fakesig`;
+
+    mockLoadGlobalConfig.mockResolvedValue({
+      sws: { auth_token: fakeToken, token_expires_at: new Date(futureExp * 1000).toISOString() },
+    });
+
+    const status = await swsTokenStatus();
+
+    vExpect(status.configured).toBe(true);
+    vExpect(status.valid).toBe(true);
+  });
+
+  vIt("returns invalid when token is expired", async () => {
+    // Create a JWT with exp in the past
+    const pastExp = Math.floor(Date.now() / 1000) - 3600;
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ exp: pastExp, sub: "user123" })).toString("base64url");
+    const fakeToken = `${header}.${payload}.fakesig`;
+
+    mockLoadGlobalConfig.mockResolvedValue({
+      sws: { auth_token: fakeToken, token_expires_at: new Date(pastExp * 1000).toISOString() },
+    });
+
+    const status = await swsTokenStatus();
+
+    vExpect(status.configured).toBe(true);
+    vExpect(status.valid).toBe(false);
+    vExpect(status.reason).toMatch(/expired/i);
+  });
+});
+
+vDescribe("swsLogout", () => {
+  vBeforeEach(() => {
+    vi.clearAllMocks();
+    mockSaveGlobalConfig.mockResolvedValue(undefined);
+  });
+
+  vIt("removes sws key from config", async () => {
+    const config = {
+      sws: { auth_token: "some-token", token_expires_at: "2026-01-01T00:00:00Z" },
+      broker: { provider: "manual", mode: "paper" },
+      telegram: { enabled: false },
+    };
+    mockLoadGlobalConfig.mockResolvedValue({ ...config });
+
+    await swsLogout();
+
+    vExpect(mockSaveGlobalConfig).toHaveBeenCalledOnce();
+    const savedConfig = mockSaveGlobalConfig.mock.calls[0][0] as Record<string, unknown>;
+    vExpect(savedConfig["sws"]).toBeUndefined();
+  });
+});
+
+vDescribe("findChromePath", () => {
+  vIt("returns CHROME_PATH env var when set", () => {
+    const original = process.env["CHROME_PATH"];
+    process.env["CHROME_PATH"] = "/custom/path/to/chrome";
+    try {
+      const result = findChromePath();
+      vExpect(result).toBe("/custom/path/to/chrome");
+    } finally {
+      if (original === undefined) {
+        delete process.env["CHROME_PATH"];
+      } else {
+        process.env["CHROME_PATH"] = original;
+      }
+    }
+  });
+});
+
+vDescribe("swsListScreeners", () => {
+  vIt("returns non-empty array with slug, id, description", () => {
+    const screeners = swsListScreeners();
+
+    vExpect(screeners.length).toBeGreaterThan(0);
+
+    for (const screener of screeners) {
+      vExpect(typeof screener.slug).toBe("string");
+      vExpect(screener.slug.length).toBeGreaterThan(0);
+      vExpect(typeof screener.id).toBe("string");
+      vExpect(screener.id.length).toBeGreaterThan(0);
+      vExpect(typeof screener.description).toBe("string");
+      vExpect(screener.description.length).toBeGreaterThan(0);
+    }
+  });
+});
