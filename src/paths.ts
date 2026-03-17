@@ -45,6 +45,7 @@ export const MCP_SERVERS = {
   brokerAlpaca: join(__dirname, "mcp", IS_DEV ? "broker-alpaca.ts" : "broker-alpaca.js"),
   marketData: join(__dirname, "mcp", IS_DEV ? "market-data.ts" : "market-data.js"),
   telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
+  sws: join(__dirname, "mcp", IS_DEV ? "sws.ts" : "sws.js"),
 };
 
 /** Command to run MCP server files (tsx for .ts in dev, node for .js in prod) */
