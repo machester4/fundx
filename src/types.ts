@@ -184,6 +184,12 @@ export const globalConfigSchema = z.object({
       fmp_api_key: z.string().optional(),
     })
     .default({}),
+  sws: z
+    .object({
+      auth_token: z.string().optional(),
+      token_expires_at: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
@@ -507,3 +513,86 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
 });
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
+
+// ── SWS (Simply Wall St) Schemas ──────────────────────────────
+
+export const swsSnowflakeSchema = z.object({
+  value: z.number(),
+  future: z.number(),
+  health: z.number(),
+  past: z.number(),
+  dividend: z.number(),
+});
+
+export type SwsSnowflake = z.infer<typeof swsSnowflakeSchema>;
+
+export const swsCompanySchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  tickerSymbol: z.string(),
+  uniqueSymbol: z.string(),
+  exchangeSymbol: z.string(),
+  score: swsSnowflakeSchema,
+  primaryIndustry: z.object({
+    id: z.number(),
+    name: z.string(),
+    slug: z.string(),
+  }),
+  analysisValue: z
+    .object({
+      return1d: z.number().nullable().optional(),
+      return7d: z.number().nullable().optional(),
+      return1yAbs: z.number().nullable().optional(),
+      marketCap: z.number().nullable().optional(),
+      lastSharePrice: z.number().nullable().optional(),
+      priceTarget: z.number().nullable().optional(),
+      pe: z.number().nullable().optional(),
+      pb: z.number().nullable().optional(),
+      priceToSales: z.number().nullable().optional(),
+    })
+    .optional(),
+  analysisFuture: z
+    .object({
+      netIncomeGrowth3Y: z.number().nullable().optional(),
+      netIncomeGrowthAnnual: z.number().nullable().optional(),
+      revenueGrowthAnnual: z.number().nullable().optional(),
+    })
+    .optional(),
+  analysisDividend: z
+    .object({
+      dividendYield: z.number().nullable().optional(),
+    })
+    .optional(),
+  analysisMisc: z
+    .object({
+      analystCount: z.number().nullable().optional(),
+    })
+    .optional(),
+  info: z
+    .object({
+      shortDescription: z.string().nullable().optional(),
+      logoUrl: z.string().nullable().optional(),
+      yearFounded: z.number().nullable().optional(),
+    })
+    .optional(),
+});
+
+export type SwsCompany = z.infer<typeof swsCompanySchema>;
+
+export const swsScreenerResultSchema = z.object({
+  totalHits: z.number(),
+  companies: z.array(swsCompanySchema).default([]),
+});
+
+export type SwsScreenerResult = z.infer<typeof swsScreenerResultSchema>;
+
+export const swsSearchResultSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  tickerSymbol: z.string(),
+  uniqueSymbol: z.string(),
+  exchangeSymbol: z.string(),
+  score: swsSnowflakeSchema.optional(),
+});
+
+export type SwsSearchResult = z.infer<typeof swsSearchResultSchema>;
