@@ -648,13 +648,23 @@ export async function buildChatMcpServers(
   if (globalConfig.market_data?.fmp_api_key) marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
   marketDataEnv.ALPACA_MODE = globalConfig.broker.mode ?? "paper";
 
-  return {
+  const servers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
     "market-data": {
       command: MCP_COMMAND,
       args: [MCP_SERVERS.marketData],
       env: marketDataEnv,
     },
   };
+
+  if (globalConfig.sws?.auth_token) {
+    servers["sws"] = {
+      command: MCP_COMMAND,
+      args: [MCP_SERVERS.sws],
+      env: { SWS_AUTH_TOKEN: globalConfig.sws.auth_token },
+    };
+  }
+
+  return servers;
 }
 
 /** Complete fund initialization after Claude has written a fund_config.yaml.

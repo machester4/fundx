@@ -132,6 +132,15 @@ export async function buildMcpServers(
     };
   }
 
+  // Conditionally add SWS (Simply Wall St) — globally available if token is set
+  if (globalConfig.sws?.auth_token) {
+    servers["sws"] = {
+      command: MCP_COMMAND,
+      args: [MCP_SERVERS.sws],
+      env: { SWS_AUTH_TOKEN: globalConfig.sws.auth_token },
+    };
+  }
+
   return servers;
 }
 
