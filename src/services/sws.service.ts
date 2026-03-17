@@ -179,33 +179,40 @@ export async function swsLogin(): Promise<{ token: string; expiresAt: string }> 
     throw new Error("Chrome not found. Set CHROME_PATH environment variable or install Chrome.");
   }
 
-  // Use the user's real Chrome profile so SWS sees an already-authenticated browser.
-  // If the user is already logged in, the auth cookie is captured immediately.
-  // Chrome must be closed — only one instance can use a profile at a time.
-  const chromeProfileDir = getChromeProfileDir();
-
   // Dynamic import to avoid loading puppeteer-core unless needed
   const puppeteer = await import("puppeteer-core");
 
+  // Strategy: try user's real Chrome profile first (may already be logged in).
+  // If Chrome is running (profile locked), fall back to a persistent FundX profile.
+  const launchArgs = {
+    executablePath: chromePath,
+    headless: false as const,
+    args: [
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-blink-features=AutomationControlled",
+    ],
+    ignoreDefaultArgs: ["--enable-automation"],
+  };
+
   let browser;
+  let usingFallbackProfile = false;
+
   try {
     browser = await puppeteer.launch({
-      executablePath: chromePath,
-      headless: false,
-      userDataDir: chromeProfileDir,
-      args: [
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-blink-features=AutomationControlled",
-      ],
-      ignoreDefaultArgs: ["--enable-automation"],
+      ...launchArgs,
+      userDataDir: getChromeProfileDir(),
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("user data directory is already in use") || msg.includes("already running")) {
-      throw new Error("Close Chrome first — only one instance can use the profile at a time. Then re-run `fundx sws login`.");
-    }
-    throw err;
+  } catch {
+    // Chrome is probably running — fall back to a separate persistent profile
+    const { mkdir } = await import("node:fs/promises");
+    const fallbackDir = join(homedir(), ".fundx", "chrome-profile");
+    await mkdir(fallbackDir, { recursive: true });
+    browser = await puppeteer.launch({
+      ...launchArgs,
+      userDataDir: fallbackDir,
+    });
+    usingFallbackProfile = true;
   }
 
   let disconnected = false;
