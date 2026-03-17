@@ -1,5 +1,7 @@
-import { platform } from "node:os";
+import { homedir, platform } from "node:os";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { loadGlobalConfig, saveGlobalConfig } from "../config.js";
 import type {
   SwsSnowflake,
@@ -161,13 +163,24 @@ export async function swsLogin(): Promise<{ token: string; expiresAt: string }> 
     throw new Error("Chrome not found. Set CHROME_PATH environment variable or install Chrome.");
   }
 
+  // Persistent profile so SWS remembers previous sessions and doesn't flag as bot
+  const userDataDir = join(homedir(), ".fundx", "chrome-profile");
+  await mkdir(userDataDir, { recursive: true });
+
   // Dynamic import to avoid loading puppeteer-core unless needed
   const puppeteer = await import("puppeteer-core");
 
   const browser = await puppeteer.launch({
     executablePath: chromePath,
     headless: false,
-    args: ["--no-first-run", "--no-default-browser-check"],
+    userDataDir,
+    args: [
+      "--no-first-run",
+      "--no-default-browser-check",
+      // Anti-bot detection flags
+      "--disable-blink-features=AutomationControlled",
+    ],
+    ignoreDefaultArgs: ["--enable-automation"],
   });
 
   let disconnected = false;
@@ -175,6 +188,12 @@ export async function swsLogin(): Promise<{ token: string; expiresAt: string }> 
 
   try {
     const page = await browser.newPage();
+
+    // Remove navigator.webdriver flag that sites use to detect automation
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    });
+
     await page.goto("https://simplywall.st/login", { waitUntil: "networkidle2" });
 
     const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
