@@ -11,20 +11,18 @@ import {
   swsScreenerResultSchema,
   swsSnowflakeSchema,
   swsCompanySchema,
+  swsSearchResultSchema,
 } from "../types.js";
 import { z } from "zod";
 
 // ── Constants ─────────────────────────────────────────────────
 
-export const SWS_GRAPHQL_URL = "https://simplywall.st/api/gql";
+export const SWS_GRAPHQL_URL = "https://simplywall.st/graphql";
 
-export const SWS_HEADERS = {
-  "Content-Type": "application/json",
-  Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  Origin: "https://simplywall.st",
-  Referer: "https://simplywall.st/",
+export const SWS_HEADERS: Record<string, string> = {
+  "accept": "*/*",
+  "apollographql-client-name": "web",
+  "content-type": "application/json",
 };
 
 export const CHROME_PATHS: Record<string, string[]> = {
@@ -51,62 +49,16 @@ export const CHROME_PATHS: Record<string, string[]> = {
 
 export interface SwsScreenerEntry {
   slug: string;
-  id: string;
+  id: number;
   description: string;
 }
 
-export const SWS_SCREENERS: SwsScreenerEntry[] = [
-  {
-    slug: "top-dividend-stocks",
-    id: "top-dividend-stocks",
-    description: "High dividend yield stocks with strong dividend history",
-  },
-  {
-    slug: "undervalued-stocks",
-    id: "undervalued-stocks",
-    description: "Stocks trading below their estimated fair value",
-  },
-  {
-    slug: "high-growth-stocks",
-    id: "high-growth-stocks",
-    description: "Companies with high projected earnings and revenue growth",
-  },
-  {
-    slug: "tech-stocks",
-    id: "tech-stocks",
-    description: "Technology sector companies",
-  },
-  {
-    slug: "small-cap-stocks",
-    id: "small-cap-stocks",
-    description: "Small capitalization companies with growth potential",
-  },
-  {
-    slug: "large-cap-stocks",
-    id: "large-cap-stocks",
-    description: "Large capitalization blue-chip stocks",
-  },
-  {
-    slug: "financial-stocks",
-    id: "financial-stocks",
-    description: "Banking, insurance, and financial services companies",
-  },
-  {
-    slug: "healthcare-stocks",
-    id: "healthcare-stocks",
-    description: "Healthcare, pharmaceuticals, and biotech companies",
-  },
-  {
-    slug: "income-stocks",
-    id: "income-stocks",
-    description: "Income-generating stocks with stable cash flows",
-  },
-  {
-    slug: "penny-stocks",
-    id: "penny-stocks",
-    description: "Low-price stocks with speculative potential",
-  },
-];
+const SWS_SCREENERS_MAP: Record<string, { id: number; description: string }> = {
+  "undiscovered-gems":  { id: 152, description: "Undiscovered gems with strong fundamentals" },
+  "high-growth-tech":   { id: 148, description: "High growth tech stocks" },
+  "dividend-champions": { id: 155, description: "Reliable dividend payers" },
+  "undervalued-large":  { id: 142, description: "Undervalued large caps" },
+};
 
 // ── Error classes ─────────────────────────────────────────────
 
@@ -173,52 +125,41 @@ export function decodeJwtExp(token: string): number | undefined {
 // ── Token management ──────────────────────────────────────────
 
 export interface SwsTokenStatus {
-  configured: boolean;
   valid: boolean;
-  expiresAt?: string;
-  reason?: string;
+  expiresAt: string | null;
+  expiresInHours: number | null;
 }
 
 /** Return the current SWS token status without throwing */
 export async function swsTokenStatus(): Promise<SwsTokenStatus> {
   try {
     const config = await loadGlobalConfig();
+    const token = config.sws?.auth_token;
+    const expiresAt = config.sws?.token_expires_at ?? null;
 
-    if (!config.sws?.auth_token) {
-      return { configured: false, valid: false, reason: "No token configured" };
+    if (!token || !expiresAt) {
+      return { valid: false, expiresAt: null, expiresInHours: null };
     }
 
-    const token = config.sws.auth_token;
-    const exp = decodeJwtExp(token);
-
-    if (exp === undefined) {
-      // Token exists but we can't decode expiry — assume valid
-      return { configured: true, valid: true };
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    if (exp <= now) {
-      return {
-        configured: true,
-        valid: false,
-        expiresAt: config.sws.token_expires_at,
-        reason: "Token expired",
-      };
-    }
+    const expiryDate = new Date(expiresAt);
+    const hoursLeft = (expiryDate.getTime() - Date.now()) / (1000 * 60 * 60);
 
     return {
-      configured: true,
-      valid: true,
-      expiresAt: config.sws.token_expires_at,
+      valid: hoursLeft > 0,
+      expiresAt,
+      expiresInHours: Math.max(0, hoursLeft),
     };
   } catch {
-    return { configured: false, valid: false, reason: "Failed to load config" };
+    return { valid: false, expiresAt: null, expiresInHours: null };
   }
 }
 
 /** Launch a browser, navigate to SWS login, capture auth cookie, save token to config */
-export async function swsLogin(): Promise<void> {
+export async function swsLogin(): Promise<{ token: string; expiresAt: string }> {
   const chromePath = findChromePath();
+  if (!chromePath) {
+    throw new Error("Chrome not found. Set CHROME_PATH environment variable or install Chrome.");
+  }
 
   // Dynamic import to avoid loading puppeteer-core unless needed
   const puppeteer = await import("puppeteer-core");
@@ -226,8 +167,11 @@ export async function swsLogin(): Promise<void> {
   const browser = await puppeteer.launch({
     executablePath: chromePath,
     headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: ["--no-first-run", "--no-default-browser-check"],
   });
+
+  let disconnected = false;
+  browser.on("disconnected", () => { disconnected = true; });
 
   try {
     const page = await browser.newPage();
@@ -237,42 +181,39 @@ export async function swsLogin(): Promise<void> {
     const POLL_INTERVAL_MS = 1000;
     const startTime = Date.now();
 
-    let authToken: string | undefined;
+    while (true) {
+      if (disconnected) {
+        throw new Error("Browser closed before login completed.");
+      }
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        throw new Error("Login timed out — try again.");
+      }
 
-    while (Date.now() - startTime < TIMEOUT_MS) {
-      const cookies = await page.cookies();
+      const cookies = await page.cookies("https://simplywall.st");
       const authCookie = cookies.find((c) => c.name === "auth");
 
       if (authCookie?.value) {
         // Auth cookie may be URL-encoded and contain a `|suffix` — extract JWT
         const decoded = decodeURIComponent(authCookie.value);
-        authToken = decoded.split("|")[0];
-        break;
+        const jwtPart = decoded.split("|")[0];
+        const exp = decodeJwtExp(jwtPart);
+        if (!exp) {
+          throw new Error("Failed to decode JWT expiration from auth cookie.");
+        }
+
+        const expiresAt = new Date(exp * 1000).toISOString();
+        const config = await loadGlobalConfig();
+        config.sws = { auth_token: jwtPart, token_expires_at: expiresAt };
+        await saveGlobalConfig(config);
+
+        return { token: jwtPart, expiresAt };
       }
 
       await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
-
-    if (!authToken) {
-      throw new Error("Login timed out — no auth cookie found after 5 minutes.");
-    }
-
-    // Decode exp claim from the JWT
-    const exp = decodeJwtExp(authToken);
-    const expiresAt = exp ? new Date(exp * 1000).toISOString() : undefined;
-
-    const config = await loadGlobalConfig();
-    config.sws = {
-      auth_token: authToken,
-      token_expires_at: expiresAt,
-    };
-    await saveGlobalConfig(config);
   } finally {
-    // Handle browser disconnect gracefully
-    try {
-      await browser.close();
-    } catch {
-      // Already closed or disconnected
+    if (!disconnected) {
+      await browser.close().catch(() => {});
     }
   }
 }
@@ -316,7 +257,7 @@ export async function swsGraphQL<T>(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(5000),
   });
 
   if (!response.ok) {
@@ -335,185 +276,108 @@ export async function swsGraphQL<T>(
 // ── GraphQL queries ───────────────────────────────────────────
 
 export const SCREENER_QUERY = `
-  query ScreenerQuery($id: String!, $offset: Int, $size: Int) {
-    screenResults(id: $id, offset: $offset, size: $size) {
-      totalHits
-      companies {
-        id
-        name
-        tickerSymbol
-        uniqueSymbol
-        exchangeSymbol
-        score {
-          value
-          future
-          health
-          past
-          dividend
-        }
-        primaryIndustry {
-          id
-          name
-          slug
-        }
-        analysisValue {
-          return1d
-          return7d
-          return1yAbs
-          marketCap
-          lastSharePrice
-          priceTarget
-          pe
-          pb
-          priceToSales
-        }
-        analysisFuture {
-          netIncomeGrowth3Y
-          netIncomeGrowthAnnual
-          revenueGrowthAnnual
-        }
-        analysisDividend {
-          dividendYield
-        }
-        analysisMisc {
-          analystCount
-        }
-        info {
-          shortDescription
-          logoUrl
-          yearFounded
-        }
-      }
+query InvestingIdeasStocks($gridViewId: Float!, $limit: Int!, $offset: Int!, $displayRecentlyAddedCompanies: Boolean!, $returnRecentCompaniesOnly: Boolean!, $additionalFilters: [AdditionalScreenerFilter!]) {
+  companyPredefinedScreenerResults(
+    input: {limit: $limit, offset: $offset, gridViewId: $gridViewId, displayRecentlyAddedCompanies: $displayRecentlyAddedCompanies, returnRecentCompaniesOnly: $returnRecentCompaniesOnly, additionalFilters: $additionalFilters}
+  ) {
+    totalHits
+    companies {
+      id name tickerSymbol uniqueSymbol exchangeSymbol
+      primaryIndustry { id slug name }
+      score { dividend future health past value }
+      analysisValue { return1d return7d return1yAbs marketCap lastSharePrice priceTarget pe pb priceToSales }
+      analysisFuture { netIncomeGrowth3Y netIncomeGrowthAnnual revenueGrowthAnnual }
+      analysisDividend { dividendYield }
+      analysisMisc { analystCount }
+      info { shortDescription logoUrl yearFounded }
     }
   }
-`;
+}`;
 
 export const SEARCH_QUERY = `
-  query SearchQuery($query: String!, $size: Int) {
-    searchResults(query: $query, size: $size) {
-      id
-      name
-      tickerSymbol
-      uniqueSymbol
-      exchangeSymbol
-      score {
-        value
-        future
-        health
-        past
-        dividend
-      }
-    }
+query SearchCompanies($query: String!, $limit: Int!) {
+  searchCompanies(query: $query, first: $limit) {
+    id name tickerSymbol uniqueSymbol exchangeSymbol
+    score { dividend future health past value }
   }
-`;
+}`;
 
 export const COMPANY_QUERY = `
-  query CompanyQuery($uniqueSymbol: String!) {
-    company(uniqueSymbol: $uniqueSymbol) {
-      id
-      name
-      tickerSymbol
-      uniqueSymbol
-      exchangeSymbol
-      score {
-        value
-        future
-        health
-        past
-        dividend
-      }
-      primaryIndustry {
-        id
-        name
-        slug
-      }
-      analysisValue {
-        return1d
-        return7d
-        return1yAbs
-        marketCap
-        lastSharePrice
-        priceTarget
-        pe
-        pb
-        priceToSales
-      }
-      analysisFuture {
-        netIncomeGrowth3Y
-        netIncomeGrowthAnnual
-        revenueGrowthAnnual
-      }
-      analysisDividend {
-        dividendYield
-      }
-      analysisMisc {
-        analystCount
-      }
-      info {
-        shortDescription
-        logoUrl
-        yearFounded
-      }
-    }
+query CompanyBySymbol($symbol: String!) {
+  companyByUniqueSymbol(uniqueSymbol: $symbol) {
+    id name tickerSymbol uniqueSymbol exchangeSymbol
+    primaryIndustry { id slug name }
+    score { dividend future health past value }
+    analysisValue { return1d return7d return1yAbs marketCap lastSharePrice priceTarget pe pb priceToSales }
+    analysisFuture { netIncomeGrowth3Y netIncomeGrowthAnnual revenueGrowthAnnual }
+    analysisDividend { dividendYield }
+    analysisMisc { analystCount }
+    info { shortDescription logoUrl yearFounded }
   }
-`;
+}`;
 
 // ── Data functions ────────────────────────────────────────────
 
-/** Run a SWS screener by slug and return the result */
+/** Run a SWS screener by slug or numeric gridViewId */
 export async function swsScreener(
-  slug: string,
-  offset = 0,
-  size = 50,
+  screenerId: string | number,
+  options?: { country?: string; limit?: number; offset?: number },
 ): Promise<SwsScreenerResult> {
-  const schema = z.object({
-    screenResults: swsScreenerResultSchema,
+  const gridViewId = typeof screenerId === "number"
+    ? screenerId
+    : SWS_SCREENERS_MAP[screenerId]?.id;
+  if (gridViewId === undefined) {
+    throw new Error(`Unknown screener: ${screenerId}. Use swsListScreeners() to see available options.`);
+  }
+
+  const variables = {
+    gridViewId,
+    limit: options?.limit ?? 36,
+    offset: options?.offset ?? 0,
+    displayRecentlyAddedCompanies: true,
+    returnRecentCompaniesOnly: false,
+    additionalFilters: [
+      { field: "country_name", operator: "in", logicalCondition: "aor", values: [options?.country ?? "us"] },
+    ],
+  };
+
+  const resultSchema = z.object({
+    companyPredefinedScreenerResults: swsScreenerResultSchema,
   });
 
-  const result = await swsGraphQL(
-    SCREENER_QUERY,
-    { id: slug, offset, size },
-    schema,
-  );
-
-  return {
-    totalHits: result.screenResults.totalHits,
-    companies: result.screenResults.companies ?? [],
-  };
+  const data = await swsGraphQL(SCREENER_QUERY, variables, resultSchema);
+  const result = data.companyPredefinedScreenerResults;
+  return { totalHits: result.totalHits, companies: result.companies ?? [] };
 }
 
 /** Search for a company by name or ticker */
-export async function swsSearchCompany(query: string, size = 10): Promise<SwsSearchResult[]> {
-  const swsSearchResultSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    tickerSymbol: z.string(),
-    uniqueSymbol: z.string(),
-    exchangeSymbol: z.string(),
-    score: swsSnowflakeSchema.optional(),
+export async function swsSearchCompany(query: string, limit = 10): Promise<SwsSearchResult[]> {
+  const resultSchema = z.object({
+    searchCompanies: z.array(swsSearchResultSchema),
   });
 
-  const schema = z.object({
-    searchResults: z.array(swsSearchResultSchema),
-  });
-
-  const result = await swsGraphQL(SEARCH_QUERY, { query, size }, schema);
-  return result.searchResults;
+  const data = await swsGraphQL(SEARCH_QUERY, { query, limit }, resultSchema);
+  return data.searchCompanies;
 }
 
-/** Get the full company analysis + snowflake scores by unique symbol */
-export async function swsCompanyScore(uniqueSymbol: string): Promise<SwsCompany | null> {
-  const schema = z.object({
-    company: swsCompanySchema.nullable(),
+/** Get snowflake scores for a company by unique symbol */
+export async function swsCompanyScore(uniqueSymbol: string): Promise<SwsSnowflake> {
+  const resultSchema = z.object({
+    companyByUniqueSymbol: z.object({ score: swsSnowflakeSchema }),
   });
 
-  const result = await swsGraphQL(COMPANY_QUERY, { uniqueSymbol }, schema);
-  return result.company;
+  const data = await swsGraphQL(COMPANY_QUERY, { symbol: uniqueSymbol }, resultSchema);
+  return data.companyByUniqueSymbol.score;
 }
 
-/** Alias for swsCompanyScore — returns full analysis */
-export async function swsCompanyAnalysis(uniqueSymbol: string): Promise<SwsCompany | null> {
-  return swsCompanyScore(uniqueSymbol);
+/** Get detailed company analysis by unique symbol */
+export async function swsCompanyAnalysis(uniqueSymbol: string): Promise<SwsCompany> {
+  const resultSchema = z.object({
+    companyByUniqueSymbol: swsCompanySchema,
+  });
+
+  const data = await swsGraphQL(COMPANY_QUERY, { symbol: uniqueSymbol }, resultSchema);
+  return data.companyByUniqueSymbol;
 }
 
 /** Enrich portfolio positions with SWS snowflake scores.
@@ -523,16 +387,20 @@ export async function swsEnrichPortfolio(
   symbols: string[],
 ): Promise<Map<string, SwsSnowflake>> {
   const result = new Map<string, SwsSnowflake>();
+  if (symbols.length === 0) return result;
 
   await Promise.all(
-    symbols.map(async (symbol) => {
+    symbols.map(async (ticker) => {
       try {
-        const searchResults = await swsSearchCompany(symbol, 5);
+        const searchResults = await swsSearchCompany(ticker, 5);
         const match = searchResults.find(
-          (r) => r.tickerSymbol.toUpperCase() === symbol.toUpperCase(),
+          (r) => r.tickerSymbol.toUpperCase() === ticker.toUpperCase(),
         );
         if (match?.score) {
-          result.set(symbol, match.score);
+          result.set(ticker, match.score);
+        } else if (match) {
+          const score = await swsCompanyScore(match.uniqueSymbol);
+          result.set(ticker, score);
         }
       } catch {
         // Individual ticker failures don't abort the whole enrichment
@@ -547,5 +415,8 @@ export async function swsEnrichPortfolio(
 
 /** List all available SWS screeners */
 export function swsListScreeners(): SwsScreenerEntry[] {
-  return SWS_SCREENERS.map(({ slug, id, description }) => ({ slug, id, description }));
+  return Object.entries(SWS_SCREENERS_MAP).map(([slug, info]) => ({
+    slug,
+    ...info,
+  }));
 }

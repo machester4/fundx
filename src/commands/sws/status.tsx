@@ -17,8 +17,7 @@ export default function SwsStatus() {
     return <Text color="yellow">SWS not configured. Run `fundx sws login` to authenticate.</Text>;
   }
 
-  const expiresDate = new Date(data.expiresAt);
-  const hoursLeft = (expiresDate.getTime() - Date.now()) / (1000 * 60 * 60);
+  const hoursLeft = data.expiresInHours ?? 0;
   const statusColor = data.valid ? (hoursLeft < 24 ? "yellow" : "green") : "red";
   const statusText = data.valid ? "Valid" : "Expired";
 
@@ -28,7 +27,7 @@ export default function SwsStatus() {
         <Text>Status:</Text>
         <Text color={statusColor} bold>{statusText}</Text>
       </Box>
-      <Text>Expires: {expiresDate.toLocaleString()}</Text>
+      <Text>Expires: {new Date(data.expiresAt).toLocaleString()}</Text>
       {data.valid && <Text>Time remaining: {Math.round(hoursLeft)}h</Text>}
       {!data.valid && <Text color="red">Run `fundx sws login` to renew.</Text>}
     </Box>
