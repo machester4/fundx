@@ -331,6 +331,21 @@ describe("buildMcpServers", () => {
 
     expect(servers["broker-alpaca"].env.FMP_API_KEY).toBeUndefined();
   });
+
+  it("includes sws server when sws token is configured", async () => {
+    mockedGlobalConfig.mockResolvedValue(
+      makeGlobalConfig({ sws: { auth_token: "test-jwt-token" } }) as never,
+    );
+    const servers = await buildMcpServers("test-fund");
+    expect(servers).toHaveProperty("sws");
+    expect(servers.sws.env.SWS_AUTH_TOKEN).toBe("test-jwt-token");
+  });
+
+  it("excludes sws server when no sws token", async () => {
+    mockedGlobalConfig.mockResolvedValue(makeGlobalConfig() as never);
+    const servers = await buildMcpServers("test-fund");
+    expect(servers).not.toHaveProperty("sws");
+  });
 });
 
 // ── runAgentQuery ─────────────────────────────────────────────
