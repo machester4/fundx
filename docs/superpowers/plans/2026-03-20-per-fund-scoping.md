@@ -224,6 +224,8 @@ function formatTimeSince(isoDate: string): string {
   return `${days}d ago`;
 }
 
+// Note: @inkjs/ui Select only accepts string labels, so StatusBadge/PnlText components
+// cannot be used here. Status icons and P&L are formatted as inline strings instead.
 export function FundSelector({ funds, onSelect, label = "Select a fund:" }: FundSelectorProps) {
   if (funds.length === 0) {
     return <Text dimColor>No funds available. Press 'c' to create one.</Text>;
@@ -532,9 +534,11 @@ function FundSelectorScreen({
   onExit: () => void;
   columns: number;
 }) {
-  useInput((input, key) => {
+  useInput((input) => {
     if (input === "q") onExit();
-    // 'c' for create fund could be added here in the future
+    if (input === "c") {
+      // TODO: trigger fund creation flow — for now, print hint
+    }
   });
 
   return (
@@ -568,6 +572,12 @@ function FundDashboardScreen({
   options: { model?: string; readonly: boolean; maxBudget?: string };
 }) {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [chatEmpty, setChatEmpty] = useState(true);
+
+  // Esc to go back (only when chat input is empty)
+  useInput((_input, key) => {
+    if (key.escape && chatEmpty) onBack();
+  });
 
   // Load fund data
   const configAction = useAsyncAction(() => loadFundConfig(fundName), [fundName]);
@@ -714,9 +724,13 @@ In the `startGateway()` function, replace the message handler block (lines 455-4
   // (Previously: bot.on("message:text", ...) with detectFund and handleFreeQuestion)
 ```
 
-- [ ] **Step 2: Add fund validation to `/portfolio` and `/pause` and `/resume` handlers**
+- [ ] **Step 1b: Delete the `bot.on("message:text", ...)` handler (lines 455-495)**
 
-The existing `/portfolio`, `/pause`, and `/resume` handlers already parse `ctx.match` and require a fund name. Add a validation step to each that checks the fund exists:
+Delete the entire block from `bot.on("message:text", ...)` through the closing `});`. This removes auto-detect, dynamic `/<fundname>` commands, `/ask_<fundname>`, and the free-text catch-all handler.
+
+- [ ] **Step 2: Add fund validation to `/portfolio`, `/trades`, `/pause`, and `/resume` handlers**
+
+The existing `/portfolio`, `/trades`, `/pause`, and `/resume` handlers already parse `ctx.match` and require a fund name. Add a validation step to each that checks the fund exists:
 
 After parsing `fundName` in each handler, before calling the handler function, add:
 ```typescript
