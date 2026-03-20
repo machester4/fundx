@@ -11,10 +11,15 @@ vi.mock("node:fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
   readdir: vi.fn().mockResolvedValue([]),
   rm: vi.fn().mockResolvedValue(undefined),
+  stat: vi.fn().mockRejectedValue(new Error("ENOENT")),
 }));
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn().mockReturnValue("node fundx"),
 }));
 
 // Capture cron callbacks by expression without actually scheduling
@@ -43,6 +48,7 @@ vi.mock("../src/services/session.service.js", () => ({
 vi.mock("../src/services/gateway.service.js", () => ({
   startGateway: vi.fn().mockResolvedValue(undefined),
   stopGateway: vi.fn().mockResolvedValue(undefined),
+  sendTelegramNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/services/special-sessions.service.js", () => ({
@@ -80,11 +86,19 @@ vi.mock("../src/state.js", () => ({
     positions: [],
   }),
   writePortfolio: vi.fn().mockResolvedValue(undefined),
+  readSessionHistory: vi.fn().mockResolvedValue({}),
+  writeSessionHistory: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/journal.js", () => ({
   openJournal: vi.fn().mockReturnValue({ close: vi.fn() }),
   insertTrade: vi.fn().mockReturnValue(1),
+}));
+
+vi.mock("../src/lock.js", () => ({
+  acquireFundLock: vi.fn().mockResolvedValue(true),
+  releaseFundLock: vi.fn().mockResolvedValue(undefined),
+  withTimeout: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
 // Import after mocks
@@ -110,6 +124,30 @@ vi.spyOn(process, "on").mockImplementation(((event: string, fn: (...args: unknow
 afterAll(() => {
   exitSpy.mockRestore();
 });
+
+// Shared test helper
+const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
+  fundConfigSchema.parse({
+    fund: {
+      name: "test-fund",
+      display_name: "Test Fund",
+      description: "Test",
+      created: "2026-01-01",
+      status: "active",
+    },
+    capital: { initial: 50000, currency: "USD" },
+    objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
+    risk: { profile: "conservative", stop_loss_pct: 8 },
+    universe: { allowed: [] },
+    schedule: {
+      trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
+      sessions: {
+        pre_market: { time: "09:00", enabled: true, focus: "Morning" },
+      },
+    },
+    broker: { provider: "alpaca", mode: "paper" },
+    ...overrides,
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -141,29 +179,6 @@ describe("daemon module", () => {
 // ── Cron callback behavior ───────────────────────────────────────
 
 describe("daemon cron callback", () => {
-  const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
-    fundConfigSchema.parse({
-      fund: {
-        name: "test-fund",
-        display_name: "Test Fund",
-        description: "Test",
-        created: "2026-01-01",
-        status: "active",
-      },
-      capital: { initial: 50000, currency: "USD" },
-      objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
-      risk: { profile: "conservative", stop_loss_pct: 8 },
-      universe: { allowed: [] },
-      schedule: {
-        trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
-        sessions: {
-          pre_market: { time: "09:00", enabled: true, focus: "Morning" },
-        },
-      },
-      broker: { provider: "alpaca", mode: "paper" },
-      ...overrides,
-    });
-
   beforeEach(async () => {
     vi.clearAllMocks();
     capturedCronCallback = null;
