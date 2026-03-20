@@ -137,6 +137,79 @@ export async function updateHeartbeat(fundsChecked: number): Promise<void> {
   await writeFile(DAEMON_HEARTBEAT, JSON.stringify(data), "utf-8").catch(() => {});
 }
 
+// ── Log Rotation ─────────────────────────────────────────────
+
+/** Rotate daemon log file if it exceeds max size */
+export async function rotateLogIfNeeded(): Promise<void> {
+  try {
+    const logStat = await stat(DAEMON_LOG);
+    if (logStat.size <= DAEMON_LOG_MAX_SIZE) return;
+
+    // Shift existing rotated logs: .2→.3, .1→.2
+    for (let i = DAEMON_LOG_MAX_FILES - 1; i >= 1; i--) {
+      const from = `${DAEMON_LOG}.${i}`;
+      const to = `${DAEMON_LOG}.${i + 1}`;
+      await rename(from, to).catch(() => {});
+    }
+
+    // Rename current log to .1
+    await rename(DAEMON_LOG, `${DAEMON_LOG}.1`).catch(() => {});
+
+    // Truncate current log (create empty)
+    await writeFile(DAEMON_LOG, "", "utf-8");
+
+    await log("Log rotated");
+  } catch {
+    // stat failed (ENOENT) — nothing to rotate
+  }
+}
+
+// ── Notifications & Error Tracking ──────────────────────────
+
+const lastAlertByType = new Map<string, number>();
+const ALERT_DEDUP_MS = 30 * 60 * 1000; // 30 minutes
+
+/** Send a daemon event notification (deduped, best-effort Telegram) */
+export async function notifyDaemonEvent(event: string, details: string): Promise<void> {
+  const now = Date.now();
+  const lastSent = lastAlertByType.get(event) ?? 0;
+  if (now - lastSent < ALERT_DEDUP_MS) return;
+
+  lastAlertByType.set(event, now);
+  await log(`[ALERT] ${event}: ${details}`);
+
+  // Best-effort Telegram notification
+  try {
+    const { sendTelegramNotification } = await import("./gateway.service.js");
+    await sendTelegramNotification(`<b>[Daemon]</b> ${event}\n${details}`);
+  } catch {
+    // Telegram not available — already logged
+  }
+}
+
+// Error tracking: consecutive failures per fund:errorType
+const errorCounts = new Map<string, number>();
+
+/** Track a consecutive error for a fund operation */
+export function trackError(fundName: string, errorType: string, error: unknown): void {
+  const key = `${fundName}:${errorType}`;
+  const count = (errorCounts.get(key) ?? 0) + 1;
+  errorCounts.set(key, count);
+  log(`Error [${key}] (${count}x): ${error}`).catch(() => {});
+  if (count === 3) {
+    notifyDaemonEvent(
+      `Repeated failure: ${fundName}/${errorType}`,
+      `Failed ${count} consecutive times. Last error: ${error}`,
+    ).catch(() => {});
+  }
+}
+
+/** Clear error counter on success */
+export function clearError(fundName: string, errorType: string): void {
+  const key = `${fundName}:${errorType}`;
+  errorCounts.delete(key);
+}
+
 async function checkSwsTokenExpiry(): Promise<void> {
   const config = await loadGlobalConfig();
   const expiresAt = config.sws?.token_expires_at;
@@ -174,6 +247,8 @@ export async function startDaemon(): Promise<void> {
   // Defensively stop gateway before starting
   await stopGateway().catch(() => {});
   await startGateway();
+
+  await rotateLogIfNeeded();
 
   cron.schedule("* * * * *", async () => {
     const names = await listFundNames();
