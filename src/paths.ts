@@ -19,6 +19,18 @@ export const DAEMON_PID = join(WORKSPACE, "daemon.pid");
 /** Daemon log file */
 export const DAEMON_LOG = join(WORKSPACE, "daemon.log");
 
+/** Supervisor PID file */
+export const SUPERVISOR_PID = join(WORKSPACE, "supervisor.pid");
+
+/** Daemon heartbeat file */
+export const DAEMON_HEARTBEAT = join(WORKSPACE, "daemon.heartbeat");
+
+/** Max daemon log size before rotation (5 MB) */
+export const DAEMON_LOG_MAX_SIZE = 5 * 1024 * 1024;
+
+/** Max number of rotated log files to keep */
+export const DAEMON_LOG_MAX_FILES = 3;
+
 /** Shared directory */
 export const SHARED_DIR = join(WORKSPACE, "shared");
 
@@ -72,6 +84,8 @@ export function fundPaths(fundName: string) {
       sessionLog: join(root, "state", "session_log.json"),
       activeSession: join(root, "state", "active_session.json"),
       chatHistory: join(root, "state", "chat_history.json"),
+      sessionHistory: join(root, "state", "session_history.json"),
+      lock: join(root, "state", ".lock"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),
