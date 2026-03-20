@@ -1,8 +1,15 @@
-import { writeFile, readFile, appendFile, unlink } from "node:fs/promises";
+import { writeFile, readFile, appendFile, unlink, stat, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import cron from "node-cron";
-import { DAEMON_PID, DAEMON_LOG } from "../paths.js";
+import {
+  DAEMON_PID,
+  DAEMON_LOG,
+  SUPERVISOR_PID,
+  DAEMON_HEARTBEAT,
+  DAEMON_LOG_MAX_SIZE,
+  DAEMON_LOG_MAX_FILES,
+} from "../paths.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
 import { startGateway, stopGateway } from "./gateway.service.js";
@@ -23,6 +30,8 @@ const MARKET_OPEN_MINUTE = 30;
 const MARKET_CLOSE_HOUR = 16;
 const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
 
+const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
+
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
@@ -30,12 +39,91 @@ async function log(message: string): Promise<void> {
   await appendFile(DAEMON_LOG, line, "utf-8").catch(() => {});
 }
 
-/** Check if daemon is already running */
+// ── PID Helpers ──────────────────────────────────────────────
+
+interface PidInfo {
+  pid: number;
+  startedAt?: string;
+  version?: string;
+}
+
+/** Parse PID file content — supports JSON format and legacy plain-text */
+function parsePidFile(content: string): PidInfo | null {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed.pid === "number") return parsed as PidInfo;
+    } catch {
+      return null;
+    }
+  }
+  // Legacy plain-text fallback
+  const pid = parseInt(trimmed, 10);
+  return isNaN(pid) ? null : { pid };
+}
+
+/** Read and return the daemon PID from the JSON PID file (with legacy fallback) */
+export async function getDaemonPid(): Promise<number | null> {
+  if (!existsSync(DAEMON_PID)) return null;
+  try {
+    const content = await readFile(DAEMON_PID, "utf-8");
+    const info = parsePidFile(content);
+    return info?.pid ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if daemon is already running (robust version) */
 export async function isDaemonRunning(): Promise<boolean> {
   if (!existsSync(DAEMON_PID)) return false;
+
   try {
-    const pid = parseInt(await readFile(DAEMON_PID, "utf-8"), 10);
-    process.kill(pid, 0);
+    const content = await readFile(DAEMON_PID, "utf-8");
+    const info = parsePidFile(content);
+    if (!info) {
+      await unlink(DAEMON_PID).catch(() => {});
+      return false;
+    }
+
+    // Check process exists
+    try {
+      process.kill(info.pid, 0);
+    } catch {
+      await unlink(DAEMON_PID).catch(() => {});
+      return false;
+    }
+
+    // Best-effort: verify process is fundx
+    try {
+      const output = execFileSync("ps", ["-p", String(info.pid), "-o", "command="], {
+        encoding: "utf-8",
+        timeout: 2000,
+      });
+      const cmd = output.trim().toLowerCase();
+      if (cmd && !cmd.includes("fundx") && !cmd.includes("node") && !cmd.includes("tsx")) {
+        await unlink(DAEMON_PID).catch(() => {});
+        return false;
+      }
+    } catch {
+      // ps failed — skip verification, don't treat as not running
+    }
+
+    // Check heartbeat freshness
+    try {
+      const hbStat = await stat(DAEMON_HEARTBEAT);
+      const age = Date.now() - hbStat.mtimeMs;
+      if (age > HEARTBEAT_STALE_MS) {
+        await log(`Daemon heartbeat stale (${Math.round(age / 1000)}s old), treating as hung`);
+        await unlink(DAEMON_PID).catch(() => {});
+        await unlink(DAEMON_HEARTBEAT).catch(() => {});
+        return false;
+      }
+    } catch {
+      // No heartbeat file — don't fail, could be newly started
+    }
+
     return true;
   } catch {
     await unlink(DAEMON_PID).catch(() => {});
@@ -43,15 +131,10 @@ export async function isDaemonRunning(): Promise<boolean> {
   }
 }
 
-/** Spawn a detached background daemon process (auto-start from dashboard) */
-export async function forkDaemon(): Promise<void> {
-  if (await isDaemonRunning()) return;
-  const child = spawn(
-    process.execPath,
-    [...process.execArgv, process.argv[1]!, "--_daemon-mode"],
-    { detached: true, stdio: "ignore" },
-  );
-  child.unref();
+/** Write heartbeat with timestamp and fund count */
+export async function updateHeartbeat(fundsChecked: number): Promise<void> {
+  const data = { timestamp: new Date().toISOString(), fundsChecked };
+  await writeFile(DAEMON_HEARTBEAT, JSON.stringify(data), "utf-8").catch(() => {});
 }
 
 async function checkSwsTokenExpiry(): Promise<void> {
@@ -82,9 +165,14 @@ export async function startDaemon(): Promise<void> {
     throw new Error("Daemon is already running.");
   }
 
-  await writeFile(DAEMON_PID, String(process.pid), "utf-8");
+  // Write JSON PID file
+  const pidInfo = { pid: process.pid, startedAt: new Date().toISOString(), version: "0.1.0" };
+  await writeFile(DAEMON_PID, JSON.stringify(pidInfo), "utf-8");
+  await updateHeartbeat(0);
   await log(`Daemon started (PID ${process.pid})`);
 
+  // Defensively stop gateway before starting
+  await stopGateway().catch(() => {});
   await startGateway();
 
   cron.schedule("* * * * *", async () => {
@@ -197,21 +285,36 @@ export async function startDaemon(): Promise<void> {
 async function cleanup() {
   await stopGateway();
   await unlink(DAEMON_PID).catch(() => {});
+  await unlink(DAEMON_HEARTBEAT).catch(() => {});
   await log("Daemon stopped.");
   process.exit(0);
 }
 
-/** Stop the daemon */
-export async function stopDaemon(): Promise<{ stopped: boolean; pid?: number }> {
-  if (!existsSync(DAEMON_PID)) {
-    return { stopped: false };
+/** Stop the supervisor (or daemon). Reads SUPERVISOR_PID first, falls back to DAEMON_PID. */
+export async function stopSupervisor(): Promise<{ stopped: boolean; pid?: number }> {
+  // Try supervisor PID first, then daemon PID
+  for (const pidFile of [SUPERVISOR_PID, DAEMON_PID]) {
+    if (!existsSync(pidFile)) continue;
+    try {
+      const content = await readFile(pidFile, "utf-8");
+      const info = parsePidFile(content);
+      if (!info) {
+        await unlink(pidFile).catch(() => {});
+        continue;
+      }
+      process.kill(info.pid, "SIGTERM");
+      return { stopped: true, pid: info.pid };
+    } catch {
+      await unlink(pidFile).catch(() => {});
+    }
   }
-  try {
-    const pid = parseInt(await readFile(DAEMON_PID, "utf-8"), 10);
-    process.kill(pid, "SIGTERM");
-    return { stopped: true, pid };
-  } catch {
-    await unlink(DAEMON_PID).catch(() => {});
-    return { stopped: false };
-  }
+  return { stopped: false };
+}
+
+/** Stop the daemon (alias for stopSupervisor) */
+export const stopDaemon = stopSupervisor;
+
+/** @deprecated Will be replaced by forkSupervisor() in supervisor module */
+export async function forkDaemon(): Promise<void> {
+  // No-op stub — supervisor replaces this
 }
