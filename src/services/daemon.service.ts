@@ -19,6 +19,7 @@ import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
+import { readSessionHistory } from "../state.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -236,6 +237,111 @@ async function checkSwsTokenExpiry(): Promise<void> {
   }
 }
 
+// ── Missed Session Catch-up ──────────────────────────────────
+
+const CATCHUP_TOLERANCE_MS = 60 * 60 * 1000; // 60 minutes
+
+/** Get the timezone offset in ms for a given IANA timezone (relative to UTC) */
+function getTimezoneOffsetMs(tz: string): number {
+  const now = new Date();
+  const utcStr = now.toLocaleString("en-US", { timeZone: "UTC" });
+  const tzStr = now.toLocaleString("en-US", { timeZone: tz });
+  return new Date(tzStr).getTime() - new Date(utcStr).getTime();
+}
+
+/**
+ * Check for missed sessions and run catch-up for the most recent one per fund.
+ * Called on daemon startup to recover from downtime.
+ */
+export async function checkMissedSessions(): Promise<void> {
+  const names = await listFundNames();
+  const now = Date.now();
+
+  for (const name of names) {
+    try {
+      const config = await loadFundConfig(name);
+      if (config.fund.status !== "active") continue;
+
+      const history = await readSessionHistory(name);
+      const tz = config.schedule.timezone || "UTC";
+      const offsetMs = getTimezoneOffsetMs(tz);
+
+      // Find the most recent missed session (only one per fund)
+      let bestMissed: { sessionType: string; scheduledAt: number; focus: string } | null = null;
+
+      for (const [sessionType, session] of Object.entries(config.schedule.sessions)) {
+        if (!session.enabled) continue;
+
+        const lastRun = history[sessionType];
+        const lastRunMs = lastRun ? new Date(lastRun).getTime() : 0;
+
+        // Parse session time (HH:MM) into today's date in the fund's timezone
+        const [hourStr, minStr] = session.time.split(":");
+        const hour = parseInt(hourStr!, 10);
+        const min = parseInt(minStr!, 10);
+
+        // Build today's scheduled time in UTC
+        const todayUtc = new Date(now);
+        todayUtc.setUTCHours(0, 0, 0, 0);
+        const scheduledMs = todayUtc.getTime() + (hour * 60 + min) * 60 * 1000 - offsetMs;
+
+        // Check if today is a trading day
+        const scheduledDate = new Date(scheduledMs);
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          weekday: "short",
+        }).formatToParts(scheduledDate);
+        const days: Record<string, string> = { Sun: "SUN", Mon: "MON", Tue: "TUE", Wed: "WED", Thu: "THU", Fri: "FRI", Sat: "SAT" };
+        const dayStr = days[parts.find((p) => p.type === "weekday")!.value] ?? "SUN";
+        if (!config.schedule.trading_days.includes(dayStr as never)) continue;
+
+        // Check if session was missed: scheduled time is in the past, within tolerance, and not already run
+        if (
+          scheduledMs < now &&
+          now - scheduledMs <= CATCHUP_TOLERANCE_MS &&
+          lastRunMs < scheduledMs
+        ) {
+          if (!bestMissed || scheduledMs > bestMissed.scheduledAt) {
+            bestMissed = { sessionType, scheduledAt: scheduledMs, focus: session.focus };
+          }
+        }
+      }
+
+      if (!bestMissed) continue;
+
+      // Try to run catch-up
+      const locked = await acquireFundLock(name, `catchup_${bestMissed.sessionType}`);
+      if (!locked) {
+        await log(`Skipping catch-up for '${name}/${bestMissed.sessionType}' (lock held)`);
+        continue;
+      }
+
+      try {
+        const catchupType = `catchup_${bestMissed.sessionType}`;
+        await log(`Running catch-up session for '${name}': ${bestMissed.sessionType} (missed by ${Math.round((now - bestMissed.scheduledAt) / 60000)}min)`);
+
+        await notifyDaemonEvent(
+          `Missed session: ${name}/${bestMissed.sessionType}`,
+          `Catching up — was scheduled ${Math.round((now - bestMissed.scheduledAt) / 60000)} minutes ago`,
+        );
+
+        await withTimeout(
+          runFundSession(name, catchupType, {
+            focus: `[CATCH-UP] ${bestMissed.focus} — This is a retroactive session; the daemon was down when it was scheduled.`,
+          }),
+          SESSION_TIMEOUT_MS,
+        );
+      } catch (err) {
+        await log(`Catch-up session error (${name}/${bestMissed.sessionType}): ${err}`);
+      } finally {
+        await releaseFundLock(name);
+      }
+    } catch (err) {
+      await log(`Error checking missed sessions for '${name}': ${err}`);
+    }
+  }
+}
+
 /** Start the scheduler daemon */
 export async function startDaemon(): Promise<void> {
   if (await isDaemonRunning()) {
@@ -253,6 +359,7 @@ export async function startDaemon(): Promise<void> {
   await startGateway();
 
   await rotateLogIfNeeded();
+  await checkMissedSessions();
 
   cron.schedule("* * * * *", async () => {
     // Backpressure: skip if previous tick is still running
