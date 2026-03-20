@@ -22,34 +22,34 @@ Enrich the existing `useStreaming` hook to capture more data from SDK events, en
 
 Extend the `StreamingActivity` interface in `useStreaming.ts` to capture more data from SDK events that are already being processed.
 
-### Current interface
+### Current interface (actual code, not simplified)
 
 ```typescript
 {
   thinking: boolean;
-  toolName?: string;
-  toolElapsed?: number;
-  taskLabel?: string;
+  toolName: string | null;
+  toolElapsed: number;
+  taskLabel: string | null;
 }
 ```
 
-### New interface
+### New interface (follows existing `| null` pattern)
 
 ```typescript
 {
   thinking: boolean;
-  thinkingStartedAt?: number;       // Date.now() when thinking started
-  toolName?: string;
-  toolElapsed?: number;
-  toolInput?: string;               // first ~80 chars of tool input
-  taskLabel?: string;
-  taskToolCount?: number;           // tools used by sub-agent (from task_progress)
-  error?: string;                   // last tool/task error
-  tokensIn: number;                 // accumulated input tokens
-  tokensOut: number;                // accumulated output tokens
+  thinkingStartedAt: number | null;  // Date.now() when thinking started
+  toolName: string | null;
+  toolElapsed: number;
+  toolInput: string | null;          // first ~80 chars, accumulated from input_json_delta
+  taskLabel: string | null;
+  taskToolCount: number;             // tools used by sub-agent (from task_progress)
+  error: string | null;              // last task error (tasks only, not per-tool)
+  tokensIn: number;                  // from SDKResultMessage.modelUsage at turn end
+  tokensOut: number;                 // from SDKResultMessage.modelUsage at turn end
   toolHistory: Array<{ name: string; elapsed: number }>;  // completed tools
-  thinkingTotalMs: number;          // total thinking duration across blocks
-  thinkingCount: number;            // number of thinking blocks
+  thinkingTotalMs: number;           // total thinking duration across blocks
+  thinkingCount: number;             // number of thinking blocks
 }
 ```
 
@@ -60,20 +60,23 @@ Extend the `StreamingActivity` interface in `useStreaming.ts` to capture more da
 | `thinkingStartedAt` | `onThinkingStart` | `Date.now()` |
 | `thinkingTotalMs` | `onThinkingEnd` | `+= Date.now() - thinkingStartedAt` |
 | `thinkingCount` | `onThinkingEnd` | `+= 1` |
-| `toolInput` | `onToolStart` callback — needs new parameter | First 80 chars of tool input from `content_block_start` event |
+| `toolInput` | `content_block_delta` with `input_json_delta` | Accumulate delta fragments in a buffer, take first 80 chars. **Note:** `content_block_start` for tool_use delivers empty `input: {}` — actual input streams incrementally via `input_json_delta` deltas. |
 | `taskToolCount` | `onTaskProgress` | From `SDKTaskProgressMessage.usage.tool_uses` |
-| `error` | `onToolEnd` / `onTaskEnd` — when status is error | Error message string |
-| `tokensIn/Out` | `onTaskProgress` / result message | From `usage.total_tokens` or `modelUsage` |
+| `error` | `onTaskEnd` when `status === 'failed'` | From `SDKTaskNotificationMessage.summary`. **Note:** Individual tool errors are NOT available as SDK events — they surface as text in subsequent assistant messages. Only sub-agent task failures can be captured. |
+| `tokensIn/Out` | `SDKResultMessage.modelUsage` at turn end | Aggregate `inputTokens`/`outputTokens` across all model entries. **Note:** These are only available when the turn completes, NOT incrementally during streaming. During execution, both values remain 0. |
 | `toolHistory` | `onToolEnd` | Push `{ name, elapsed }` on each tool completion |
 
 ### Changes to callbacks
 
 The existing callbacks in `useStreaming` (`onToolStart`, `onToolEnd`, `onThinkingStart`, `onThinkingEnd`, `onTaskProgress`) already fire at the right moments. The changes are:
 
-1. `onToolStart` — also capture tool input preview (requires passing input from the SDK event in `chat.service.ts`)
-2. `onToolEnd` — push to `toolHistory`, capture errors
-3. `onThinkingStart/End` — track timestamps and accumulate duration
-4. `onTaskProgress` — capture `tool_uses` count and token usage
+1. `onToolStart` — reset `toolInput` buffer
+2. Tool input accumulation — in `chat.service.ts`, accumulate `input_json_delta` fragments into a buffer, pass first 80 chars to a new `onToolInputDelta` callback that updates `toolInput` on `StreamingActivity`
+3. `onToolEnd` — push to `toolHistory`
+4. `onThinkingStart/End` — track timestamps and accumulate duration
+5. `onTaskProgress` — capture `tool_uses` count
+6. `onTaskEnd` — capture error from `summary` when `status === 'failed'`
+7. Turn completion — set `tokensIn`/`tokensOut` from `SDKResultMessage.modelUsage`
 
 ### Modified files
 
@@ -93,7 +96,6 @@ Replace the single-line spinner with a multi-line verbose display during agent e
 [tool] alpaca_get_positions (3.2s)
        get_account_positions { fund: "growth" }
 [thinking] 2.1s
-[tokens] 1,240 in / 380 out
 ```
 
 **Sub-agent active:**
@@ -110,8 +112,9 @@ Replace the single-line spinner with a multi-line verbose display during agent e
 **Just thinking (no tool):**
 ```
 [thinking] 4.2s
-[tokens] 890 in / 0 out
 ```
+
+**Note:** Token counts are NOT available during streaming — only at turn end via `SDKResultMessage.modelUsage`. The `[tokens]` line is therefore NOT shown in the real-time indicator. Tokens are shown exclusively in the post-response `TurnSummary`.
 
 ### Rendering rules
 
@@ -121,7 +124,7 @@ Replace the single-line spinner with a multi-line verbose display during agent e
 - Thinking line: `[thinking] <duration>s` — magenta
 - Agent/task line: `[agent] <label> (<elapsed>, <toolCount> tools)` — cyan
 - Error line: `[error] <message>` — red, persists until next tool starts
-- Token line: `[tokens] <in> in / <out> out` — dimColor
+- No token line in real-time indicator (tokens only available at turn end — shown in TurnSummary)
 - All prefixes in brackets, no emojis
 
 ### Modified files
@@ -154,10 +157,13 @@ The `toolHistory` array is aggregated into tool name counts (e.g., `alpaca_get_p
 
 ### Data flow
 
-1. `useStreaming` accumulates metrics during the turn
-2. When the turn completes, the final `StreamingActivity` snapshot is captured
-3. `ChatView` renders `<TurnSummary metrics={activity} />` after the response
-4. Metrics are reset for the next turn via existing `resetActivity()` in `useStreaming`
+1. `useStreaming` accumulates metrics during the turn in `StreamingActivity`
+2. Token counts (`tokensIn`/`tokensOut`) are set from `SDKResultMessage.modelUsage` when the turn completes
+3. Before `send()` resets activity to `IDLE_ACTIVITY` (which it already does on stream end), it stores the final snapshot in a new `lastTurnMetrics: StreamingActivity | null` field on the streaming state
+4. `ChatView` renders `<TurnSummary metrics={streaming.lastTurnMetrics} />` after the agent's response message
+5. `lastTurnMetrics` persists until the next `send()` call replaces it
+
+**Note:** There is no existing `resetActivity()` function. The existing `reset()` function resets the entire streaming state. The new `lastTurnMetrics` field avoids the snapshot-before-reset timing issue by capturing metrics inside `send()` before the activity is cleared.
 
 ### Modified files
 
