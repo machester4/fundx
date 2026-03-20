@@ -8,7 +8,7 @@ import { useInterval } from "../hooks/useInterval.js";
 import { getDashboardData } from "../services/status.service.js";
 import { getDashboardMarketData } from "../services/market.service.js";
 import { resolveChatFund } from "../services/chat.service.js";
-import { forkDaemon } from "../services/daemon.service.js";
+import { forkSupervisor } from "../services/supervisor.service.js";
 import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
 import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
 import { NewsPanel } from "../components/NewsPanel.js";
@@ -49,7 +49,7 @@ export default function Index({ options: opts }: Props) {
 
   // Auto-start daemon in background if not running
   useEffect(() => {
-    forkDaemon().catch(() => {});
+    forkSupervisor().catch(() => {});
   }, []);
 
   // Resolve fund on mount — workspace mode by default, specific fund only via --fund

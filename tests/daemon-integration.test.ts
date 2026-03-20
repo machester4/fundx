@@ -11,10 +11,15 @@ vi.mock("node:fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
   readdir: vi.fn().mockResolvedValue([]),
   rm: vi.fn().mockResolvedValue(undefined),
+  stat: vi.fn().mockRejectedValue(new Error("ENOENT")),
 }));
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn().mockReturnValue("node fundx"),
 }));
 
 // Capture cron callbacks by expression without actually scheduling
@@ -43,6 +48,7 @@ vi.mock("../src/services/session.service.js", () => ({
 vi.mock("../src/services/gateway.service.js", () => ({
   startGateway: vi.fn().mockResolvedValue(undefined),
   stopGateway: vi.fn().mockResolvedValue(undefined),
+  sendTelegramNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/services/special-sessions.service.js", () => ({
@@ -80,11 +86,19 @@ vi.mock("../src/state.js", () => ({
     positions: [],
   }),
   writePortfolio: vi.fn().mockResolvedValue(undefined),
+  readSessionHistory: vi.fn().mockResolvedValue({}),
+  writeSessionHistory: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/journal.js", () => ({
   openJournal: vi.fn().mockReturnValue({ close: vi.fn() }),
   insertTrade: vi.fn().mockReturnValue(1),
+}));
+
+vi.mock("../src/lock.js", () => ({
+  acquireFundLock: vi.fn().mockResolvedValue(true),
+  releaseFundLock: vi.fn().mockResolvedValue(undefined),
+  withTimeout: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
 // Import after mocks
@@ -93,7 +107,9 @@ import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
 import { syncPortfolio } from "../src/sync.js";
 import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
 import { generateDailyReport } from "../src/services/reports.service.js";
-import { startDaemon, stopDaemon, isDaemonRunning } from "../src/services/daemon.service.js";
+import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions } from "../src/services/daemon.service.js";
+import { runFundSession } from "../src/services/session.service.js";
+import { readSessionHistory } from "../src/state.js";
 import type { FundConfig } from "../src/types.js";
 import { fundConfigSchema } from "../src/types.js";
 
@@ -110,6 +126,30 @@ vi.spyOn(process, "on").mockImplementation(((event: string, fn: (...args: unknow
 afterAll(() => {
   exitSpy.mockRestore();
 });
+
+// Shared test helper
+const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
+  fundConfigSchema.parse({
+    fund: {
+      name: "test-fund",
+      display_name: "Test Fund",
+      description: "Test",
+      created: "2026-01-01",
+      status: "active",
+    },
+    capital: { initial: 50000, currency: "USD" },
+    objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
+    risk: { profile: "conservative", stop_loss_pct: 8 },
+    universe: { allowed: [] },
+    schedule: {
+      trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
+      sessions: {
+        pre_market: { time: "09:00", enabled: true, focus: "Morning" },
+      },
+    },
+    broker: { provider: "alpaca", mode: "paper" },
+    ...overrides,
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -141,29 +181,6 @@ describe("daemon module", () => {
 // ── Cron callback behavior ───────────────────────────────────────
 
 describe("daemon cron callback", () => {
-  const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
-    fundConfigSchema.parse({
-      fund: {
-        name: "test-fund",
-        display_name: "Test Fund",
-        description: "Test",
-        created: "2026-01-01",
-        status: "active",
-      },
-      capital: { initial: 50000, currency: "USD" },
-      objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
-      risk: { profile: "conservative", stop_loss_pct: 8 },
-      universe: { allowed: [] },
-      schedule: {
-        trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
-        sessions: {
-          pre_market: { time: "09:00", enabled: true, focus: "Morning" },
-        },
-      },
-      broker: { provider: "alpaca", mode: "paper" },
-      ...overrides,
-    });
-
   beforeEach(async () => {
     vi.clearAllMocks();
     capturedCronCallback = null;
@@ -312,5 +329,91 @@ describe("daemon cron callback", () => {
     await capturedCronCallback!();
 
     expect(generateDailyReport).toHaveBeenCalledWith("test-fund");
+  });
+});
+
+// ── Catch-up on startup ──────────────────────────────────────
+
+describe("daemon catch-up on startup", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("no catch-up when session history is current", async () => {
+    vi.useFakeTimers();
+    // Monday 09:15 UTC — pre_market is at 09:00, so it was 15 min ago
+    vi.setSystemTime(new Date("2026-02-23T09:15:00Z"));
+
+    vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
+    vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
+    // Session history shows pre_market ran today at 09:00
+    vi.mocked(readSessionHistory).mockResolvedValue({
+      pre_market: "2026-02-23T09:00:30.000Z",
+    });
+
+    await checkMissedSessions();
+
+    expect(runFundSession).not.toHaveBeenCalled();
+  });
+
+  it("catch-up runs for missed session within tolerance", async () => {
+    vi.useFakeTimers();
+    // Monday 09:30 UTC — pre_market was at 09:00, 30 min ago (within 60-min tolerance)
+    vi.setSystemTime(new Date("2026-02-23T09:30:00Z"));
+
+    vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
+    vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
+    // Session history shows last run was yesterday
+    vi.mocked(readSessionHistory).mockResolvedValue({
+      pre_market: "2026-02-22T09:00:00.000Z",
+    });
+
+    await checkMissedSessions();
+
+    expect(runFundSession).toHaveBeenCalledWith(
+      "test-fund",
+      "catchup_pre_market",
+      expect.objectContaining({
+        focus: expect.stringContaining("[CATCH-UP]"),
+      }),
+    );
+  });
+
+  it("no catch-up when outside tolerance (> 60 min)", async () => {
+    vi.useFakeTimers();
+    // Monday 10:30 UTC — pre_market was at 09:00, 90 min ago (outside 60-min tolerance)
+    vi.setSystemTime(new Date("2026-02-23T10:30:00Z"));
+
+    vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
+    vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
+    vi.mocked(readSessionHistory).mockResolvedValue({
+      pre_market: "2026-02-22T09:00:00.000Z",
+    });
+
+    await checkMissedSessions();
+
+    expect(runFundSession).not.toHaveBeenCalled();
+  });
+
+  it("handles fund with no session history (first run)", async () => {
+    vi.useFakeTimers();
+    // Monday 09:20 UTC — pre_market was at 09:00, 20 min ago
+    vi.setSystemTime(new Date("2026-02-23T09:20:00Z"));
+
+    vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
+    vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
+    // Empty history (first run ever)
+    vi.mocked(readSessionHistory).mockResolvedValue({});
+
+    await checkMissedSessions();
+
+    // Should catch up because lastRunMs=0 is before scheduledMs
+    expect(runFundSession).toHaveBeenCalledWith(
+      "test-fund",
+      "catchup_pre_market",
+      expect.objectContaining({
+        focus: expect.stringContaining("[CATCH-UP]"),
+      }),
+    );
   });
 });

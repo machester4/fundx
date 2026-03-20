@@ -596,3 +596,15 @@ export const swsSearchResultSchema = z.object({
 });
 
 export type SwsSearchResult = z.infer<typeof swsSearchResultSchema>;
+
+// ── Daemon Resilience Schemas ────────────────────────────────
+
+export const sessionHistorySchema = z.record(z.string(), z.string());
+export type SessionHistory = z.infer<typeof sessionHistorySchema>;
+
+export const daemonPidInfoSchema = z.object({
+  pid: z.number(),
+  startedAt: z.string(),
+  version: z.string(),
+});
+export type DaemonPidInfo = z.infer<typeof daemonPidInfoSchema>;

@@ -19,7 +19,8 @@ import { buildMcpServers } from "../agent.js";
 import { generateFundClaudeMd } from "../template.js";
 import { ensureFundSkillFiles, ensureFundRules } from "../skills.js";
 import { buildAnalystAgents } from "../subagent.js";
-import { fundPaths, WORKSPACE, DAEMON_PID, DAEMON_LOG, MCP_SERVERS, MCP_COMMAND } from "../paths.js";
+import { fundPaths, WORKSPACE, DAEMON_LOG, MCP_SERVERS, MCP_COMMAND } from "../paths.js";
+import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 
 // ── Types ────────────────────────────────────────────────────
@@ -159,14 +160,9 @@ export async function loadImageAttachment(filePath: string): Promise<ImageAttach
 
 /** Check if the daemon process is running */
 export async function getDaemonStatus(): Promise<{ running: boolean; pid?: number }> {
-  if (!existsSync(DAEMON_PID)) return { running: false };
-  try {
-    const pid = parseInt(await readFile(DAEMON_PID, "utf-8"), 10);
-    process.kill(pid, 0);
-    return { running: true, pid };
-  } catch {
-    return { running: false };
-  }
+  const running = await isDaemonRunning();
+  const pid = running ? (await getDaemonPid()) ?? undefined : undefined;
+  return { running, pid };
 }
 
 /** Get last few daemon log lines relevant to this fund */
