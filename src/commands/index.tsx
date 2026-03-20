@@ -51,7 +51,6 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [tracker, setTracker] = useState<ObjectiveTracker | null>(null);
   const [fundConfig, setFundConfig] = useState<FundConfig | null>(null);
-  const [chatActive, setChatActive] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Load fund data
@@ -75,16 +74,13 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
   // Refresh portfolio on interval
   useInterval(() => setRefreshKey((k) => k + 1), PORTFOLIO_REFRESH_MS);
 
-  const handleChatStart = useCallback(() => setChatActive(true), []);
-
   const handleSwitchFund = useCallback((name: string) => {
     // When user types /fund <name> in chat, switch to that fund
     onBack();
   }, [onBack]);
 
-  // Escape to go back to selector (only when chat is not active)
   useInput((input, key) => {
-    if (key.escape && !chatActive) {
+    if (key.escape) {
       onBack();
     }
   });
@@ -102,23 +98,6 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
   const objectiveHeight = 1;
   const panelsHeight = headerHeight + portfolioHeight + objectiveHeight + 1; // +1 for spacing
   const chatHeight = Math.max(5, height - panelsHeight);
-
-  if (chatActive) {
-    // When chat is active, give it the full screen
-    return (
-      <ChatView
-        key={fundName}
-        fundName={fundName}
-        width={width}
-        height={height}
-        mode="static"
-        onExit={onExit}
-        onSwitchFund={handleSwitchFund}
-        onChatStart={handleChatStart}
-        options={chatOptions}
-      />
-    );
-  }
 
   return (
     <Box flexDirection="column" width={width} height={height}>
@@ -145,7 +124,7 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
         width={width}
       />
 
-      {/* Chat scoped to this fund */}
+      {/* Chat scoped to this fund — always in the same tree position */}
       <ChatView
         key={fundName}
         fundName={fundName}
@@ -154,7 +133,6 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
         mode="inline"
         onExit={onExit}
         onSwitchFund={handleSwitchFund}
-        onChatStart={handleChatStart}
         options={chatOptions}
       />
 
