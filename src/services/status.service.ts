@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
 import { readPortfolio, readTracker, readSessionLog } from "../state.js";
 import { getHistoryData } from "./chart.service.js";
@@ -8,8 +6,8 @@ import { computeCorrelationMatrix } from "./correlation.service.js";
 import { checkSpecialSessions, KNOWN_EVENTS } from "./special-sessions.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { ALPACA_PAPER_URL } from "../alpaca-helpers.js";
-import { DAEMON_PID } from "../paths.js";
 import { getMarketDataProvider } from "./market.service.js";
+import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import type { FundConfig, ServiceStatus, NextCronInfo } from "../types.js";
 
 export interface FundStatusData {
@@ -92,14 +90,9 @@ export async function getAllFundStatuses(): Promise<FundStatusData[]> {
 // ── Dashboard Helpers ─────────────────────────────────────────
 
 async function getDaemonStatus(): Promise<{ running: boolean; pid?: number }> {
-  if (!existsSync(DAEMON_PID)) return { running: false };
-  try {
-    const pid = parseInt(await readFile(DAEMON_PID, "utf-8"), 10);
-    process.kill(pid, 0);
-    return { running: true, pid };
-  } catch {
-    return { running: false };
-  }
+  const running = await isDaemonRunning();
+  const pid = running ? (await getDaemonPid()) ?? undefined : undefined;
+  return { running, pid };
 }
 
 function timeAgo(dateStr: string): string {
