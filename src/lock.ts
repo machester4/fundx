@@ -1,4 +1,4 @@
-import { readFile, writeFile, unlink, mkdir } from "node:fs/promises";
+import { readFile, unlink, mkdir, open } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { fundPaths } from "./paths.js";
@@ -14,9 +14,11 @@ const STALE_THRESHOLD_MS = 25 * 60 * 1000; // 25 minutes
 export async function acquireFundLock(fundName: string, sessionType: string): Promise<boolean> {
   const lockFile = fundPaths(fundName).state.lock;
 
+  // If lock file exists, check staleness
   if (existsSync(lockFile)) {
     if (await isLockStale(fundName)) {
       await unlink(lockFile).catch(() => {});
+      // Fall through to atomic create below
     } else {
       return false;
     }
@@ -24,8 +26,19 @@ export async function acquireFundLock(fundName: string, sessionType: string): Pr
 
   await mkdir(dirname(lockFile), { recursive: true });
   const info: LockInfo = { pid: process.pid, session: sessionType, since: new Date().toISOString() };
-  await writeFile(lockFile, JSON.stringify(info), "utf-8");
-  return true;
+
+  // Atomic create: O_WRONLY | O_CREAT | O_EXCL — fails with EEXIST if another process won the race
+  try {
+    const handle = await open(lockFile, "wx");
+    await handle.writeFile(JSON.stringify(info));
+    await handle.close();
+    return true;
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && err.code === "EEXIST") {
+      return false; // Another process created the lock between our check and write
+    }
+    throw err; // Unexpected error — propagate
+  }
 }
 
 export async function releaseFundLock(fundName: string): Promise<void> {

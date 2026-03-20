@@ -80,7 +80,7 @@ export async function getDaemonPid(): Promise<number | null> {
   }
 }
 
-/** Check if daemon is already running (robust version) */
+/** Check if daemon is already running (robust version, read-only — does NOT delete PID files) */
 export async function isDaemonRunning(): Promise<boolean> {
   if (!existsSync(DAEMON_PID)) return false;
 
@@ -88,7 +88,6 @@ export async function isDaemonRunning(): Promise<boolean> {
     const content = await readFile(DAEMON_PID, "utf-8");
     const info = parsePidFile(content);
     if (!info) {
-      await unlink(DAEMON_PID).catch(() => {});
       return false;
     }
 
@@ -96,7 +95,6 @@ export async function isDaemonRunning(): Promise<boolean> {
     try {
       process.kill(info.pid, 0);
     } catch {
-      await unlink(DAEMON_PID).catch(() => {});
       return false;
     }
 
@@ -108,7 +106,6 @@ export async function isDaemonRunning(): Promise<boolean> {
       });
       const cmd = output.trim().toLowerCase();
       if (cmd && !cmd.includes("fundx") && !cmd.includes("node") && !cmd.includes("tsx")) {
-        await unlink(DAEMON_PID).catch(() => {});
         return false;
       }
     } catch {
@@ -121,8 +118,6 @@ export async function isDaemonRunning(): Promise<boolean> {
       const age = Date.now() - hbStat.mtimeMs;
       if (age > HEARTBEAT_STALE_MS) {
         await log(`Daemon heartbeat stale (${Math.round(age / 1000)}s old), treating as hung`);
-        await unlink(DAEMON_PID).catch(() => {});
-        await unlink(DAEMON_HEARTBEAT).catch(() => {});
         return false;
       }
     } catch {
@@ -131,8 +126,49 @@ export async function isDaemonRunning(): Promise<boolean> {
 
     return true;
   } catch {
-    await unlink(DAEMON_PID).catch(() => {});
     return false;
+  }
+}
+
+/** Clean up stale PID and heartbeat files. Call only from startDaemon / stopSupervisor. */
+export async function cleanStalePidFiles(): Promise<void> {
+  if (!existsSync(DAEMON_PID)) return;
+
+  try {
+    const content = await readFile(DAEMON_PID, "utf-8");
+    const info = parsePidFile(content);
+    if (!info) {
+      await unlink(DAEMON_PID).catch(() => {});
+      return;
+    }
+
+    let alive = false;
+    try {
+      process.kill(info.pid, 0);
+      alive = true;
+    } catch {
+      // Process is dead
+    }
+
+    if (!alive) {
+      await unlink(DAEMON_PID).catch(() => {});
+      await unlink(DAEMON_HEARTBEAT).catch(() => {});
+      return;
+    }
+
+    // Check heartbeat freshness
+    try {
+      const hbStat = await stat(DAEMON_HEARTBEAT);
+      const age = Date.now() - hbStat.mtimeMs;
+      if (age > HEARTBEAT_STALE_MS) {
+        await unlink(DAEMON_PID).catch(() => {});
+        await unlink(DAEMON_HEARTBEAT).catch(() => {});
+      }
+    } catch {
+      // No heartbeat file — don't clean up, could be newly started
+    }
+  } catch {
+    await unlink(DAEMON_PID).catch(() => {});
   }
 }
 
@@ -348,6 +384,9 @@ export async function startDaemon(): Promise<void> {
     throw new Error("Daemon is already running.");
   }
 
+  // Clean up stale PID/heartbeat files before writing new ones
+  await cleanStalePidFiles();
+
   // Write JSON PID file
   const pidInfo = { pid: process.pid, startedAt: new Date().toISOString(), version: "0.1.0" };
   await writeFile(DAEMON_PID, JSON.stringify(pidInfo), "utf-8");
@@ -534,6 +573,9 @@ async function cleanup() {
 
 /** Stop the supervisor (or daemon). Reads SUPERVISOR_PID first, falls back to DAEMON_PID. */
 export async function stopSupervisor(): Promise<{ stopped: boolean; pid?: number }> {
+  // Clean stale files before attempting to stop
+  await cleanStalePidFiles();
+
   // Try supervisor PID first, then daemon PID
   for (const pidFile of [SUPERVISOR_PID, DAEMON_PID]) {
     if (!existsSync(pidFile)) continue;
