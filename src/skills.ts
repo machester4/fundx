@@ -970,3 +970,104 @@ export function getFundRuleCount(): number {
 export async function ensureWorkspaceSkillFiles(): Promise<void> {
   await ensureSkillFiles(WORKSPACE_CLAUDE_DIR, [WORKSPACE_SKILL]);
 }
+
+// ── Per-Fund Memory ───────────────────────────────────────────
+
+export interface MemoryFile {
+  fileName: string;
+  description: string;
+  content: string;
+}
+
+export const FUND_MEMORY_FILES: MemoryFile[] = [
+  {
+    fileName: "MEMORY.md",
+    description: "Index of memory files",
+    content: `# Fund Memory
+
+Memory files for this fund. Updated by the AI agent during sessions.
+
+- [market-lessons.md](market-lessons.md) — Market patterns and lessons learned
+- [trading-patterns.md](trading-patterns.md) — Trading behavior observations
+- [fund-notes.md](fund-notes.md) — General fund observations
+`,
+  },
+  {
+    fileName: "market-lessons.md",
+    description: "Market patterns and lessons learned",
+    content: `---
+description: Market patterns and lessons learned by the AI agent
+---
+
+(No observations yet. The AI agent will populate this during trading sessions.)
+`,
+  },
+  {
+    fileName: "trading-patterns.md",
+    description: "Trading behavior observations",
+    content: `---
+description: Trading behavior observations and recurring patterns
+---
+
+(No observations yet. The AI agent will populate this during trading sessions.)
+`,
+  },
+  {
+    fileName: "fund-notes.md",
+    description: "General fund observations",
+    content: `---
+description: General observations about this fund's performance and strategy
+---
+
+(No observations yet. The AI agent will populate this during trading sessions.)
+`,
+  },
+];
+
+export const MEMORY_USAGE_RULE = {
+  fileName: "memory-usage.md",
+  content: `# Memory Usage
+
+You have a persistent memory system in the \`memory/\` directory at the fund root.
+
+## At Session Start
+Read \`memory/MEMORY.md\` to see what memory files exist. Read individual files
+as relevant to the current session's focus.
+
+## During Sessions
+When you discover something worth remembering across sessions, write it to the
+appropriate memory file:
+- \`memory/market-lessons.md\` — Market patterns, sector behavior, macro observations
+- \`memory/trading-patterns.md\` — What works/doesn't for this fund, entry/exit timing
+- \`memory/fund-notes.md\` — Strategy adjustments, risk observations, general notes
+
+## Rules
+- Keep entries concise and actionable — facts and lessons, not raw data
+- Do not duplicate information already in CLAUDE.md, fund_config.yaml, or state files
+- State files (portfolio.json, objective_tracker.json, trade_journal.sqlite) are for
+  current state. Memory is for learned patterns and observations that inform future decisions.
+- Prefix each entry with a date (YYYY-MM-DD) for context
+`,
+};
+
+/**
+ * Write memory files and memory-usage rule to a fund directory.
+ * Called during fund creation and upgrade. Idempotent — does not overwrite existing memory.
+ */
+export async function ensureFundMemory(fundRoot: string, fundClaudeDir: string): Promise<void> {
+  const memoryDir = join(fundRoot, "memory");
+  await mkdir(memoryDir, { recursive: true });
+
+  for (const file of FUND_MEMORY_FILES) {
+    const filePath = join(memoryDir, file.fileName);
+    if (!existsSync(filePath)) {
+      await writeFile(filePath, file.content, "utf-8");
+    }
+  }
+
+  // Write the memory-usage rule
+  const rulesDir = join(fundClaudeDir, "rules");
+  await mkdir(rulesDir, { recursive: true });
+  const rulePath = join(rulesDir, MEMORY_USAGE_RULE.fileName);
+  await writeFile(rulePath, MEMORY_USAGE_RULE.content, "utf-8");
+}

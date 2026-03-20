@@ -124,10 +124,10 @@ describe("upgradeFund", () => {
   it("rewrites all builtin skills and rules", async () => {
     await upgradeFund("test-fund");
 
-    // mkdir is called once per skill + once for rules dir
-    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + 1);
-    // writeFile is called once per skill (SKILL.md) + once per rule file
-    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + getFundRuleCount());
+    // mkdir is called once per skill + once for rules dir (ensureFundRules) + once for memory dir + once for rules dir again (ensureFundMemory)
+    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + 3);
+    // writeFile is called once per skill (SKILL.md) + once per rule file + 4 memory files + 1 memory-usage rule
+    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + getFundRuleCount() + 5);
   });
 
   it("returns fund name and skill count", async () => {
