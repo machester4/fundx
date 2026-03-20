@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import zod from "zod";
-import { Box, Text, useApp } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
 import { useInterval } from "../hooks/useInterval.js";
-import { getDashboardData } from "../services/status.service.js";
-import { getDashboardMarketData } from "../services/market.service.js";
-import { resolveChatFund } from "../services/chat.service.js";
+import { getAllFundStatuses } from "../services/status.service.js";
+import type { FundStatusData } from "../services/status.service.js";
+import { loadFundConfig } from "../services/fund.service.js";
+import { readPortfolio, readTracker } from "../state.js";
 import { forkSupervisor } from "../services/supervisor.service.js";
-import { SystemStatusPanel } from "../components/SystemStatusPanel.js";
-import { FundsOverviewPanel } from "../components/FundsOverviewPanel.js";
-import { NewsPanel } from "../components/NewsPanel.js";
-import { MarketTickerBanner } from "../components/MarketTickerBanner.js";
-import { SectorHeatmapPanel } from "../components/SectorHeatmapPanel.js";
-import { DashboardFooter } from "../components/DashboardFooter.js";
+import { FundSelector } from "../components/FundSelector.js";
+import { FundDashboardHeader } from "../components/FundDashboardHeader.js";
+import { PortfolioPanel } from "../components/PortfolioPanel.js";
+import { ObjectiveProgressBar } from "../components/ObjectiveProgressBar.js";
 import { ChatView } from "../components/ChatView.js";
+import { Logo } from "../components/Logo.js";
+import type { Portfolio, ObjectiveTracker, FundConfig } from "../types.js";
 
 export const description = "FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK";
 
@@ -26,215 +27,288 @@ export const options = zod.object({
   maxBudget: zod.string().optional().describe("Maximum budget in USD for the session"),
 });
 
-const MARKET_REFRESH_MS = 60_000;
-const DASHBOARD_REFRESH_MS = 30_000;
-const TICKER_HEIGHT = 3; // 1 content row + 2 border rows (borderStyle="single")
-const TOP_PANEL_HEIGHT = 5;
-const BOTTOM_PANEL_HEIGHT = 8;
-const SECTOR_ROW_HEIGHT = 3;
+const PORTFOLIO_REFRESH_MS = 30_000;
 
 type Phase =
-  | { type: "resolving" }
-  | { type: "ready"; fundName: string | null; initError?: string };
+  | { type: "loading" }
+  | { type: "selecting" }
+  | { type: "fund-dashboard"; fundName: string };
 
 type Props = { options: zod.infer<typeof options> };
+
+// ── Fund Dashboard Screen ────────────────────────────────────────
+
+interface FundDashboardScreenProps {
+  fundName: string;
+  width: number;
+  height: number;
+  onBack: () => void;
+  onExit: () => void;
+  chatOptions: { model?: string; readonly: boolean; maxBudget?: string };
+}
+
+function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOptions }: FundDashboardScreenProps) {
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [tracker, setTracker] = useState<ObjectiveTracker | null>(null);
+  const [fundConfig, setFundConfig] = useState<FundConfig | null>(null);
+  const [chatActive, setChatActive] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Load fund data
+  useEffect(() => {
+    (async () => {
+      try {
+        const [config, port, trk] = await Promise.all([
+          loadFundConfig(fundName),
+          readPortfolio(fundName).catch(() => null),
+          readTracker(fundName).catch(() => null),
+        ]);
+        setFundConfig(config);
+        setPortfolio(port);
+        setTracker(trk);
+      } catch {
+        // Fund data may not be available yet
+      }
+    })();
+  }, [fundName, refreshKey]);
+
+  // Refresh portfolio on interval
+  useInterval(() => setRefreshKey((k) => k + 1), PORTFOLIO_REFRESH_MS);
+
+  const handleChatStart = useCallback(() => setChatActive(true), []);
+
+  const handleSwitchFund = useCallback((name: string) => {
+    // When user types /fund <name> in chat, switch to that fund
+    onBack();
+  }, [onBack]);
+
+  // Escape to go back to selector (only when chat is not active)
+  useInput((input, key) => {
+    if (key.escape && !chatActive) {
+      onBack();
+    }
+  });
+
+  const displayName = fundConfig?.fund.display_name ?? fundName;
+  const status = fundConfig?.fund.status ?? "active";
+  const brokerMode = fundConfig?.broker.mode === "live" ? "live" : "paper";
+  const model = chatOptions.model ?? "sonnet";
+  const objectiveType = fundConfig?.objective.type ?? "unknown";
+  const initialCapital = fundConfig?.capital.initial ?? 0;
+
+  // Calculate layout heights
+  const headerHeight = 1;
+  const portfolioHeight = portfolio ? Math.min(portfolio.positions.length + 2, 8) : 1;
+  const objectiveHeight = 1;
+  const panelsHeight = headerHeight + portfolioHeight + objectiveHeight + 1; // +1 for spacing
+  const chatHeight = Math.max(5, height - panelsHeight);
+
+  if (chatActive) {
+    // When chat is active, give it the full screen
+    return (
+      <ChatView
+        key={fundName}
+        fundName={fundName}
+        width={width}
+        height={height}
+        mode="static"
+        onExit={onExit}
+        onSwitchFund={handleSwitchFund}
+        onChatStart={handleChatStart}
+        options={chatOptions}
+      />
+    );
+  }
+
+  return (
+    <Box flexDirection="column" width={width} height={height}>
+      {/* Fund header bar */}
+      <FundDashboardHeader
+        displayName={displayName}
+        status={status}
+        brokerMode={brokerMode}
+        model={model}
+        width={width}
+      />
+
+      {/* Portfolio summary */}
+      <PortfolioPanel
+        portfolio={portfolio}
+        initialCapital={initialCapital}
+        width={width}
+      />
+
+      {/* Objective progress */}
+      <ObjectiveProgressBar
+        tracker={tracker}
+        objectiveType={objectiveType}
+        width={width}
+      />
+
+      {/* Chat scoped to this fund */}
+      <ChatView
+        key={fundName}
+        fundName={fundName}
+        width={width}
+        height={chatHeight}
+        mode="inline"
+        onExit={onExit}
+        onSwitchFund={handleSwitchFund}
+        onChatStart={handleChatStart}
+        options={chatOptions}
+      />
+
+      {/* Footer hint */}
+      <Box paddingX={1}>
+        <Text dimColor>Esc: back to fund list  /help: commands  q: quit</Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Main Command ─────────────────────────────────────────────────
 
 export default function Index({ options: opts }: Props) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
-  const [phase, setPhase] = useState<Phase>({ type: "resolving" });
-  const [chatActive, setChatActive] = useState(false);
-  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
-  const [marketRefreshKey, setMarketRefreshKey] = useState(0);
+  const [phase, setPhase] = useState<Phase>({ type: "loading" });
+  const [fundStatusRefreshKey, setFundStatusRefreshKey] = useState(0);
 
   // Auto-start daemon in background if not running
   useEffect(() => {
     forkSupervisor().catch(() => {});
   }, []);
 
-  // Resolve fund on mount — workspace mode by default, specific fund only via --fund
+  // Load fund list on mount
+  const fundStatuses = useAsyncAction(
+    () => getAllFundStatuses(),
+    [fundStatusRefreshKey],
+  );
+
+  // When fund statuses load, transition from loading to selecting (or fund-dashboard)
   useEffect(() => {
-    (async () => {
-      try {
-        if (opts.fund) {
-          const { fundName } = await resolveChatFund(opts.fund);
-          setPhase({ type: "ready", fundName });
-        } else {
-          setPhase({ type: "ready", fundName: null });
-        }
-      } catch (err) {
-        // Fall back to workspace mode so the user isn't trapped on a dead-end screen
-        const message = err instanceof Error ? err.message : String(err);
-        setPhase({ type: "ready", fundName: null, initError: message });
+    if (phase.type !== "loading") return;
+    if (fundStatuses.isLoading) return;
+
+    const funds = fundStatuses.data ?? [];
+
+    // If --fund flag provided, go directly to fund-dashboard
+    if (opts.fund) {
+      const match = funds.find((f) => f.name === opts.fund);
+      if (match) {
+        setPhase({ type: "fund-dashboard", fundName: match.name });
+      } else {
+        // Fund not found — still try, loadFundConfig will fail gracefully in dashboard
+        setPhase({ type: "fund-dashboard", fundName: opts.fund });
       }
-    })();
+      return;
+    }
+
+    // Auto-select if only 1 fund
+    if (funds.length === 1) {
+      setPhase({ type: "fund-dashboard", fundName: funds[0].name });
+      return;
+    }
+
+    // Otherwise show selector
+    setPhase({ type: "selecting" });
+  }, [phase.type, fundStatuses.isLoading, fundStatuses.data, opts.fund]);
+
+  const handleSelectFund = useCallback((fundName: string) => {
+    setPhase({ type: "fund-dashboard", fundName });
   }, []);
 
-  // Dashboard data (panels)
-  const dashboard = useAsyncAction(() => getDashboardData(), [dashboardRefreshKey]);
-  const market = useAsyncAction(() => getDashboardMarketData(), [marketRefreshKey]);
+  const handleBackToSelector = useCallback(() => {
+    // Refresh fund statuses when returning to selector
+    setFundStatusRefreshKey((k) => k + 1);
+    setPhase({ type: "loading" });
+  }, []);
 
-  // Auto-refresh dashboard (daemon, funds, cron) every 30s
-  useInterval(() => setDashboardRefreshKey((k) => k + 1), DASHBOARD_REFRESH_MS);
-  // Auto-refresh market data every 60s
-  useInterval(() => setMarketRefreshKey((k) => k + 1), MARKET_REFRESH_MS);
-
-  // ── Derived panel data ──────────────────────────────────────
-
-  const data = dashboard.data;
-  const marketData = market.data;
-  const services = data?.services ?? { daemon: false, telegram: false, marketData: false, marketDataProvider: "none" as const };
-  // Derive from provider detection, not from whether data arrived in this cycle
-  const hasCredentials = services.marketDataProvider !== "none";
-  const nextCron = data?.nextCron ?? null;
-  const funds = data?.funds ?? [];
-  const fundExtras = data?.fundExtras ?? new Map();
-  const indices = marketData?.indices ?? [];
-  const news = marketData?.news ?? [];
-  const sectors = marketData?.sectors ?? [];
-  const marketOpen = marketData?.marketOpen ?? false;
-  const isShort = rows < 20;
-
-  const innerWidth = columns - 2; // inside outer border
-  const halfInner = Math.floor(innerWidth / 2);
-  // Each news item is 1 line; subtract 2 for borders
-  const newsItems = Math.max(1, BOTTOM_PANEL_HEIGHT - 2);
-
-  // Active fund name (available once resolved)
-  const activeFundName = phase.type === "ready" ? (phase.fundName ?? undefined) : undefined;
-
-  // Stable references so ChatView's internal callbacks aren't recreated on every dashboard refresh.
   const handleExit = useCallback(() => exit(), [exit]);
-  const handleSwitchFund = useCallback((name: string) => {
-    setChatActive(false);
-    setPhase({ type: "ready", fundName: name });
-  }, []);
+
   const chatOptions = useMemo(
     () => ({ model: opts.model, readonly: opts.readonly, maxBudget: opts.maxBudget }),
     [opts.model, opts.readonly, opts.maxBudget],
   );
-  const handleChatStart = useCallback(() => setChatActive(true), []);
 
-  // ── Panels block (reused in all states) ─────────────────────
+  // ── Phase: loading ──────────────────────────────────────────────
 
-  const panelsBlock = (
-    <>
-      {/* Market index bar - static, full width, hidden on short terminals */}
-      {!isShort && (
-        <MarketTickerBanner
-          indices={indices}
-          width={innerWidth}
-          hasCredentials={hasCredentials}
-          isLoading={market.isLoading}
-        />
-      )}
-
-      {/* Top row: System Status | Fund Detail */}
-      <Box>
-        <SystemStatusPanel
-          width={halfInner}
-          height={TOP_PANEL_HEIGHT}
-          services={services}
-          nextCron={nextCron}
-        />
-        <FundsOverviewPanel
-          funds={funds}
-          fundExtras={fundExtras}
-          activeFund={activeFundName}
-          width={innerWidth - halfInner}
-          height={TOP_PANEL_HEIGHT}
-        />
-      </Box>
-
-      {/* News - full width (hidden on short terminals) */}
-      {!isShort && (
-        <NewsPanel
-          headlines={news.slice(0, newsItems)}
-          width={innerWidth}
-          height={BOTTOM_PANEL_HEIGHT}
-          hasCredentials={hasCredentials}
-        />
-      )}
-
-      {/* Sector heatmap row (hidden on short terminals) */}
-      {!isShort && (
-        <SectorHeatmapPanel
-          sectors={sectors}
-          width={innerWidth}
-          hasCredentials={hasCredentials}
-        />
-      )}
-    </>
-  );
-
-  const footerBlock = (
-    <DashboardFooter
-      hints={[
-        { key: "r", label: "" },
-        { key: "q", label: "" },
-      ]}
-      model="claude-sonnet"
-      marketOpen={marketOpen}
-      width={columns}
-    />
-  );
-
-  // ── Resolving state ─────────────────────────────────────────
-
-  if (phase.type === "resolving") {
+  if (phase.type === "loading") {
     return (
-      <Box flexDirection="column" width={columns} height={rows}>
-        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
-          {panelsBlock}
-          <Box flexGrow={1} justifyContent="center" alignItems="center">
-            <Spinner label="Loading..." />
-          </Box>
-        </Box>
-        {footerBlock}
+      <Box flexDirection="column" width={columns} height={rows} justifyContent="center" alignItems="center">
+        <Spinner label="Loading funds..." />
       </Box>
     );
   }
 
-  // ── REPL (main state) ───────────────────────────────────────
+  // ── Phase: selecting ────────────────────────────────────────────
 
-  const panelsHeight = isShort
-    ? TOP_PANEL_HEIGHT
-    : TICKER_HEIGHT + TOP_PANEL_HEIGHT + BOTTOM_PANEL_HEIGHT + SECTOR_ROW_HEIGHT;
-  const footerHeight = 1;
-  const outerBorderHeight = 2; // top + bottom border
-  const chatHeight = Math.max(5, rows - panelsHeight - footerHeight - outerBorderHeight);
+  if (phase.type === "selecting") {
+    const funds = fundStatuses.data ?? [];
+
+    return (
+      <FundSelectorScreen
+        funds={funds}
+        columns={columns}
+        rows={rows}
+        onSelect={handleSelectFund}
+        onExit={handleExit}
+      />
+    );
+  }
+
+  // ── Phase: fund-dashboard ───────────────────────────────────────
 
   return (
-    <Box flexDirection="column" width={columns} height={chatActive ? undefined : rows}>
-      {/* Dashboard panels — hidden when chat is active */}
-      {!chatActive && (
-        <Box flexDirection="column" borderStyle="round" borderDimColor flexGrow={1}>
-          {panelsBlock}
+    <FundDashboardScreen
+      fundName={phase.fundName}
+      width={columns}
+      height={rows}
+      onBack={handleBackToSelector}
+      onExit={handleExit}
+      chatOptions={chatOptions}
+    />
+  );
+}
 
-          {/* Init error banner (e.g. --fund not found) */}
-          {phase.initError && (
-            <Box paddingX={1}>
-              <Text color="red">{phase.initError} — falling back to workspace mode.</Text>
-            </Box>
-          )}
+// ── Fund Selector Screen ─────────────────────────────────────────
+
+interface FundSelectorScreenProps {
+  funds: FundStatusData[];
+  columns: number;
+  rows: number;
+  onSelect: (fundName: string) => void;
+  onExit: () => void;
+}
+
+function FundSelectorScreen({ funds, columns, rows, onSelect, onExit }: FundSelectorScreenProps) {
+  useInput((input, key) => {
+    if (input === "q" && !key.ctrl && !key.meta) {
+      onExit();
+    }
+  });
+
+  return (
+    <Box flexDirection="column" width={columns} height={rows} paddingX={1} paddingY={1}>
+      <Logo subtitle="Autonomous AI Fund Manager" />
+      <Box marginTop={1}>
+        <Text> </Text>
+      </Box>
+      {funds.length === 0 ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text>No funds found.</Text>
+          <Text dimColor>Run <Text bold>fundx fund create</Text> to create your first fund.</Text>
         </Box>
+      ) : (
+        <FundSelector
+          funds={funds}
+          onSelect={onSelect}
+          label="Select a fund to manage:"
+        />
       )}
-
-      {/* Chat — stable tree position preserves state across inline→static transition */}
-      <ChatView
-        key={phase.fundName ?? "__workspace__"}
-        fundName={phase.fundName}
-        width={chatActive ? columns : innerWidth}
-        height={chatActive ? rows : chatHeight}
-        mode={chatActive ? "static" : "inline"}
-        onExit={handleExit}
-        onSwitchFund={handleSwitchFund}
-        onChatStart={handleChatStart}
-        options={chatOptions}
-      />
-
-      {/* Footer (outside border) */}
-      {!chatActive && footerBlock}
+      <Box marginTop={1}>
+        <Text dimColor>q: quit  c: create fund (coming soon)</Text>
+      </Box>
     </Box>
   );
 }
