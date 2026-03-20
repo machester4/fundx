@@ -56,9 +56,9 @@ loading → selecting → fund-dashboard
 - Refactor `src/commands/index.tsx` — replace current multi-panel dashboard with phased UI
 - Phase `selecting`: render fund list with `Select` from `@inkjs/ui`
 - Phase `fund-dashboard`: render fund-scoped dashboard (Section 2)
-- Data: use `getDashboardData()` from `status.service.ts` which returns enriched fund data (display name, current value, P&L, status, last session). Do NOT use `useAllFunds` (returns only names).
+- Data: use `getAllFundStatuses()` from `status.service.ts` which returns `FundStatusData[]` (display name, current value, P&L, status, last session). Lighter than `getDashboardData()` (no sparklines/extras needed for selector). Do NOT use `useAllFunds` (returns only names).
 - Reuse existing `FundSelector` component (`src/components/FundSelector.tsx`) as a starting point, enhance with richer fund data display
-- Reuse `StatusBadge`, `PnlText` components for list items
+- Note: `@inkjs/ui` `Select` only accepts string labels, so `StatusBadge`/`PnlText` React components cannot be used inside list items. Format status and P&L as inline strings instead.
 
 ### Modified files
 
