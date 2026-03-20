@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text } from "ink";
 import { Spinner } from "@inkjs/ui";
-import { stopDaemon } from "../services/daemon.service.js";
+import { stopSupervisor } from "../services/daemon.service.js";
 
 export const description = "Stop the daemon scheduler + Telegram gateway";
 
@@ -13,7 +13,7 @@ export default function Stop() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await stopDaemon();
+        const r = await stopSupervisor();
         setResult(r);
         setStatus("done");
       } catch (err: unknown) {
