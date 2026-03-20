@@ -258,65 +258,7 @@ async function handleNext(ctx: Context): Promise<void> {
   await ctx.reply(response, { parse_mode: "HTML" });
 }
 
-// ── Auto-fund detection ──────────────────────────────────────
-
-async function detectFund(text: string): Promise<string | null> {
-  const names = await listFundNames();
-  const lowerText = text.toLowerCase();
-
-  for (const name of names) {
-    if (lowerText.includes(name.toLowerCase())) return name;
-  }
-
-  for (const name of names) {
-    try {
-      const config = await loadFundConfig(name);
-      for (const entry of config.universe.allowed) {
-        if (entry.tickers) {
-          for (const ticker of entry.tickers) {
-            const regex = new RegExp(`\\b${ticker}\\b`, "i");
-            if (regex.test(text)) return name;
-          }
-        }
-      }
-    } catch {
-      // Skip
-    }
-  }
-
-  return null;
-}
-
-// ── Free question handler (wake Claude) ──────────────────────
-
-async function handleFreeQuestion(ctx: Context): Promise<void> {
-  const text = ctx.message?.text;
-  if (!text) return;
-
-  const fundName = await detectFund(text);
-
-  if (!fundName) {
-    const names = await listFundNames();
-    if (names.length === 0) {
-      await ctx.reply("No funds configured. Create one with `fundx fund create`.");
-      return;
-    }
-    if (names.length === 1) {
-      await wakeClaudeForQuestion(ctx, names[0], text);
-      return;
-    }
-
-    let response = "Which fund does this relate to?\n\n";
-    for (const name of names) {
-      response += `  /ask_${name} ${text}\n`;
-    }
-    response += `\nOr reply with the fund name.`;
-    await ctx.reply(response);
-    return;
-  }
-
-  await wakeClaudeForQuestion(ctx, fundName, text);
-}
+// ── Wake Claude for question ──────────────────────────────────
 
 async function wakeClaudeForQuestion(
   ctx: Context,
@@ -418,6 +360,11 @@ export async function startGateway(): Promise<Bot | null> {
       await ctx.reply("Usage: /portfolio <fund>");
       return;
     }
+    const names = await listFundNames();
+    if (!names.includes(fundName)) {
+      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      return;
+    }
     await handlePortfolio(ctx, fundName);
   });
 
@@ -425,6 +372,11 @@ export async function startGateway(): Promise<Bot | null> {
     const parts = ctx.match?.trim().split(/\s+/) ?? [];
     if (parts.length === 0 || !parts[0]) {
       await ctx.reply("Usage: /trades <fund> [today|week]");
+      return;
+    }
+    const names = await listFundNames();
+    if (!names.includes(parts[0])) {
+      await ctx.reply(`Fund '${parts[0]}' not found.\nAvailable funds: ${names.join(", ")}`);
       return;
     }
     await handleTrades(ctx, parts[0], parts[1]);
@@ -436,6 +388,11 @@ export async function startGateway(): Promise<Bot | null> {
       await ctx.reply("Usage: /pause <fund>");
       return;
     }
+    const names = await listFundNames();
+    if (!names.includes(fundName)) {
+      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      return;
+    }
     await handlePause(ctx, fundName);
   });
 
@@ -445,6 +402,11 @@ export async function startGateway(): Promise<Bot | null> {
       await ctx.reply("Usage: /resume <fund>");
       return;
     }
+    const names = await listFundNames();
+    if (!names.includes(fundName)) {
+      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      return;
+    }
     await handleResume(ctx, fundName);
   });
 
@@ -452,46 +414,39 @@ export async function startGateway(): Promise<Bot | null> {
     await handleNext(ctx);
   });
 
-  bot.on("message:text", async (ctx, next) => {
-    const text = ctx.message.text;
-    if (text.startsWith("/")) {
-      const command = text.slice(1).split(/\s+/)[0].toLowerCase();
-      const builtins = ["status", "portfolio", "trades", "pause", "resume", "next", "start", "help"];
-      if (builtins.includes(command)) return next();
-
+  bot.command("ask", async (ctx) => {
+    const parts = ctx.match?.trim().split(/\s+/) ?? [];
+    const fundName = parts[0];
+    const question = parts.slice(1).join(" ");
+    if (!fundName || !question) {
       const names = await listFundNames();
-      const matchedFund = names.find((n) => n.toLowerCase() === command);
-      if (matchedFund) {
-        const config = await loadFundConfig(matchedFund);
-        const tracker = await readTracker(matchedFund).catch(() => null);
-
-        if (config.objective.type === "runway" && tracker) {
-          const portfolio = await readPortfolio(matchedFund).catch(() => null);
-          const monthlyBurn = "monthly_burn" in config.objective ? config.objective.monthly_burn : 0;
-          const monthsRemaining = portfolio
-            ? portfolio.total_value / monthlyBurn
-            : 0;
-          await ctx.reply(
-            `\u23F1 <b>${config.fund.display_name}</b>\nRunway: ${monthsRemaining.toFixed(1)} months remaining`,
-            { parse_mode: "HTML" },
-          );
-        } else {
-          await handleFundStatus(ctx, matchedFund);
-        }
-        return;
-      }
-
-      if (command.startsWith("ask_")) {
-        const fundName = command.slice(4);
-        const question = text.slice(text.indexOf(" ") + 1);
-        if (names.includes(fundName) && question !== text) {
-          await wakeClaudeForQuestion(ctx, fundName, question);
-          return;
-        }
-      }
+      await ctx.reply(`Usage: /ask <fund> <question>\nAvailable funds: ${names.join(", ")}`);
+      return;
     }
+    const names = await listFundNames();
+    if (!names.includes(fundName)) {
+      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      return;
+    }
+    await wakeClaudeForQuestion(ctx, fundName, question);
+  });
 
-    await handleFreeQuestion(ctx);
+  bot.command("help", async (ctx) => {
+    await ctx.reply(
+      `<b>FundX Commands</b>\n\n` +
+      `<b>Global:</b>\n` +
+      `/status — List all funds\n` +
+      `/next — Upcoming scheduled sessions\n` +
+      `/help — This message\n\n` +
+      `<b>Per-fund (requires fund name):</b>\n` +
+      `/status <fund>\n` +
+      `/portfolio <fund>\n` +
+      `/trades <fund> [today|week]\n` +
+      `/pause <fund>\n` +
+      `/resume <fund>\n` +
+      `/ask <fund> <question>`,
+      { parse_mode: "HTML" },
+    );
   });
 
   bot.catch((err) => {
