@@ -32,7 +32,6 @@ interface ChatViewProps {
   height: number;
   onExit?: () => void;
   onSwitchFund?: (fundName: string) => void;
-  onChatStart?: () => void;
   options: { model?: string; readonly: boolean; maxBudget?: string };
   mode?: "standalone" | "inline" | "static";
 }
@@ -46,7 +45,7 @@ interface ChatMsg {
   turns?: number;
 }
 
-export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChatStart, options, mode = "standalone" }: ChatViewProps) {
+export function ChatView({ fundName, width, height, onExit, onSwitchFund, options, mode = "standalone" }: ChatViewProps) {
   const isInline = mode === "inline";
   const isStatic = mode === "static";
   const isWorkspaceMode = fundName === null;
@@ -115,9 +114,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChat
             // Derive the next ID from the maximum stored ID to avoid duplicates
             const maxId = history.messages.reduce((max, m) => Math.max(max, m.id), 0);
             nextIdRef.current = maxId + 1;
-
-            // Transition to static mode for restored sessions
-            onChatStart?.();
           }
         }
 
@@ -337,12 +333,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, onChat
     }
 
     const messageText = cleanText || (images ? "Analyze this image." : trimmed);
-    if (messages.length === 0 && onChatStart) {
-      onChatStart();
-    }
     addMessage("you", messageText);
     await sendMessage(messageText, images);
-  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, onChatStart, sendMessage, streaming, messages.length]);
+  }, [addMessage, costTracker, fundName, onExit, onSwitchFund, sendMessage, streaming]);
 
   // Persist chat history to disk whenever messages or sessionId change.
   // Write errors are logged but not surfaced — persistence is best-effort and must not interrupt the UI.

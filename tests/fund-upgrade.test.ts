@@ -28,6 +28,7 @@ vi.mock("../src/paths.js", () => ({
     config: `/home/test/.fundx/funds/${name}/fund_config.yaml`,
     claudeMd: `/home/test/.fundx/funds/${name}/CLAUDE.md`,
     claudeDir: `/home/test/.fundx/funds/${name}/.claude`,
+    claudeSettings: `/home/test/.fundx/funds/${name}/.claude/settings.json`,
     claudeSkillsDir: `/home/test/.fundx/funds/${name}/.claude/skills`,
     state: {
       dir: `/home/test/.fundx/funds/${name}/state`,
@@ -35,10 +36,16 @@ vi.mock("../src/paths.js", () => ({
       tracker: `/home/test/.fundx/funds/${name}/state/objective_tracker.json`,
       journal: `/home/test/.fundx/funds/${name}/state/trade_journal.sqlite`,
       sessionLog: `/home/test/.fundx/funds/${name}/state/session_log.json`,
+      activeSession: `/home/test/.fundx/funds/${name}/state/active_session.json`,
+      chatHistory: `/home/test/.fundx/funds/${name}/state/chat_history.json`,
+      sessionHistory: `/home/test/.fundx/funds/${name}/state/session_history.json`,
+      lock: `/home/test/.fundx/funds/${name}/state/.lock`,
     },
     analysis: `/home/test/.fundx/funds/${name}/analysis`,
     scripts: `/home/test/.fundx/funds/${name}/scripts`,
     reports: `/home/test/.fundx/funds/${name}/reports`,
+    claudeRulesDir: `/home/test/.fundx/funds/${name}/.claude/rules`,
+    memory: `/home/test/.fundx/funds/${name}/memory`,
   }),
 }));
 
