@@ -18,6 +18,7 @@ import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from
 import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
+import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -31,6 +32,9 @@ const MARKET_CLOSE_HOUR = 16;
 const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
 
 const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
+const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+
+let isProcessing = false;
 
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
@@ -251,98 +255,154 @@ export async function startDaemon(): Promise<void> {
   await rotateLogIfNeeded();
 
   cron.schedule("* * * * *", async () => {
-    const names = await listFundNames();
-    const now = new Date();
+    // Backpressure: skip if previous tick is still running
+    if (isProcessing) {
+      await log("Cron tick skipped (previous tick still processing)");
+      return;
+    }
+    isProcessing = true;
 
-    for (const name of names) {
-      try {
-        const config = await loadFundConfig(name);
-        if (config.fund.status !== "active") continue;
+    try {
+      const names = await listFundNames();
+      const now = new Date();
 
-        const tz = config.schedule.timezone || "UTC";
-        const parts = new Intl.DateTimeFormat("en-US", {
-          timeZone: tz,
-          hour: "2-digit",
-          minute: "2-digit",
-          weekday: "short",
-          hour12: false,
-        }).formatToParts(now);
-        const currentTime = `${parts.find((p) => p.type === "hour")!.value}:${parts.find((p) => p.type === "minute")!.value}`;
-        const days: Record<string, string> = { Sun: "SUN", Mon: "MON", Tue: "TUE", Wed: "WED", Thu: "THU", Fri: "FRI", Sat: "SAT" };
-        const currentDay = days[parts.find((p) => p.type === "weekday")!.value] ?? "SUN";
+      await updateHeartbeat(names.length);
 
-        if (!config.schedule.trading_days.includes(currentDay as never))
-          continue;
+      await Promise.allSettled(
+        names.map(async (name) => {
+          try {
+            const config = await loadFundConfig(name);
+            if (config.fund.status !== "active") return;
 
-        for (const [sessionType, session] of Object.entries(
-          config.schedule.sessions,
-        )) {
-          if (!session.enabled) continue;
-          if (session.time !== currentTime) continue;
+            const tz = config.schedule.timezone || "UTC";
+            const parts = new Intl.DateTimeFormat("en-US", {
+              timeZone: tz,
+              hour: "2-digit",
+              minute: "2-digit",
+              weekday: "short",
+              hour12: false,
+            }).formatToParts(now);
+            const currentTime = `${parts.find((p) => p.type === "hour")!.value}:${parts.find((p) => p.type === "minute")!.value}`;
+            const days: Record<string, string> = { Sun: "SUN", Mon: "MON", Tue: "TUE", Wed: "WED", Thu: "THU", Fri: "FRI", Sat: "SAT" };
+            const currentDay = days[parts.find((p) => p.type === "weekday")!.value] ?? "SUN";
 
-          await log(`Running ${sessionType} for '${name}'...`);
-          runFundSession(name, sessionType).catch(async (err) => {
-            await log(`Session error (${name}/${sessionType}): ${err}`);
-          });
-        }
+            if (!config.schedule.trading_days.includes(currentDay as never))
+              return;
 
-        const specialMatches = checkSpecialSessions(config);
-        for (const special of specialMatches) {
-          if (special.time !== currentTime) continue;
+            // ── Scheduled sessions (lock-gated) ──
+            for (const [sessionType, session] of Object.entries(
+              config.schedule.sessions,
+            )) {
+              if (!session.enabled) continue;
+              if (session.time !== currentTime) continue;
 
-          const specialType = `special_${special.trigger.replace(/\s+/g, "_").toLowerCase()}`;
-          await log(`Running special session for '${name}': ${special.trigger}...`);
-          runFundSession(name, specialType, { focus: special.focus }).catch(async (err) => {
-            await log(`Special session error (${name}/${specialType}): ${err}`);
-          });
-        }
-
-        if (currentTime === DAILY_REPORT_TIME) {
-          generateDailyReport(name).catch(async (err) => {
-            await log(`Daily report error (${name}): ${err}`);
-          });
-        }
-        if (currentDay === "FRI" && currentTime === WEEKLY_REPORT_TIME) {
-          generateWeeklyReport(name).catch(async (err) => {
-            await log(`Weekly report error (${name}): ${err}`);
-          });
-        }
-        const dayOfMonth = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, day: "numeric" }).format(now), 10);
-        if (dayOfMonth === 1 && currentTime === MONTHLY_REPORT_TIME) {
-          generateMonthlyReport(name).catch(async (err) => {
-            await log(`Monthly report error (${name}): ${err}`);
-          });
-        }
-
-        if (currentTime === PORTFOLIO_SYNC_TIME) {
-          syncPortfolio(name).catch(async (err) => {
-            await log(`Portfolio sync error (${name}): ${err}`);
-          });
-        }
-
-        const hour = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
-        const minute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
-        const duringMarket =
-          (hour > MARKET_OPEN_HOUR || (hour === MARKET_OPEN_HOUR && minute >= MARKET_OPEN_MINUTE)) &&
-          hour < MARKET_CLOSE_HOUR;
-        if (duringMarket && minute % STOPLOSS_CHECK_INTERVAL_MINUTES === 0) {
-          void (async () => {
-            try {
-              const triggered = await checkStopLosses(name);
-              if (triggered.length > 0) {
-                await log(
-                  `Stop-loss triggered for '${name}': ${triggered.map((t) => t.symbol).join(", ")}`,
-                );
-                await executeStopLosses(name, triggered);
+              const locked = await acquireFundLock(name, sessionType);
+              if (!locked) {
+                await log(`Skipping ${sessionType} for '${name}' (lock held)`);
+                await notifyDaemonEvent("Lock conflict", `${name}/${sessionType} — another session is running`);
+                continue;
               }
-            } catch (err) {
-              await log(`Stop-loss check error (${name}): ${err}`);
+              try {
+                await log(`Running ${sessionType} for '${name}'...`);
+                await withTimeout(runFundSession(name, sessionType), SESSION_TIMEOUT_MS);
+                clearError(name, `session:${sessionType}`);
+              } catch (err) {
+                trackError(name, `session:${sessionType}`, err);
+              } finally {
+                await releaseFundLock(name);
+              }
             }
-          })();
-        }
-      } catch (err) {
-        await log(`Error checking fund '${name}': ${err}`);
-      }
+
+            // ── Special sessions (lock-gated) ──
+            const specialMatches = checkSpecialSessions(config);
+            for (const special of specialMatches) {
+              if (special.time !== currentTime) continue;
+
+              const specialType = `special_${special.trigger.replace(/\s+/g, "_").toLowerCase()}`;
+              const locked = await acquireFundLock(name, specialType);
+              if (!locked) {
+                await log(`Skipping special session for '${name}': ${special.trigger} (lock held)`);
+                continue;
+              }
+              try {
+                await log(`Running special session for '${name}': ${special.trigger}...`);
+                await withTimeout(
+                  runFundSession(name, specialType, { focus: special.focus }),
+                  SESSION_TIMEOUT_MS,
+                );
+                clearError(name, `special:${specialType}`);
+              } catch (err) {
+                trackError(name, `special:${specialType}`, err);
+              } finally {
+                await releaseFundLock(name);
+              }
+            }
+
+            // ── Reports (fire-and-forget, no lock) ──
+            if (currentTime === DAILY_REPORT_TIME) {
+              generateDailyReport(name).catch(async (err) => {
+                await log(`Daily report error (${name}): ${err}`);
+              });
+            }
+            if (currentDay === "FRI" && currentTime === WEEKLY_REPORT_TIME) {
+              generateWeeklyReport(name).catch(async (err) => {
+                await log(`Weekly report error (${name}): ${err}`);
+              });
+            }
+            const dayOfMonth = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, day: "numeric" }).format(now), 10);
+            if (dayOfMonth === 1 && currentTime === MONTHLY_REPORT_TIME) {
+              generateMonthlyReport(name).catch(async (err) => {
+                await log(`Monthly report error (${name}): ${err}`);
+              });
+            }
+
+            // ── Portfolio sync (lock-gated) ──
+            if (currentTime === PORTFOLIO_SYNC_TIME) {
+              const locked = await acquireFundLock(name, "portfolio_sync");
+              if (locked) {
+                try {
+                  await syncPortfolio(name);
+                  clearError(name, "portfolio_sync");
+                } catch (err) {
+                  trackError(name, "portfolio_sync", err);
+                } finally {
+                  await releaseFundLock(name);
+                }
+              }
+            }
+
+            // ── Stop-loss checks (lock-gated) ──
+            const hour = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+            const minute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+            const duringMarket =
+              (hour > MARKET_OPEN_HOUR || (hour === MARKET_OPEN_HOUR && minute >= MARKET_OPEN_MINUTE)) &&
+              hour < MARKET_CLOSE_HOUR;
+            if (duringMarket && minute % STOPLOSS_CHECK_INTERVAL_MINUTES === 0) {
+              const locked = await acquireFundLock(name, "stoploss");
+              if (locked) {
+                try {
+                  const triggered = await checkStopLosses(name);
+                  if (triggered.length > 0) {
+                    await log(
+                      `Stop-loss triggered for '${name}': ${triggered.map((t) => t.symbol).join(", ")}`,
+                    );
+                    await executeStopLosses(name, triggered);
+                  }
+                  clearError(name, "stoploss");
+                } catch (err) {
+                  trackError(name, "stoploss", err);
+                } finally {
+                  await releaseFundLock(name);
+                }
+              }
+            }
+          } catch (err) {
+            await log(`Error checking fund '${name}': ${err}`);
+          }
+        }),
+      );
+    } finally {
+      isProcessing = false;
     }
   });
 
