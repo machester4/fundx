@@ -28,10 +28,12 @@ export async function startSupervisor(): Promise<void> {
   let attempt = 0;
   let stopping = false;
   let currentChild: ReturnType<typeof fork> | null = null;
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Signal handlers registered ONCE at supervisor scope (not per-launch)
   async function handleShutdown() {
     stopping = true;
+    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     if (currentChild) currentChild.kill("SIGTERM");
     setTimeout(async () => {
       await unlink(SUPERVISOR_PID).catch(() => {});
@@ -51,6 +53,9 @@ export async function startSupervisor(): Promise<void> {
       if (stopping) return;
       currentChild = null;
 
+      // Clear any pending reset timer from the previous launch
+      if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+
       const now = Date.now();
       restartTimestamps.push(now);
 
@@ -66,6 +71,12 @@ export async function startSupervisor(): Promise<void> {
         }
         await unlink(SUPERVISOR_PID).catch(() => {});
         process.exit(1);
+      }
+
+      // Prune old timestamps outside the window
+      const cutoff = now - WINDOW_MS;
+      while (restartTimestamps.length > 0 && restartTimestamps[0]! < cutoff) {
+        restartTimestamps.shift();
       }
 
       const delay = getBackoffDelay(attempt);
@@ -87,8 +98,9 @@ export async function startSupervisor(): Promise<void> {
     });
 
     // Reset attempt counter on successful run (child alive for > 60s)
-    setTimeout(() => {
+    resetTimer = setTimeout(() => {
       if (!stopping) attempt = 0;
+      resetTimer = null;
     }, 60000);
   }
 
