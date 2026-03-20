@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
-// Internal daemon runner mode — spawned as a detached background process by forkDaemon()
-if (process.argv.includes("--_daemon-mode")) {
+// Internal supervisor runner mode -- spawned as a detached background process by forkSupervisor()
+if (process.argv.includes("--_supervisor-mode")) {
+  const { startSupervisor } = await import("./services/supervisor.service.js");
+  await startSupervisor();
+// Internal daemon runner mode -- spawned by supervisor via fork()
+} else if (process.argv.includes("--_daemon-mode")) {
   const { startDaemon } = await import("./services/daemon.service.js");
   await startDaemon();
 } else {

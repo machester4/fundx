@@ -1,5 +1,5 @@
 import { loadFundConfig } from "./fund.service.js";
-import { writeSessionLog, readActiveSession, writeActiveSession } from "../state.js";
+import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory } from "../state.js";
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import type { SessionLogV2 } from "../types.js";
@@ -103,6 +103,15 @@ export async function runFundSession(
   };
 
   await writeSessionLog(fundName, log);
+
+  // Update per-session-type history for catch-up detection
+  try {
+    const history = await readSessionHistory(fundName);
+    history[sessionType] = new Date().toISOString();
+    await writeSessionHistory(fundName, history);
+  } catch {
+    // Non-critical -- catch-up will still work from session_log.json fallback
+  }
 
   if (result.session_id && result.status === "success") {
     try {

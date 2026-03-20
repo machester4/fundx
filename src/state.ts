@@ -11,6 +11,8 @@ import {
   type SessionLog,
   type ActiveSession,
   type ChatHistory,
+  type SessionHistory,
+  sessionHistorySchema,
 } from "./types.js";
 import { fundPaths } from "./paths.js";
 
@@ -144,6 +146,26 @@ export async function clearChatHistory(fundName: string): Promise<void> {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return;
     throw err;
   }
+}
+
+// ── Session History ───────────────────────────────────────────
+
+export async function readSessionHistory(fundName: string): Promise<SessionHistory> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.sessionHistory);
+    return sessionHistorySchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return {};
+    }
+    throw err;
+  }
+}
+
+export async function writeSessionHistory(fundName: string, history: SessionHistory): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.sessionHistory, history);
 }
 
 // ── Initialize state for a new fund ────────────────────────────

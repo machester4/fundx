@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Text } from "ink";
 import { Spinner } from "@inkjs/ui";
-import { startDaemon } from "../services/daemon.service.js";
+import { forkSupervisor } from "../services/supervisor.service.js";
 
 export const description = "Start the daemon scheduler + Telegram gateway";
 
@@ -12,7 +12,7 @@ export default function Start() {
   useEffect(() => {
     (async () => {
       try {
-        await startDaemon();
+        await forkSupervisor();
         setStatus("done");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : String(err));
@@ -23,5 +23,5 @@ export default function Start() {
 
   if (status === "starting") return <Spinner label="Starting daemon..." />;
   if (status === "error") return <Text color="red">Error: {error}</Text>;
-  return <Text color="green">Daemon started.</Text>;
+  return <Text color="green">Daemon started (via supervisor).</Text>;
 }
