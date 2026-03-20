@@ -1016,7 +1016,21 @@ Add after `await rotateLogIfNeeded();` and before the cron schedule:
 
 - [ ] **Step 4: Add catch-up specific tests to `tests/daemon-integration.test.ts`**
 
-Add a new describe block for catch-up testing. These tests call `checkMissedSessions` indirectly via `startDaemon()`, which calls it on startup:
+Add a new describe block for catch-up testing. **Important:** The `makeFundConfig` helper must be hoisted to the file's top-level scope (before all describe blocks) so it's accessible from both the existing "daemon cron callback" tests and this new block. Also add `sendTelegramNotification` to the gateway mock:
+
+```typescript
+// Add to the existing gateway mock:
+vi.mock("../src/services/gateway.service.js", () => ({
+  startGateway: vi.fn().mockResolvedValue(undefined),
+  stopGateway: vi.fn().mockResolvedValue(undefined),
+  sendTelegramNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Add stat to the fs/promises mock:
+// stat: vi.fn().mockResolvedValue(null),
+```
+
+Then add the new describe block:
 
 ```typescript
 import { readSessionHistory } from "../src/state.js";
