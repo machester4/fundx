@@ -401,13 +401,10 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         {/* Dynamic bottom section — re-renders as streaming progresses */}
         <Box flexDirection="column">
           {isStreaming && (
-            <Box paddingX={1} flexDirection="column">
+            <Box paddingX={1} flexDirection="column" marginTop={1}>
               {streaming.buffer ? (
                 <Box flexDirection="column">
-                  <Box gap={1}>
-                    <Text bold color="blue">claude</Text>
-                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
-                  </Box>
+                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
                   <MarkdownView content={streaming.buffer} />
                 </Box>
               ) : (
@@ -416,28 +413,20 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             </Box>
           )}
           {!streaming.isStreaming && streaming.lastTurnMetrics && (
-            <Box paddingX={1}>
+            <Box paddingX={1} marginTop={1}>
               <TurnSummary metrics={streaming.lastTurnMetrics} />
             </Box>
           )}
 
           {phase === "error" && (
-            <Box paddingX={1}>
+            <Box paddingX={1} marginTop={1}>
               <Text color="red">Error: {errorMsg}</Text>
-            </Box>
-          )}
-
-          {costTracker.messages > 0 && !isStreaming && (
-            <Box paddingX={1}>
-              <Text dimColor>
-                ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns | /help
-              </Text>
             </Box>
           )}
 
           {!isStreaming && phase !== "error" && (
             <Box flexDirection="column" marginTop={1}>
-              <Text dimColor>{"\u2500".repeat(Math.min(width, 80))}</Text>
+              <Text dimColor>{"\u2500".repeat(width)}</Text>
               <Box paddingX={1}>
                 <Text color="green">{"❯ "}</Text>
                 <TextInput
@@ -445,6 +434,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                   onSubmit={handleSubmit}
                 />
               </Box>
+              <Text dimColor>{"\u2500".repeat(width)}</Text>
             </Box>
           )}
         </Box>
@@ -491,10 +481,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           <Box paddingX={1} flexDirection="column">
             {streaming.buffer ? (
               <Box flexDirection="column">
-                <Box gap={1}>
-                  <Text bold color="blue">claude</Text>
-                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
-                </Box>
+                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
                 <MarkdownView content={streaming.buffer} />
               </Box>
             ) : (
@@ -530,7 +517,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       {/* Input */}
       {!isStreaming && (
         <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>{"\u2500".repeat(Math.min(width, 80))}</Text>
+          <Text dimColor>{"\u2500".repeat(width)}</Text>
           <Box paddingX={1}>
             <Text color="green">{"❯ "}</Text>
             <TextInput
@@ -538,6 +525,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               onSubmit={handleSubmit}
             />
           </Box>
+          <Text dimColor>{"\u2500".repeat(width)}</Text>
         </Box>
       )}
     </Box>
