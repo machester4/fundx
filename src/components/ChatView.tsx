@@ -24,6 +24,7 @@ import { ChatMessage } from "./ChatMessage.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
 import { FundContextBar } from "./FundContextBar.js";
 import { MarkdownView } from "./MarkdownView.js";
+import { TurnSummary } from "./TurnSummary.js";
 import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
 
 interface ChatViewProps {
@@ -414,6 +415,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               )}
             </Box>
           )}
+          {!streaming.isStreaming && streaming.lastTurnMetrics && (
+            <Box paddingX={1}>
+              <TurnSummary metrics={streaming.lastTurnMetrics} />
+            </Box>
+          )}
 
           {phase === "error" && (
             <Box paddingX={1}>
@@ -491,6 +497,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             ) : (
               <StreamingIndicator charCount={0} activity={streaming.activity} />
             )}
+          </Box>
+        )}
+        {!streaming.isStreaming && streaming.lastTurnMetrics && (
+          <Box paddingX={1}>
+            <TurnSummary metrics={streaming.lastTurnMetrics} />
           </Box>
         )}
       </Box>
