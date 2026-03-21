@@ -124,13 +124,13 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
         width={width}
       />
 
-      {/* Chat scoped to this fund — always in the same tree position */}
+      {/* Chat scoped to this fund */}
       <ChatView
         key={fundName}
         fundName={fundName}
         width={width}
         height={chatHeight}
-        mode="inline"
+        mode="static"
         onExit={onExit}
         onSwitchFund={handleSwitchFund}
         options={chatOptions}
