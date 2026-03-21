@@ -388,11 +388,13 @@ export async function runChatTurn(
     onThinkingStart?: () => void;
     onThinkingEnd?: () => void;
     onToolStart?: (toolName: string) => void;
+    onToolInputDelta?: (fragment: string) => void;
     onToolProgress?: (toolName: string, elapsedSeconds: number) => void;
     onToolEnd?: () => void;
     onTaskStart?: (taskId: string, description: string) => void;
-    onTaskProgress?: (taskId: string, description: string) => void;
-    onTaskEnd?: (taskId: string, summary: string) => void;
+    onTaskProgress?: (taskId: string, description: string, toolUses?: number) => void;
+    onTaskEnd?: (taskId: string, summary: string, failed?: boolean, errorMsg?: string) => void;
+    onTokens?: (tokensIn: number, tokensOut: number) => void;
   },
 ): Promise<ChatTurnResult> {
   const cwd = fundName ? fundPaths(fundName).root : WORKSPACE;
@@ -493,7 +495,7 @@ export async function runChatTurn(
     if (msg.type === "stream_event") {
       const event = msg.event as {
         type?: string;
-        delta?: { type?: string; text?: string };
+        delta?: { type?: string; text?: string; partial_json?: string };
         content_block?: { type?: string; name?: string };
       };
 
@@ -518,6 +520,8 @@ export async function runChatTurn(
           responseBuffer += event.delta.text;
           charCount += event.delta.text.length;
           callbacks?.onStreamDelta?.(event.delta.text, charCount);
+        } else if (event.delta?.type === "input_json_delta" && event.delta.partial_json) {
+          callbacks?.onToolInputDelta?.(event.delta.partial_json);
         }
       } else if (event.type === "content_block_stop") {
         if (activeBlockType === "thinking") {
@@ -542,10 +546,11 @@ export async function runChatTurn(
         callbacks?.onTaskStart?.(ts.task_id, ts.description);
       } else if (msg.subtype === "task_progress") {
         const tp = msg as SDKTaskProgressMessage;
-        callbacks?.onTaskProgress?.(tp.task_id, tp.description);
+        callbacks?.onTaskProgress?.(tp.task_id, tp.description, (tp as unknown as { usage?: { tool_uses?: number } }).usage?.tool_uses);
       } else if (msg.subtype === "task_notification") {
         const tn = msg as SDKTaskNotificationMessage;
-        callbacks?.onTaskEnd?.(tn.task_id, tn.summary);
+        const failed = tn.status === "failed" || tn.status === "stopped";
+        callbacks?.onTaskEnd?.(tn.task_id, tn.summary, failed, failed ? tn.summary : undefined);
       }
     }
 
@@ -554,6 +559,17 @@ export async function runChatTurn(
       costUsd = result.total_cost_usd;
       numTurns = result.num_turns;
       resultSessionId = result.session_id;
+
+      // Extract token counts from modelUsage (available on both success and error results)
+      if ((result as unknown as { modelUsage?: Record<string, { inputTokens: number; outputTokens: number }> }).modelUsage) {
+        let totalIn = 0;
+        let totalOut = 0;
+        for (const usage of Object.values((result as unknown as { modelUsage: Record<string, { inputTokens: number; outputTokens: number }> }).modelUsage)) {
+          totalIn += usage.inputTokens;
+          totalOut += usage.outputTokens;
+        }
+        callbacks?.onTokens?.(totalIn, totalOut);
+      }
     }
   }
 
