@@ -436,12 +436,15 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           )}
 
           {!isStreaming && phase !== "error" && (
-            <Box paddingX={1}>
-              <Text color="green">{"❯ "}</Text>
-              <TextInput
-                placeholder="Message... (/help for commands)"
-                onSubmit={handleSubmit}
-              />
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>{"\u2500".repeat(Math.min(width, 80))}</Text>
+              <Box paddingX={1}>
+                <Text color="green">{"❯ "}</Text>
+                <TextInput
+                  placeholder="Message... (/help for commands)"
+                  onSubmit={handleSubmit}
+                />
+              </Box>
             </Box>
           )}
         </Box>
@@ -524,15 +527,8 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
       {/* Input */}
       {!isStreaming && (
-        isInline ? (
-          <Box borderStyle="round" borderDimColor paddingX={1}>
-            <Text color="green">{"> "}</Text>
-            <TextInput
-              placeholder="Message... (/help for commands)"
-              onSubmit={handleSubmit}
-            />
-          </Box>
-        ) : (
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>{"\u2500".repeat(Math.min(width, 80))}</Text>
           <Box paddingX={1}>
             <Text color="green">{"❯ "}</Text>
             <TextInput
@@ -540,7 +536,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               onSubmit={handleSubmit}
             />
           </Box>
-        )
+        </Box>
       )}
     </Box>
   );
