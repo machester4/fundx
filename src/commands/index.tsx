@@ -130,7 +130,7 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
         fundName={fundName}
         width={width}
         height={chatHeight}
-        mode="static"
+        mode="standalone"
         onExit={onExit}
         onSwitchFund={handleSwitchFund}
         options={chatOptions}
