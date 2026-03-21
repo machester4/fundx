@@ -92,6 +92,22 @@ interface StreamingState {
 
 Update the initial state in `useState` to include `lastTurnMetrics: null`.
 
+Also update the `setState` call inside `send()` (lines 73-80) to include `lastTurnMetrics: null`:
+
+```typescript
+      setState({
+        isStreaming: true,
+        buffer: "",
+        charCount: 0,
+        activity: IDLE_ACTIVITY,
+        result: null,
+        error: null,
+        lastTurnMetrics: null,
+      });
+```
+
+This is required because the setState uses a complete object literal (not a spread), so TypeScript requires all fields.
+
 - [ ] **Step 3: Enrich the streaming callbacks**
 
 Replace the `streamCallbacks` object inside `send()` (lines 83-118):
@@ -280,7 +296,17 @@ In the `runChatTurn` function signature (around line 384-396), update the callba
 
 - [ ] **Step 2: Accumulate tool input deltas**
 
-In the message processing loop, after the `content_block_start` handling for `tool_use` (around line 504-506), add handling for `input_json_delta`:
+First, update the event type cast (around line 494-498) to include `partial_json`:
+
+```typescript
+      const event = msg.event as {
+        type?: string;
+        delta?: { type?: string; text?: string; partial_json?: string };
+        content_block?: { type?: string; name?: string };
+      };
+```
+
+Then, in the `content_block_delta` handling (around line 517-521), add the `input_json_delta` branch as an `else if`:
 
 ```typescript
       if (event.type === "content_block_delta") {
@@ -293,8 +319,6 @@ In the message processing loop, after the `content_block_start` handling for `to
         }
       }
 ```
-
-Note: the existing `content_block_delta` handling (line 517-521) checks for `text_delta`. Add the `input_json_delta` branch as an `else if`.
 
 - [ ] **Step 3: Pass task usage and error info**
 
@@ -322,8 +346,8 @@ In the result message handler (around line 552-557), after extracting `costUsd` 
       numTurns = result.num_turns;
       resultSessionId = result.session_id;
 
-      // Extract token counts from modelUsage
-      if ("modelUsage" in result && result.modelUsage) {
+      // Extract token counts from modelUsage (available on both success and error results)
+      if (result.modelUsage) {
         let totalIn = 0;
         let totalOut = 0;
         for (const usage of Object.values(result.modelUsage as Record<string, { inputTokens: number; outputTokens: number }>)) {
@@ -524,7 +548,11 @@ The cleanest approach: after the streaming buffer block (where `streaming.buffer
 )}
 ```
 
-Place this right after the streaming block (after the `StreamingIndicator` + `MarkdownView` section). It will show the summary once the agent finishes responding, and disappear when the next message starts.
+Place this in BOTH render paths in ChatView:
+1. **Static mode** (around line 416) — after the streaming block inside the `isStatic` branch
+2. **Standalone mode** (around line 495) — after the streaming block inside the standalone branch
+
+In both cases, place it right after the `StreamingIndicator` + `MarkdownView` section. It shows the summary once the agent finishes responding and persists until the next `send()` clears `lastTurnMetrics`.
 
 - [ ] **Step 3: Run typecheck**
 
