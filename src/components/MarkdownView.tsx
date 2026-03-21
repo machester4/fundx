@@ -381,15 +381,18 @@ export function MarkdownView({ content }: MarkdownViewProps) {
 
       // Bullet list items
       if (/^\s*[-*]\s/.test(line)) {
-        if (prevType !== "list") spaceBefore("list");
+        const isFirst = prevType !== "list";
+        if (isFirst) spaceBefore("list");
         const indent = line.match(/^(\s*)/)?.[1] ?? "";
         const text = line.replace(/^\s*[-*]\s/, "");
         elements.push(
-          <Text key={i}>
-            {indent}{"  "}
-            <Text color="cyan">{"\u2022"}</Text>
-            {" "}{parseInlineMarkdown(text, `l${i}`)}
-          </Text>,
+          <Box key={i} marginTop={isFirst && prevType !== null && prevType !== "empty" ? 1 : 0}>
+            <Text>
+              {indent}{"  "}
+              <Text color="cyan">{"\u2022"}</Text>
+              {" "}{parseInlineMarkdown(text, `l${i}`)}
+            </Text>
+          </Box>,
         );
         prevType = "list";
         i++;
@@ -398,15 +401,18 @@ export function MarkdownView({ content }: MarkdownViewProps) {
 
       // Numbered list items
       if (/^\s*\d+[.)]\s/.test(line)) {
-        if (prevType !== "list") spaceBefore("list");
+        const isFirst = prevType !== "list";
+        if (isFirst) spaceBefore("list");
         const numMatch = line.match(/^(\s*)(\d+[.)])\s(.*)$/);
         if (numMatch) {
           elements.push(
-            <Text key={i}>
-              {numMatch[1]}{"  "}
-              <Text color="cyan">{numMatch[2]}</Text>
-              {" "}{parseInlineMarkdown(numMatch[3], `l${i}`)}
-            </Text>,
+            <Box key={i} marginTop={isFirst && prevType !== null && prevType !== "empty" ? 1 : 0}>
+              <Text>
+                {numMatch[1]}{"  "}
+                <Text color="cyan">{numMatch[2]}</Text>
+                {" "}{parseInlineMarkdown(numMatch[3], `l${i}`)}
+              </Text>
+            </Box>,
           );
           prevType = "list";
           i++;
