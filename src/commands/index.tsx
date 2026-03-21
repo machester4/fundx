@@ -41,7 +41,8 @@ interface FundDashboardScreenProps {
 }
 
 function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOptions }: FundDashboardScreenProps) {
-  const handleSwitchFund = useCallback(() => {
+  const handleSwitchFund = useCallback((_fundName: string) => {
+    // Always go back to selector — direct switching not yet supported
     onBack();
   }, [onBack]);
 
