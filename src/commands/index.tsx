@@ -92,16 +92,9 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
   const objectiveType = fundConfig?.objective.type ?? "unknown";
   const initialCapital = fundConfig?.capital.initial ?? 0;
 
-  // Calculate layout heights
-  const headerHeight = 1;
-  const portfolioHeight = portfolio ? Math.min(portfolio.positions.length + 2, 8) : 1;
-  const objectiveHeight = 1;
-  const panelsHeight = headerHeight + portfolioHeight + objectiveHeight + 1; // +1 for spacing
-  const chatHeight = Math.max(5, height - panelsHeight);
-
   return (
-    <Box flexDirection="column" width={width} height={height}>
-      {/* Fund header bar */}
+    <>
+      {/* Fund info panels — rendered once, scroll up as chat grows */}
       <FundDashboardHeader
         displayName={displayName}
         status={status}
@@ -109,38 +102,29 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
         model={model}
         width={width}
       />
-
-      {/* Portfolio summary */}
       <PortfolioPanel
         portfolio={portfolio}
         initialCapital={initialCapital}
         width={width}
       />
-
-      {/* Objective progress */}
       <ObjectiveProgressBar
         tracker={tracker}
         objectiveType={objectiveType}
         width={width}
       />
 
-      {/* Chat scoped to this fund */}
+      {/* Chat in static mode — uses Ink's <Static> for scrollback */}
       <ChatView
         key={fundName}
         fundName={fundName}
         width={width}
-        height={chatHeight}
-        mode="standalone"
+        height={height}
+        mode="static"
         onExit={onExit}
         onSwitchFund={handleSwitchFund}
         options={chatOptions}
       />
-
-      {/* Footer hint */}
-      <Box paddingX={1}>
-        <Text dimColor>Esc: back to fund list  /help: commands  q: quit</Text>
-      </Box>
-    </Box>
+    </>
   );
 }
 
