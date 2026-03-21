@@ -153,7 +153,7 @@ function renderTable(lines: string[], startKey: number): React.ReactNode {
   const separator = colWidths.map((w) => "\u2500".repeat(w + 2)).join("\u253C");
 
   return (
-    <Box key={`tbl-${startKey}`} flexDirection="column" marginY={0}>
+    <Box key={`tbl-${startKey}`} flexDirection="column" marginY={1}>
       {renderTableRow(headerRow, colWidths, `tbl-${startKey}-h`, true)}
       <Text dimColor>{separator}</Text>
       {bodyRows.map((row, r) =>
@@ -216,10 +216,15 @@ export function MarkdownView({ content }: MarkdownViewProps) {
     /** Add vertical spacing before block elements */
     function spaceBefore(currentType: typeof prevType): void {
       if (prevType === null) return;
-      // Add blank line between different block types, or before headings
+      if (prevType === "empty") return; // empty line already provides visual break
+      // Always add spacing before headings, tables, code blocks, and hr
+      // Add spacing between different block types (e.g., list → text, text → list)
       if (
         currentType === "heading" ||
-        (prevType !== currentType && prevType !== "empty" && currentType !== "empty")
+        currentType === "table" ||
+        currentType === "code" ||
+        currentType === "hr" ||
+        prevType !== currentType
       ) {
         elements.push(<Box key={`sp-${i}`} marginTop={1} />);
       }
