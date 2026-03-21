@@ -400,18 +400,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
         {/* Dynamic bottom section — re-renders as streaming progresses */}
         <Box flexDirection="column">
-          {isStreaming && (
-            <Box paddingX={1} flexDirection="column" marginTop={1}>
-              {streaming.buffer ? (
-                <Box flexDirection="column">
-                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
-                  <MarkdownView content={streaming.buffer} />
-                </Box>
-              ) : (
-                <StreamingIndicator charCount={0} activity={streaming.activity} />
-              )}
-            </Box>
-          )}
           {!streaming.isStreaming && streaming.lastTurnMetrics && (
             <Box paddingX={1} marginTop={1}>
               <TurnSummary metrics={streaming.lastTurnMetrics} />
@@ -426,7 +414,18 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
           <Box flexDirection="column" marginTop={1}>
             <Text dimColor>{"\u2500".repeat(width)}</Text>
-            {!isStreaming && phase !== "error" && (
+            {isStreaming ? (
+              <Box paddingX={1} flexDirection="column">
+                {streaming.buffer ? (
+                  <Box flexDirection="column">
+                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
+                    <MarkdownView content={streaming.buffer} />
+                  </Box>
+                ) : (
+                  <StreamingIndicator charCount={0} activity={streaming.activity} />
+                )}
+              </Box>
+            ) : phase !== "error" ? (
               <Box paddingX={1}>
                 <Text color="green">{"❯ "}</Text>
                 <TextInput
@@ -434,7 +433,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                   onSubmit={handleSubmit}
                 />
               </Box>
-            )}
+            ) : null}
             <Text dimColor>{"\u2500".repeat(width)}</Text>
           </Box>
         </Box>
