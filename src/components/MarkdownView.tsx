@@ -277,12 +277,13 @@ export function MarkdownView({ content }: MarkdownViewProps) {
 
       // Horizontal rule
       if (isHorizontalRule(line)) {
-        spaceBefore("hr");
         const ruleWidth = Math.min(getTerminalWidth(), 60);
         elements.push(
-          <Text key={i} dimColor>
-            {"\u2500".repeat(ruleWidth)}
-          </Text>,
+          <Box key={i} marginY={1}>
+            <Text dimColor>
+              {"\u2500".repeat(ruleWidth)}
+            </Text>
+          </Box>,
         );
         prevType = "hr";
         i++;
