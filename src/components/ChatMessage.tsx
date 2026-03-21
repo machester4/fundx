@@ -5,13 +5,9 @@ import { MarkdownView } from "./MarkdownView.js";
 interface ChatMessageProps {
   sender: "you" | "claude" | "system";
   content: string;
-  timestamp: Date;
+  timestamp?: Date;
   cost?: number;
   turns?: number;
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 export function ChatMessage({ sender, content }: ChatMessageProps) {

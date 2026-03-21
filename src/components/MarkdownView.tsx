@@ -184,20 +184,6 @@ function getTerminalWidth(): number {
  * Supports: headers, bold, italic, inline code, code blocks, tables,
  * horizontal rules, blockquotes, numbered lists, bullet lists, checkboxes.
  */
-/** Check if a line is a block-level element (header, list, blockquote, etc.) */
-function isBlockElement(line: string): boolean {
-  if (!line) return false;
-  return (
-    line.startsWith("#") ||
-    isHorizontalRule(line) ||
-    isTableRow(line) ||
-    line.startsWith("> ") ||
-    /^\s*[-*]\s/.test(line) ||
-    /^\s*\d+[.)]\s/.test(line) ||
-    line.trimStart().startsWith("```")
-  );
-}
-
 /**
  * Terminal markdown renderer for Ink.
  *
@@ -421,7 +407,7 @@ export function MarkdownView({ content }: MarkdownViewProps) {
       }
 
       // Regular paragraph line
-      if (prevType === "empty" && prevType !== null) {
+      if (prevType === "empty") {
         // Blank line before text means paragraph break — add spacing
         spaceBefore("text");
       }
