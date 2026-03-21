@@ -513,7 +513,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
       {/* Context bar — always visible at bottom */}
       {!isInline && (welcomeData || isWorkspaceMode) && (
-        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+        <Box marginTop={1}>
+          <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+        </Box>
       )}
 
       {/* Cost summary */}
