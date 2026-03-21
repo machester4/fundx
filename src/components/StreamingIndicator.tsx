@@ -22,10 +22,10 @@ export function StreamingIndicator({ charCount, activity }: StreamingIndicatorPr
   const dots = DOTS[dotIdx];
   const lines: React.ReactNode[] = [];
 
-  // Error (persists until next tool starts)
+  // Error
   if (activity?.error) {
     lines.push(
-      <Text key="error" color="red">[error] {activity.error}</Text>,
+      <Text key="error" color="red">{"\u25CF"} {activity.error}</Text>,
     );
   }
 
@@ -33,25 +33,20 @@ export function StreamingIndicator({ charCount, activity }: StreamingIndicatorPr
   if (activity?.taskLabel) {
     const toolInfo = activity.taskToolCount > 0 ? `, ${activity.taskToolCount} tools` : "";
     lines.push(
-      <Text key="task" color="cyan">[agent] {activity.taskLabel}{toolInfo}{dots}</Text>,
+      <Text key="task" color="cyan">{"\u25CF"} Agent({activity.taskLabel}{toolInfo}){dots}</Text>,
     );
   }
 
-  // Tool execution
+  // Tool execution — green dot + name(input preview)
   if (activity?.toolName) {
     const elapsed = activity.toolElapsed > 0 ? ` (${activity.toolElapsed.toFixed(1)}s)` : "";
+    const inputPreview = activity.toolInput ? `(${activity.toolInput})` : "";
+    const indent = activity.taskLabel ? "  " : "";
     lines.push(
-      <Text key="tool" color="yellow">
-        {activity.taskLabel ? "  " : ""}[tool] {activity.toolName}{elapsed}{dots}
+      <Text key="tool" color="green">
+        {indent}{"\u25CF"} <Text bold>{activity.toolName}</Text>{inputPreview}{elapsed}{dots}
       </Text>,
     );
-    if (activity.toolInput) {
-      lines.push(
-        <Text key="toolInput" dimColor>
-          {activity.taskLabel ? "  " : ""}       {activity.toolInput}
-        </Text>,
-      );
-    }
   }
 
   // Thinking
@@ -60,19 +55,19 @@ export function StreamingIndicator({ charCount, activity }: StreamingIndicatorPr
       ? ((Date.now() - activity.thinkingStartedAt) / 1000).toFixed(1)
       : "0.0";
     lines.push(
-      <Text key="thinking" color="magenta">[thinking] {elapsed}s{dots}</Text>,
+      <Text key="thinking" color="magenta">{"\u25CF"} Thinking ({elapsed}s){dots}</Text>,
     );
   }
 
-  // Fallback: streaming text or initial thinking
+  // Fallback
   if (lines.length === 0) {
     if (charCount > 0) {
       lines.push(
-        <Text key="streaming" color="blue">Streaming{dots} ({charCount.toLocaleString()} chars)</Text>,
+        <Text key="streaming" dimColor>{"\u25CF"} Streaming{dots} ({charCount.toLocaleString()} chars)</Text>,
       );
     } else {
       lines.push(
-        <Text key="init" color="blue">Thinking{dots}</Text>,
+        <Text key="init" dimColor>{"\u25CF"} Thinking{dots}</Text>,
       );
     }
   }
