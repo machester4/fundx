@@ -496,24 +496,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         )}
       </Box>
 
-      {/* === Bottom pinned section (standalone only) === */}
-
-      {/* Context bar — always visible at bottom */}
-      {!isInline && (welcomeData || isWorkspaceMode) && (
-        <Box marginTop={1}>
-          <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
-        </Box>
-      )}
-
-      {/* Cost summary */}
-      {!isInline && costTracker.messages > 0 && (
-        <Box paddingX={1}>
-          <Text dimColor>
-            ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns
-          </Text>
-        </Box>
-      )}
-
       {/* Input */}
       <Box flexDirection="column" marginTop={1}>
         <Text dimColor>{"\u2500".repeat(width)}</Text>
@@ -528,6 +510,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         )}
         <Text dimColor>{"\u2500".repeat(width)}</Text>
       </Box>
+
+      {/* Context bar — below input */}
+      {!isInline && (welcomeData || isWorkspaceMode) && (
+        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+      )}
     </Box>
   );
 }
