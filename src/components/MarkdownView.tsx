@@ -184,6 +184,26 @@ function getTerminalWidth(): number {
  * Supports: headers, bold, italic, inline code, code blocks, tables,
  * horizontal rules, blockquotes, numbered lists, bullet lists, checkboxes.
  */
+/** Check if a line is a block-level element (header, list, blockquote, etc.) */
+function isBlockElement(line: string): boolean {
+  if (!line) return false;
+  return (
+    line.startsWith("#") ||
+    isHorizontalRule(line) ||
+    isTableRow(line) ||
+    line.startsWith("> ") ||
+    /^\s*[-*]\s/.test(line) ||
+    /^\s*\d+[.)]\s/.test(line) ||
+    line.trimStart().startsWith("```")
+  );
+}
+
+/**
+ * Terminal markdown renderer for Ink.
+ *
+ * Supports: headers, bold, italic, inline code, code blocks, tables,
+ * horizontal rules, blockquotes, numbered lists, bullet lists, checkboxes.
+ */
 export function MarkdownView({ content }: MarkdownViewProps) {
   const rendered = useMemo(() => {
     const lines = content.split("\n");
@@ -191,6 +211,19 @@ export function MarkdownView({ content }: MarkdownViewProps) {
     let inCodeBlock = false;
     let codeBlockLang = "";
     let i = 0;
+    let prevType: "heading" | "table" | "code" | "list" | "blockquote" | "hr" | "text" | "empty" | null = null;
+
+    /** Add vertical spacing before block elements */
+    function spaceBefore(currentType: typeof prevType): void {
+      if (prevType === null) return;
+      // Add blank line between different block types, or before headings
+      if (
+        currentType === "heading" ||
+        (prevType !== currentType && prevType !== "empty" && currentType !== "empty")
+      ) {
+        elements.push(<Box key={`sp-${i}`} marginTop={1} />);
+      }
+    }
 
     while (i < lines.length) {
       const line = lines[i];
@@ -200,7 +233,7 @@ export function MarkdownView({ content }: MarkdownViewProps) {
         if (!inCodeBlock) {
           inCodeBlock = true;
           codeBlockLang = line.trimStart().slice(3).trim();
-          // Render a dim label for the code block
+          spaceBefore("code");
           if (codeBlockLang) {
             elements.push(
               <Text key={i} dimColor>
@@ -213,6 +246,7 @@ export function MarkdownView({ content }: MarkdownViewProps) {
         } else {
           inCodeBlock = false;
           codeBlockLang = "";
+          prevType = "code";
           i++;
           continue;
         }
@@ -229,81 +263,103 @@ export function MarkdownView({ content }: MarkdownViewProps) {
         continue;
       }
 
+      // Empty lines
+      if (line.trim() === "") {
+        prevType = "empty";
+        i++;
+        continue;
+      }
+
       // Horizontal rule
       if (isHorizontalRule(line)) {
+        spaceBefore("hr");
         const ruleWidth = Math.min(getTerminalWidth(), 60);
         elements.push(
           <Text key={i} dimColor>
             {"\u2500".repeat(ruleWidth)}
           </Text>,
         );
+        prevType = "hr";
         i++;
         continue;
       }
 
       // Table detection: collect consecutive table rows
       if (isTableRow(line)) {
+        spaceBefore("table");
         const tableLines: string[] = [];
         while (i < lines.length && (isTableRow(lines[i]) || isTableSeparator(lines[i]))) {
           tableLines.push(lines[i]);
           i++;
         }
         elements.push(renderTable(tableLines, i));
+        prevType = "table";
         continue;
       }
 
       // Headers
       if (line.startsWith("#### ")) {
+        spaceBefore("heading");
         elements.push(
           <Text key={i} bold dimColor>
             {line.slice(5)}
           </Text>,
         );
+        prevType = "heading";
         i++;
         continue;
       }
       if (line.startsWith("### ")) {
+        spaceBefore("heading");
         elements.push(
           <Text key={i} bold color="cyan">
             {line.slice(4)}
           </Text>,
         );
+        prevType = "heading";
         i++;
         continue;
       }
       if (line.startsWith("## ")) {
+        spaceBefore("heading");
         elements.push(
           <Text key={i} bold color="blue">
             {line.slice(3)}
           </Text>,
         );
+        prevType = "heading";
         i++;
         continue;
       }
       if (line.startsWith("# ")) {
+        spaceBefore("heading");
         elements.push(
           <Text key={i} bold underline>
             {line.slice(2)}
           </Text>,
         );
+        prevType = "heading";
         i++;
         continue;
       }
 
       // Blockquote
       if (line.startsWith("> ")) {
+        if (prevType !== "blockquote") spaceBefore("blockquote");
         elements.push(
           <Text key={i}>
             <Text dimColor>{"  \u2502 "}</Text>
             <Text italic>{parseInlineMarkdown(line.slice(2), `l${i}`)}</Text>
           </Text>,
         );
+        prevType = "blockquote";
         i++;
         continue;
       }
 
       // Checkbox list items
       if (/^\s*[-*]\s+\[[ x]\]\s/.test(line)) {
+        if (prevType !== "list") spaceBefore("list");
         const isChecked = /\[x\]/i.test(line);
         const textStart = line.indexOf("]") + 2;
         const text = line.slice(textStart);
@@ -312,12 +368,14 @@ export function MarkdownView({ content }: MarkdownViewProps) {
             {"  "}{isChecked ? <Text color="green">{"\u2611"}</Text> : <Text dimColor>{"\u2610"}</Text>}{" "}{parseInlineMarkdown(text, `l${i}`)}
           </Text>,
         );
+        prevType = "list";
         i++;
         continue;
       }
 
       // Bullet list items
       if (/^\s*[-*]\s/.test(line)) {
+        if (prevType !== "list") spaceBefore("list");
         const indent = line.match(/^(\s*)/)?.[1] ?? "";
         const text = line.replace(/^\s*[-*]\s/, "");
         elements.push(
@@ -327,12 +385,14 @@ export function MarkdownView({ content }: MarkdownViewProps) {
             {" "}{parseInlineMarkdown(text, `l${i}`)}
           </Text>,
         );
+        prevType = "list";
         i++;
         continue;
       }
 
       // Numbered list items
       if (/^\s*\d+[.)]\s/.test(line)) {
+        if (prevType !== "list") spaceBefore("list");
         const numMatch = line.match(/^(\s*)(\d+[.)])\s(.*)$/);
         if (numMatch) {
           elements.push(
@@ -342,18 +402,24 @@ export function MarkdownView({ content }: MarkdownViewProps) {
               {" "}{parseInlineMarkdown(numMatch[3], `l${i}`)}
             </Text>,
           );
+          prevType = "list";
           i++;
           continue;
         }
       }
 
       // Regular paragraph line
+      if (prevType === "empty" && prevType !== null) {
+        // Blank line before text means paragraph break — add spacing
+        spaceBefore("text");
+      }
       elements.push(<Text key={i}>{parseInlineMarkdown(line, `l${i}`)}</Text>);
+      prevType = "text";
       i++;
     }
 
     return elements;
   }, [content]);
 
-  return <>{rendered}</>;
+  return <Box flexDirection="column">{rendered}</Box>;
 }
