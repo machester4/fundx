@@ -14,7 +14,7 @@ function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function ChatMessage({ sender, content, timestamp, cost, turns }: ChatMessageProps) {
+export function ChatMessage({ sender, content }: ChatMessageProps) {
   if (sender === "system") {
     return (
       <Box flexDirection="column" marginY={0}>
@@ -25,28 +25,18 @@ export function ChatMessage({ sender, content, timestamp, cost, turns }: ChatMes
     );
   }
 
-  const isUser = sender === "you";
-  const nameColor = isUser ? "green" : "blue";
+  if (sender === "you") {
+    return (
+      <Box marginBottom={1}>
+        <Text backgroundColor="#333333" color="white">{` ${content} `}</Text>
+      </Box>
+    );
+  }
 
+  // Claude response — just the text, no label
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box gap={1}>
-        <Text bold color={nameColor}>
-          {sender}
-        </Text>
-        <Text dimColor>{formatTime(timestamp)}</Text>
-        {!isUser && cost !== undefined && cost > 0 && (
-          <Text dimColor>
-            · ${cost.toFixed(4)}
-            {turns !== undefined && turns > 0 ? ` · ${turns} turns` : ""}
-          </Text>
-        )}
-      </Box>
-      {isUser ? (
-        <Text>{content}</Text>
-      ) : (
-        <MarkdownView content={content} />
-      )}
+      <MarkdownView content={content} />
     </Box>
   );
 }
