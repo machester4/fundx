@@ -24,6 +24,7 @@ import { ChatMessage } from "./ChatMessage.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
 import { FundContextBar } from "./FundContextBar.js";
 import { MarkdownView } from "./MarkdownView.js";
+import { TurnSummary } from "./TurnSummary.js";
 import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
 
 interface ChatViewProps {
@@ -399,44 +400,39 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
         {/* Dynamic bottom section — re-renders as streaming progresses */}
         <Box flexDirection="column">
-          {isStreaming && (
-            <Box paddingX={1} flexDirection="column">
-              {streaming.buffer ? (
-                <Box flexDirection="column">
-                  <Box gap={1}>
-                    <Text bold color="blue">claude</Text>
-                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
-                  </Box>
-                  <MarkdownView content={streaming.buffer} />
-                </Box>
-              ) : (
-                <StreamingIndicator charCount={0} activity={streaming.activity} />
-              )}
+          {!streaming.isStreaming && streaming.lastTurnMetrics && (
+            <Box paddingX={1} marginTop={1}>
+              <TurnSummary metrics={streaming.lastTurnMetrics} />
             </Box>
           )}
 
           {phase === "error" && (
-            <Box paddingX={1}>
+            <Box paddingX={1} marginTop={1}>
               <Text color="red">Error: {errorMsg}</Text>
             </Box>
           )}
 
-          {costTracker.messages > 0 && !isStreaming && (
-            <Box paddingX={1}>
-              <Text dimColor>
-                ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns | /help
-              </Text>
-            </Box>
-          )}
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>{"\u2500".repeat(width)}</Text>
+            {isStreaming ? (
+              <Box paddingX={1}>
+                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
+              </Box>
+            ) : phase !== "error" ? (
+              <Box paddingX={1}>
+                <Text color="green">{"❯ "}</Text>
+                <TextInput
+                  placeholder="Message... (/help for commands)"
+                  onSubmit={handleSubmit}
+                />
+              </Box>
+            ) : null}
+            <Text dimColor>{"\u2500".repeat(width)}</Text>
+          </Box>
 
-          {!isStreaming && phase !== "error" && (
-            <Box paddingX={1}>
-              <Text color="green">{"❯ "}</Text>
-              <TextInput
-                placeholder="Message... (/help for commands)"
-                onSubmit={handleSubmit}
-              />
-            </Box>
+          {/* Context bar — below input */}
+          {(welcomeData || isWorkspaceMode) && (
+            <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
           )}
         </Box>
       </>
@@ -482,10 +478,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           <Box paddingX={1} flexDirection="column">
             {streaming.buffer ? (
               <Box flexDirection="column">
-                <Box gap={1}>
-                  <Text bold color="blue">claude</Text>
-                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
-                </Box>
+                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
                 <MarkdownView content={streaming.buffer} />
               </Box>
             ) : (
@@ -493,35 +486,17 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             )}
           </Box>
         )}
+        {!streaming.isStreaming && streaming.lastTurnMetrics && (
+          <Box paddingX={1}>
+            <TurnSummary metrics={streaming.lastTurnMetrics} />
+          </Box>
+        )}
       </Box>
 
-      {/* === Bottom pinned section (standalone only) === */}
-
-      {/* Context bar — always visible at bottom */}
-      {!isInline && (welcomeData || isWorkspaceMode) && (
-        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
-      )}
-
-      {/* Cost summary */}
-      {!isInline && costTracker.messages > 0 && (
-        <Box paddingX={1}>
-          <Text dimColor>
-            ${costTracker.total_cost_usd.toFixed(4)} | {costTracker.messages} msgs | {costTracker.total_turns} turns
-          </Text>
-        </Box>
-      )}
-
       {/* Input */}
-      {!isStreaming && (
-        isInline ? (
-          <Box borderStyle="round" borderDimColor paddingX={1}>
-            <Text color="green">{"> "}</Text>
-            <TextInput
-              placeholder="Message... (/help for commands)"
-              onSubmit={handleSubmit}
-            />
-          </Box>
-        ) : (
+      <Box flexDirection="column" marginTop={1}>
+        <Text dimColor>{"\u2500".repeat(width)}</Text>
+        {!isStreaming && (
           <Box paddingX={1}>
             <Text color="green">{"❯ "}</Text>
             <TextInput
@@ -529,7 +504,13 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               onSubmit={handleSubmit}
             />
           </Box>
-        )
+        )}
+        <Text dimColor>{"\u2500".repeat(width)}</Text>
+      </Box>
+
+      {/* Context bar — below input */}
+      {!isInline && (welcomeData || isWorkspaceMode) && (
+        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
       )}
     </Box>
   );
