@@ -4,19 +4,12 @@ import { Box, Text, useApp, useInput } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
-import { useInterval } from "../hooks/useInterval.js";
 import { getAllFundStatuses } from "../services/status.service.js";
 import type { FundStatusData } from "../services/status.service.js";
-import { loadFundConfig } from "../services/fund.service.js";
-import { readPortfolio, readTracker } from "../state.js";
 import { forkSupervisor } from "../services/supervisor.service.js";
 import { FundSelector } from "../components/FundSelector.js";
-import { FundDashboardHeader } from "../components/FundDashboardHeader.js";
-import { PortfolioPanel } from "../components/PortfolioPanel.js";
-import { ObjectiveProgressBar } from "../components/ObjectiveProgressBar.js";
 import { ChatView } from "../components/ChatView.js";
 import { Logo } from "../components/Logo.js";
-import type { Portfolio, ObjectiveTracker, FundConfig } from "../types.js";
 
 export const description = "FundX — Autonomous AI Fund Manager powered by the Claude Agent SDK";
 
@@ -48,83 +41,27 @@ interface FundDashboardScreenProps {
 }
 
 function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOptions }: FundDashboardScreenProps) {
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [tracker, setTracker] = useState<ObjectiveTracker | null>(null);
-  const [fundConfig, setFundConfig] = useState<FundConfig | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  // Load fund data
-  useEffect(() => {
-    (async () => {
-      try {
-        const [config, port, trk] = await Promise.all([
-          loadFundConfig(fundName),
-          readPortfolio(fundName).catch(() => null),
-          readTracker(fundName).catch(() => null),
-        ]);
-        setFundConfig(config);
-        setPortfolio(port);
-        setTracker(trk);
-      } catch {
-        // Fund data may not be available yet
-      }
-    })();
-  }, [fundName, refreshKey]);
-
-  // Refresh portfolio on interval
-  useInterval(() => setRefreshKey((k) => k + 1), PORTFOLIO_REFRESH_MS);
-
-  const handleSwitchFund = useCallback((name: string) => {
-    // When user types /fund <name> in chat, switch to that fund
+  const handleSwitchFund = useCallback(() => {
     onBack();
   }, [onBack]);
 
-  useInput((input, key) => {
+  useInput((_input, key) => {
     if (key.escape) {
       onBack();
     }
   });
 
-  const displayName = fundConfig?.fund.display_name ?? fundName;
-  const status = fundConfig?.fund.status ?? "active";
-  const brokerMode = fundConfig?.broker.mode === "live" ? "live" : "paper";
-  const model = chatOptions.model ?? "sonnet";
-  const objectiveType = fundConfig?.objective.type ?? "unknown";
-  const initialCapital = fundConfig?.capital.initial ?? 0;
-
   return (
-    <>
-      {/* Fund info panels — rendered once, scroll up as chat grows */}
-      <FundDashboardHeader
-        displayName={displayName}
-        status={status}
-        brokerMode={brokerMode}
-        model={model}
-        width={width}
-      />
-      <PortfolioPanel
-        portfolio={portfolio}
-        initialCapital={initialCapital}
-        width={width}
-      />
-      <ObjectiveProgressBar
-        tracker={tracker}
-        objectiveType={objectiveType}
-        width={width}
-      />
-
-      {/* Chat in static mode — uses Ink's <Static> for scrollback */}
-      <ChatView
-        key={fundName}
-        fundName={fundName}
-        width={width}
-        height={height}
-        mode="static"
-        onExit={onExit}
-        onSwitchFund={handleSwitchFund}
-        options={chatOptions}
-      />
-    </>
+    <ChatView
+      key={fundName}
+      fundName={fundName}
+      width={width}
+      height={height}
+      mode="static"
+      onExit={onExit}
+      onSwitchFund={handleSwitchFund}
+      options={chatOptions}
+    />
   );
 }
 

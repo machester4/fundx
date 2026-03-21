@@ -436,6 +436,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             ) : null}
             <Text dimColor>{"\u2500".repeat(width)}</Text>
           </Box>
+
+          {/* Context bar — below input */}
+          {(welcomeData || isWorkspaceMode) && (
+            <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+          )}
         </Box>
       </>
     );
