@@ -424,9 +424,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             </Box>
           )}
 
-          {!isStreaming && phase !== "error" && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text dimColor>{"\u2500".repeat(width)}</Text>
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>{"\u2500".repeat(width)}</Text>
+            {!isStreaming && phase !== "error" && (
               <Box paddingX={1}>
                 <Text color="green">{"❯ "}</Text>
                 <TextInput
@@ -434,9 +434,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                   onSubmit={handleSubmit}
                 />
               </Box>
-              <Text dimColor>{"\u2500".repeat(width)}</Text>
-            </Box>
-          )}
+            )}
+            <Text dimColor>{"\u2500".repeat(width)}</Text>
+          </Box>
         </Box>
       </>
     );
@@ -515,9 +515,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       )}
 
       {/* Input */}
-      {!isStreaming && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>{"\u2500".repeat(width)}</Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Text dimColor>{"\u2500".repeat(width)}</Text>
+        {!isStreaming && (
           <Box paddingX={1}>
             <Text color="green">{"❯ "}</Text>
             <TextInput
@@ -525,9 +525,9 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
               onSubmit={handleSubmit}
             />
           </Box>
-          <Text dimColor>{"\u2500".repeat(width)}</Text>
-        </Box>
-      )}
+        )}
+        <Text dimColor>{"\u2500".repeat(width)}</Text>
+      </Box>
     </Box>
   );
 }
