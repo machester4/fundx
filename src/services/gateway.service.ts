@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, Keyboard, InlineKeyboard, type Context } from "grammy";
 import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig, saveFundConfig } from "./fund.service.js";
 import { readPortfolio, readTracker, readSessionLog } from "../state.js";
@@ -8,6 +8,31 @@ import type { GlobalConfig } from "../types.js";
 
 let bot: Bot | null = null;
 let globalConfig: GlobalConfig | null = null;
+const pendingAsk = new Map<string, string>(); // chatId → fundName for /ask follow-up
+
+// ── Keyboard Helpers ─────────────────────────────────────────
+
+/** Build the persistent reply keyboard with main commands */
+function buildMainKeyboard(): Keyboard {
+  return new Keyboard()
+    .text("/status").text("/next").text("/help").row();
+}
+
+/** Build inline keyboard with fund buttons for a given command */
+async function buildFundInlineKeyboard(command: string): Promise<InlineKeyboard> {
+  const names = await listFundNames();
+  const kb = new InlineKeyboard();
+  for (const name of names) {
+    kb.text(name, `${command}:${name}`);
+  }
+  return kb;
+}
+
+/** Reply with fund picker when no fund name provided */
+async function replyWithFundPicker(ctx: Context, command: string, usage: string): Promise<void> {
+  const kb = await buildFundInlineKeyboard(command);
+  await ctx.reply(usage, { reply_markup: kb });
+}
 
 // ── Quick command handlers (no Claude needed) ────────────────
 
@@ -349,20 +374,50 @@ export async function startGateway(): Promise<Bot | null> {
     await next();
   });
 
+  // Register command menu (appears when user types / in Telegram)
+  await bot.api.setMyCommands([
+    { command: "status", description: "Fund status (all or specific)" },
+    { command: "portfolio", description: "Fund holdings" },
+    { command: "trades", description: "Recent trades" },
+    { command: "next", description: "Upcoming sessions" },
+    { command: "pause", description: "Pause a fund" },
+    { command: "resume", description: "Resume a fund" },
+    { command: "ask", description: "Ask Claude about a fund" },
+    { command: "help", description: "Show all commands" },
+  ]);
+
+  const mainKeyboard = buildMainKeyboard();
+
+  bot.command("start", async (ctx) => {
+    await ctx.reply(
+      "Welcome to <b>FundX</b>. Use the keyboard below or type a command.",
+      { parse_mode: "HTML", reply_markup: mainKeyboard.resized().persistent() },
+    );
+  });
+
   bot.command("status", async (ctx) => {
     const args = ctx.match?.trim();
-    await handleStatus(ctx, args || undefined);
+    if (!args) {
+      await handleStatus(ctx);
+      return;
+    }
+    const names = await listFundNames();
+    if (!names.includes(args)) {
+      await replyWithFundPicker(ctx, "status", "Select a fund:");
+      return;
+    }
+    await handleStatus(ctx, args);
   });
 
   bot.command("portfolio", async (ctx) => {
     const fundName = ctx.match?.trim();
     if (!fundName) {
-      await ctx.reply("Usage: /portfolio <fund>");
+      await replyWithFundPicker(ctx, "portfolio", "Select a fund:");
       return;
     }
     const names = await listFundNames();
     if (!names.includes(fundName)) {
-      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "portfolio", `Fund '${fundName}' not found. Select one:`);
       return;
     }
     await handlePortfolio(ctx, fundName);
@@ -371,12 +426,12 @@ export async function startGateway(): Promise<Bot | null> {
   bot.command("trades", async (ctx) => {
     const parts = ctx.match?.trim().split(/\s+/) ?? [];
     if (parts.length === 0 || !parts[0]) {
-      await ctx.reply("Usage: /trades <fund> [today|week]");
+      await replyWithFundPicker(ctx, "trades", "Select a fund:");
       return;
     }
     const names = await listFundNames();
     if (!names.includes(parts[0])) {
-      await ctx.reply(`Fund '${parts[0]}' not found.\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "trades", `Fund '${parts[0]}' not found. Select one:`);
       return;
     }
     await handleTrades(ctx, parts[0], parts[1]);
@@ -385,12 +440,12 @@ export async function startGateway(): Promise<Bot | null> {
   bot.command("pause", async (ctx) => {
     const fundName = ctx.match?.trim();
     if (!fundName) {
-      await ctx.reply("Usage: /pause <fund>");
+      await replyWithFundPicker(ctx, "pause", "Select a fund to pause:");
       return;
     }
     const names = await listFundNames();
     if (!names.includes(fundName)) {
-      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "pause", `Fund '${fundName}' not found. Select one:`);
       return;
     }
     await handlePause(ctx, fundName);
@@ -399,12 +454,12 @@ export async function startGateway(): Promise<Bot | null> {
   bot.command("resume", async (ctx) => {
     const fundName = ctx.match?.trim();
     if (!fundName) {
-      await ctx.reply("Usage: /resume <fund>");
+      await replyWithFundPicker(ctx, "resume", "Select a fund to resume:");
       return;
     }
     const names = await listFundNames();
     if (!names.includes(fundName)) {
-      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "resume", `Fund '${fundName}' not found. Select one:`);
       return;
     }
     await handleResume(ctx, fundName);
@@ -419,13 +474,12 @@ export async function startGateway(): Promise<Bot | null> {
     const fundName = parts[0];
     const question = parts.slice(1).join(" ");
     if (!fundName || !question) {
-      const names = await listFundNames();
-      await ctx.reply(`Usage: /ask <fund> <question>\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "ask", "Select a fund to ask:");
       return;
     }
     const names = await listFundNames();
     if (!names.includes(fundName)) {
-      await ctx.reply(`Fund '${fundName}' not found.\nAvailable funds: ${names.join(", ")}`);
+      await replyWithFundPicker(ctx, "ask", `Fund '${fundName}' not found. Select one:`);
       return;
     }
     await wakeClaudeForQuestion(ctx, fundName, question);
@@ -438,15 +492,64 @@ export async function startGateway(): Promise<Bot | null> {
       `/status — List all funds\n` +
       `/next — Upcoming scheduled sessions\n` +
       `/help — This message\n\n` +
-      `<b>Per-fund (requires fund name):</b>\n` +
-      `/status <fund>\n` +
-      `/portfolio <fund>\n` +
-      `/trades <fund> [today|week]\n` +
-      `/pause <fund>\n` +
-      `/resume <fund>\n` +
-      `/ask <fund> <question>`,
-      { parse_mode: "HTML" },
+      `<b>Per-fund:</b>\n` +
+      `/status <fund> — Fund details\n` +
+      `/portfolio <fund> — Holdings\n` +
+      `/trades <fund> — Recent trades\n` +
+      `/pause <fund> — Pause fund\n` +
+      `/resume <fund> — Resume fund\n` +
+      `/ask <fund> <question> — Ask Claude\n\n` +
+      `<i>Tip: tap a command without fund name to get fund buttons</i>`,
+      { parse_mode: "HTML", reply_markup: mainKeyboard },
     );
+  });
+
+  // Handle inline keyboard callbacks (fund selection buttons)
+  bot.on("callback_query:data", async (ctx) => {
+    const data = ctx.callbackQuery.data;
+    const [command, fundName] = data.split(":");
+    if (!command || !fundName) {
+      await ctx.answerCallbackQuery("Invalid selection");
+      return;
+    }
+    await ctx.answerCallbackQuery();
+
+    switch (command) {
+      case "status":
+        await handleStatus(ctx, fundName);
+        break;
+      case "portfolio":
+        await handlePortfolio(ctx, fundName);
+        break;
+      case "trades":
+        await handleTrades(ctx, fundName);
+        break;
+      case "pause":
+        await handlePause(ctx, fundName);
+        break;
+      case "resume":
+        await handleResume(ctx, fundName);
+        break;
+      case "ask":
+        await ctx.reply(`Send your question for <b>${fundName}</b>:`, { parse_mode: "HTML" });
+        // Store pending ask context for next message
+        pendingAsk.set(String(ctx.chat?.id), fundName);
+        break;
+      default:
+        await ctx.reply("Unknown command");
+    }
+  });
+
+  // Handle text messages (for pending /ask follow-up)
+  bot.on("message:text", async (ctx) => {
+    const chatId = String(ctx.chat?.id);
+    const fundName = pendingAsk.get(chatId);
+    if (fundName) {
+      pendingAsk.delete(chatId);
+      await wakeClaudeForQuestion(ctx, fundName, ctx.message.text);
+      return;
+    }
+    // Ignore other free text
   });
 
   bot.catch((err) => {
