@@ -40,9 +40,11 @@ news:
 
 Defaults are Bloomberg + Reuters + CNBC + MarketWatch. Users can add any RSS feed with `name`, `url`, and `category` (macro, market, sector, commodity, crypto, etc.).
 
+**Note:** Some default feeds (especially Bloomberg, Reuters) may return 403 or empty responses due to paywall/deprecation. The fetch logic handles this gracefully — logs a warning and skips non-functional feeds. Users should verify their feeds work and replace defaults as needed.
+
 ### Zvec Storage
 
-`~/.fundx/news_cache.zvec` — single collection for all articles.
+`~/.fundx/news/` — zvec collection directory (zvec uses a directory structure internally with RocksDB + Arrow files, not a single file).
 
 **Schema per article:**
 
@@ -61,7 +63,16 @@ Defaults are Bloomberg + Reuters + CNBC + MarketWatch. Users can add any RSS fee
 
 ### Embeddings
 
-Generated at insert time for each article. Uses a lightweight text embedding approach consistent with the existing trade journal (`src/embeddings.ts`). The embedding covers `title + " " + snippet` to capture the article's semantic meaning.
+Generated at insert time for each article using `fastembed-js` (`@anysphere/fastembed`) — a local embedding library that runs ONNX models in-process (no API calls, no cost per article). Uses the `all-MiniLM-L6-v2` model (384 dimensions, ~30ms per text on ARM64).
+
+**How it works:**
+1. Each article's `title + " " + snippet` is embedded at insert time
+2. For semantic search queries, the query text is also embedded
+3. Zvec performs vector similarity search (cosine distance)
+
+**Note:** The existing `src/embeddings.ts` uses SQLite FTS5 keyword matching, NOT vector embeddings. This is a different approach. `fastembed-js` is a new dependency that provides actual vector embeddings locally.
+
+**New dependency:** `@anysphere/fastembed` — local ONNX-based text embeddings (384 dimensions, no API calls)
 
 ### Advantages over plain SQLite
 
@@ -89,13 +100,23 @@ Generated at insert time for each article. Uses a lightweight text embedding app
 
 ### Fetch cron in daemon
 
-New cron schedule in `daemon.service.ts`:
+**Implementation:** A separate `cron.schedule()` call (not inside the existing per-minute tick) to avoid blocking fund session scheduling. The pattern `*/5 * * * *` (every 5 min) covers market hours. Off-hours reduction is handled by conditional logic inside the callback: check if current hour is 8-19 UTC, otherwise skip unless it's been 30+ min since last fetch.
 
-- **Market hours (8:00-19:00 UTC):** fetch every `fetch_interval_minutes` (default 5 min)
-- **Off-hours:** fetch every 30 min
+```
+cron.schedule("*/5 * * * *", async () => {
+  const hour = new Date().getUTCHours();
+  const isMarketHours = hour >= 8 && hour < 19;
+  if (!isMarketHours && lastFetchAge < 30 min) return;
+  await fetchAllFeeds();
+  await checkBreakingNews(newArticles);
+});
+```
+
 - Uses `fast-xml-parser` for RSS parsing (lightweight, no native deps)
 - Deduplicates by URL hash before inserting
-- Cleans articles older than `retention_days` once daily
+- Cleans articles older than `retention_days` once daily (at midnight)
+- Each feed fetch is independent — one failing feed doesn't block others
+- Gracefully handles non-functional feeds (403, empty, timeout) with warning logs
 
 ### Ticker detection (best-effort)
 
@@ -120,6 +141,12 @@ This is pattern matching, not NLP. The agent (Claude) does deeper analysis when 
 ---
 
 ## Section 3: MCP Tool + Agent Access
+
+### Multi-process access
+
+MCP servers run as separate child processes. The daemon writes to zvec, and the MCP server needs to read from it. To avoid concurrency issues, the MCP tool opens zvec in **read-only mode** on each request (no persistent connection). Zvec uses RocksDB internally which supports concurrent readers with a single writer. The daemon holds the write handle; MCP servers open read-only snapshots.
+
+If zvec doesn't support multi-process access reliably, the fallback is: the MCP tool reads articles from a JSON snapshot file (`~/.fundx/news/latest.json`) that the daemon writes after each fetch cycle. This is simpler but loses semantic search — queries would be keyword-based on the snapshot.
 
 ### New tool `get_rss_news` in `src/mcp/market-data.ts`
 
@@ -180,7 +207,7 @@ Funds: pm-survivor, runway-metal
 
 ### Dedup and rate limiting
 
-- Track alerted article IDs in memory (Set) — no duplicate alerts
+- Track alerted article IDs in zvec (add `alerted: boolean` field to article schema) — survives daemon restarts
 - Max 1 alert per fund every 10 minutes (avoid spam during volatile sessions)
 - Respect fund's `notifications.quiet_hours` config
 - Uses existing `sendTelegramNotification` from `gateway.service.ts`
@@ -204,8 +231,8 @@ Funds: pm-survivor, runway-metal
 
 | File | Changes |
 |------|---------|
-| `src/types.ts` | News feed config schema (`NewsFeedConfig`), article schema |
-| `src/paths.ts` | `NEWS_CACHE` path constant for zvec database |
+| `src/types.ts` | `newsFeedSchema` (`z.object({ name: z.string(), url: z.string().url(), category: z.string().default("market") })`), `newsConfigSchema` (`z.object({ feeds: z.array(newsFeedSchema).default([...defaults]), fetch_interval_minutes: z.number().default(5), max_articles_per_feed: z.number().default(20), retention_days: z.number().default(7) })`), `newsArticleSchema` for query results |
+| `src/paths.ts` | `NEWS_DIR` path constant for zvec database directory (`~/.fundx/news/`) |
 | `src/config.ts` | Default news feeds in global config |
 | `src/services/daemon.service.ts` | News fetch cron schedule + breaking news check |
 | `src/mcp/market-data.ts` | New `get_rss_news` tool with semantic + hybrid search |
@@ -216,6 +243,7 @@ Funds: pm-survivor, runway-metal
 | Package | Purpose |
 |---------|---------|
 | `@zvec/zvec` | In-process vector database for article storage + semantic search |
+| `@anysphere/fastembed` | Local ONNX text embeddings (all-MiniLM-L6-v2, 384d, no API calls) |
 | `fast-xml-parser` | RSS/XML feed parsing |
 
 ### Unchanged
