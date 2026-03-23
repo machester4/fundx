@@ -2,6 +2,7 @@ import YahooFinance from "yahoo-finance2";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { queryArticles } from "../services/news.service.js";
 
 const yf = new YahooFinance();
 
@@ -284,6 +285,39 @@ server.tool(
     const query = symbols ? symbols.split(",")[0] : "stock market";
     const result = await yf.search(query, { newsCount: limit });
     return { content: [{ type: "text", text: JSON.stringify(result.news ?? [], null, 2) }] };
+  },
+);
+
+server.tool(
+  "get_rss_news",
+  "Search cached RSS news articles from Bloomberg, Reuters, CNBC, etc. Supports semantic search and filtering by source, category, symbols, or time range.",
+  {
+    query: z.string().optional().describe("Semantic search query (e.g. 'gold miners selloff', 'monetary policy')"),
+    symbols: z.string().optional().describe("Filter by ticker symbols (comma-separated, e.g. GDXJ,GLD)"),
+    category: z.string().optional().describe("Filter by category (macro, market, sector, commodity)"),
+    source: z.string().optional().describe("Filter by source name (Bloomberg, Reuters, CNBC, MarketWatch)"),
+    hours: z.number().positive().default(24).describe("Look back N hours (default 24)"),
+    limit: z.number().positive().max(50).default(20).describe("Max articles to return"),
+  },
+  async ({ query, symbols, category, source, hours, limit }) => {
+    try {
+      const articles = await queryArticles({ query, symbols, category, source, hours, limit });
+      if (articles.length === 0) {
+        return { content: [{ type: "text", text: "No RSS news articles found matching your criteria. Try broadening the search or check if RSS feeds are configured." }] };
+      }
+      const formatted = articles.map((a) => ({
+        title: a.title,
+        source: a.source,
+        category: a.category,
+        published: a.published_at,
+        symbols: a.symbols,
+        snippet: a.snippet,
+        url: a.url,
+      }));
+      return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error querying RSS news: ${err instanceof Error ? err.message : err}` }] };
+    }
   },
 );
 
