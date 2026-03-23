@@ -14,6 +14,7 @@ import { listFundNames, loadFundConfig } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
 import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
+import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.service.js";
 import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
@@ -557,6 +558,37 @@ export async function startDaemon(): Promise<void> {
     checkSwsTokenExpiry().catch(async (err) => {
       await log(`SWS token check error: ${err}`);
     });
+  });
+
+  // News feed fetcher — every 5 min, reduced off-hours
+  let lastNewsFetchAt = 0;
+  cron.schedule("*/5 * * * *", async () => {
+    const hour = new Date().getUTCHours();
+    const isMarketHours = hour >= 8 && hour < 19;
+    const elapsed = Date.now() - lastNewsFetchAt;
+
+    if (!isMarketHours && elapsed < 30 * 60 * 1000) return;
+
+    lastNewsFetchAt = Date.now();
+    try {
+      const newArticles = await fetchAllFeeds();
+      if (newArticles.length > 0) {
+        await log(`[news] Fetched ${newArticles.length} new articles`);
+        await checkBreakingNews(newArticles);
+      }
+    } catch (err) {
+      await log(`[news] Fetch error: ${err}`);
+    }
+  });
+
+  // Daily cleanup of old news articles
+  cron.schedule("0 0 * * *", async () => {
+    try {
+      await cleanOldArticles();
+      await log("[news] Old articles cleaned up");
+    } catch (err) {
+      await log(`[news] Cleanup error: ${err}`);
+    }
   });
 
   process.on("SIGINT", cleanup);

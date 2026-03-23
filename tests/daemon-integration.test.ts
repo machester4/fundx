@@ -101,6 +101,12 @@ vi.mock("../src/lock.js", () => ({
   withTimeout: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
+vi.mock("../src/services/news.service.js", () => ({
+  fetchAllFeeds: vi.fn().mockResolvedValue([]),
+  checkBreakingNews: vi.fn().mockResolvedValue(undefined),
+  cleanOldArticles: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Import after mocks
 import cron from "node-cron";
 import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
