@@ -313,6 +313,7 @@ server.tool(
         symbols: a.symbols,
         snippet: a.snippet,
         url: a.url,
+        ...(a.score !== undefined && { relevance: a.score }),
       }));
       return { content: [{ type: "text", text: JSON.stringify(formatted, null, 2) }] };
     } catch (err) {

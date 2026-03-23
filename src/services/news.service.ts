@@ -12,6 +12,17 @@ import type { NewsArticle, NewsFeed } from "../types.js";
 
 const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
+/** Safely parse a date string to ISO, falling back to current time on malformed input */
+function safeISODate(dateStr: string, fallback: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return fallback;
+    return d.toISOString();
+  } catch {
+    return fallback;
+  }
+}
+
 export function parseRssXml(xml: string, sourceName: string, category: string): Omit<NewsArticle, "alerted">[] {
   const parsed = xmlParser.parse(xml);
   const articles: Omit<NewsArticle, "alerted">[] = [];
@@ -32,7 +43,7 @@ export function parseRssXml(xml: string, sourceName: string, category: string): 
         source: sourceName,
         category,
         url: String(url).trim(),
-        published_at: new Date(pubDate).toISOString(),
+        published_at: safeISODate(pubDate, now),
         fetched_at: now,
         symbols: [],
         snippet: stripHtml(String(desc)).slice(0, 200),
@@ -56,7 +67,7 @@ export function parseRssXml(xml: string, sourceName: string, category: string): 
         source: sourceName,
         category,
         url: String(url).trim(),
-        published_at: new Date(published).toISOString(),
+        published_at: safeISODate(published, now),
         fetched_at: now,
         symbols: [],
         snippet: stripHtml(String(summary)).slice(0, 200),
@@ -73,11 +84,16 @@ function stripHtml(html: string): string {
 
 // ── Ticker Detection ─────────────────────────────────────────
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function detectTickers(text: string, knownTickers: string[]): string[] {
   const found: string[] = [];
   for (const ticker of knownTickers) {
     // Match $TICKER, (TICKER), or bare TICKER as whole word
-    const pattern = new RegExp(`(\\$${ticker}\\b|\\(${ticker}\\)|\\b${ticker}\\b)`, "i");
+    const escaped = escapeRegex(ticker);
+    const pattern = new RegExp(`(\\$${escaped}\\b|\\(${escaped}\\)|\\b${escaped}\\b)`, "i");
     if (pattern.test(text)) {
       found.push(ticker);
     }
@@ -264,6 +280,23 @@ async function gatherKnownTickers(): Promise<string[]> {
   return [...tickers];
 }
 
+/** Map a zvec result document to a NewsArticle (with optional score) */
+function mapZvecDoc(doc: { id: string; fields: Record<string, unknown>; score?: number }): NewsArticle & { score?: number } {
+  return {
+    id: doc.id,
+    title: doc.fields.title as string,
+    source: doc.fields.source as string,
+    category: doc.fields.category as string,
+    url: doc.fields.url as string,
+    published_at: doc.fields.published_at as string,
+    fetched_at: doc.fields.fetched_at as string,
+    symbols: JSON.parse((doc.fields.symbols as string) || "[]"),
+    snippet: doc.fields.snippet as string,
+    alerted: doc.fields.alerted as boolean,
+    ...(doc.score !== undefined && { score: doc.score }),
+  };
+}
+
 /** Search articles with optional semantic query and filters */
 export async function queryArticles(opts: {
   query?: string;
@@ -273,7 +306,14 @@ export async function queryArticles(opts: {
   hours?: number;
   limit?: number;
 }): Promise<(NewsArticle & { score?: number })[]> {
-  const collection = await getCollection();
+  let collection: ZVecCollection;
+  try {
+    collection = await getCollection();
+  } catch (err) {
+    // Graceful degradation if zvec multi-process locking fails (Issue 5)
+    console.warn(`[news] Failed to open zvec collection: ${err instanceof Error ? err.message : err}`);
+    return [];
+  }
   const maxResults = opts.limit ?? 20;
 
   // Build zvec filter expression parts
@@ -286,49 +326,49 @@ export async function queryArticles(opts: {
   }
   const filter = filterParts.length > 0 ? filterParts.join(" and ") : undefined;
 
-  if (opts.query) {
-    // Semantic search — embed query and search by vector similarity
-    const embedder = await getEmbedder();
-    const queryEmbedding = await embedText(embedder, opts.query);
-    const results = collection.querySync({
-      fieldName: "embedding",
-      topk: maxResults,
-      vector: queryEmbedding,
-      filter,
-    });
-    return results.map((doc) => ({
-      id: doc.id,
-      title: doc.fields.title as string,
-      source: doc.fields.source as string,
-      category: doc.fields.category as string,
-      url: doc.fields.url as string,
-      published_at: doc.fields.published_at as string,
-      fetched_at: doc.fields.fetched_at as string,
-      symbols: JSON.parse((doc.fields.symbols as string) || "[]"),
-      snippet: doc.fields.snippet as string,
-      alerted: doc.fields.alerted as boolean,
-      score: doc.score,
-    }));
+  let results: (NewsArticle & { score?: number })[];
+
+  try {
+    if (opts.query) {
+      // Semantic search — embed query and search by vector similarity
+      const embedder = await getEmbedder();
+      const queryEmbedding = await embedText(embedder, opts.query);
+      const docs = collection.querySync({
+        fieldName: "embedding",
+        topk: maxResults,
+        vector: queryEmbedding,
+        filter,
+      });
+      results = docs.map(mapZvecDoc);
+    } else {
+      // Filter-only — query without vector (scalar filter)
+      const docs = collection.querySync({
+        topk: maxResults,
+        filter,
+      });
+      results = docs.map(mapZvecDoc);
+    }
+  } catch (err) {
+    // Graceful degradation if zvec query fails (e.g., multi-process locking)
+    console.warn(`[news] zvec query failed: ${err instanceof Error ? err.message : err}`);
+    return [];
   }
 
-  // Filter-only — query without vector (scalar filter)
-  const results = collection.querySync({
-    topk: maxResults,
-    filter,
-  });
-  return results.map((doc) => ({
-    id: doc.id,
-    title: doc.fields.title as string,
-    source: doc.fields.source as string,
-    category: doc.fields.category as string,
-    url: doc.fields.url as string,
-    published_at: doc.fields.published_at as string,
-    fetched_at: doc.fields.fetched_at as string,
-    symbols: JSON.parse((doc.fields.symbols as string) || "[]"),
-    snippet: doc.fields.snippet as string,
-    alerted: doc.fields.alerted as boolean,
-  }));
+  // Post-filter by symbols (Issue 1): symbols are stored as JSON arrays in zvec,
+  // so we filter in JavaScript after fetching
+  if (opts.symbols) {
+    const wanted = opts.symbols.split(",").map((s) => s.trim().toUpperCase());
+    results = results.filter((r) => {
+      const articleSymbols: string[] = Array.isArray(r.symbols) ? r.symbols : JSON.parse(r.symbols || "[]");
+      return wanted.some((w) => articleSymbols.includes(w));
+    });
+  }
+
+  return results;
 }
+
+// Module-level cooldown map so it persists across invocations within the same daemon process
+const alertCooldowns = new Map<string, number>(); // fundName -> last alert timestamp
 
 /** Check new articles for breaking news and send Telegram alerts */
 export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<void> {
@@ -349,11 +389,9 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
     } catch { /* skip */ }
   }
 
-  const alertCooldowns = new Map<string, number>(); // fundName -> last alert timestamp
-
   for (const article of newArticles) {
     if (article.alerted) continue;
-    if (!isHighImpact(article.title)) continue;
+    if (!isHighImpact(article.title + " " + article.snippet)) continue;
 
     const affectedFunds: string[] = [];
     for (const [fundName, tickers] of fundTickers) {
@@ -374,14 +412,15 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
         try {
           const config = await loadFundConfig(fundName);
           const qh = config.notifications?.quiet_hours;
-          if (qh?.enabled) {
+          if (qh?.enabled && qh.start && qh.end) {
             const now = new Date();
             const hour = now.getHours();
             const min = now.getMinutes();
             const current = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
-            if (qh.start && qh.end && (current >= qh.start || current <= qh.end)) {
-              continue; // in quiet hours, skip
-            }
+            const isQuiet = qh.start <= qh.end
+              ? (current >= qh.start && current <= qh.end)   // same-day: e.g. 12:00-14:00
+              : (current >= qh.start || current <= qh.end);  // overnight: e.g. 23:00-07:00
+            if (isQuiet) continue;
           }
           notifyFunds.push(fundName);
         } catch {
