@@ -63,7 +63,7 @@ Defaults are Bloomberg + Reuters + CNBC + MarketWatch. Users can add any RSS fee
 
 ### Embeddings
 
-Generated at insert time for each article using `fastembed-js` (`@anysphere/fastembed`) — a local embedding library that runs ONNX models in-process (no API calls, no cost per article). Uses the `all-MiniLM-L6-v2` model (384 dimensions, ~30ms per text on ARM64).
+Generated at insert time for each article using `fastembed-js` (`fastembed`) — a local embedding library that runs ONNX models in-process (no API calls, no cost per article). Uses the `all-MiniLM-L6-v2` model (384 dimensions, ~30ms per text on ARM64).
 
 **How it works:**
 1. Each article's `title + " " + snippet` is embedded at insert time
@@ -72,7 +72,7 @@ Generated at insert time for each article using `fastembed-js` (`@anysphere/fast
 
 **Note:** The existing `src/embeddings.ts` uses SQLite FTS5 keyword matching, NOT vector embeddings. This is a different approach. `fastembed-js` is a new dependency that provides actual vector embeddings locally.
 
-**New dependency:** `@anysphere/fastembed` — local ONNX-based text embeddings (384 dimensions, no API calls)
+**New dependency:** `fastembed` — local ONNX-based text embeddings (384 dimensions, no API calls)
 
 ### Advantages over plain SQLite
 
@@ -243,7 +243,7 @@ Funds: pm-survivor, runway-metal
 | Package | Purpose |
 |---------|---------|
 | `@zvec/zvec` | In-process vector database for article storage + semantic search |
-| `@anysphere/fastembed` | Local ONNX text embeddings (all-MiniLM-L6-v2, 384d, no API calls) |
+| `fastembed` | Local ONNX text embeddings (all-MiniLM-L6-v2, 384d, no API calls) |
 | `fast-xml-parser` | RSS/XML feed parsing |
 
 ### Unchanged

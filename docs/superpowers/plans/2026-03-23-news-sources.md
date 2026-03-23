@@ -6,7 +6,7 @@
 
 **Architecture:** A new `news.service.ts` handles RSS fetching, parsing, embedding via fastembed-js, and storing in zvec. The daemon runs a separate cron that fetches feeds every 5 min and checks for breaking news. A new `get_rss_news` MCP tool lets the agent query cached articles with semantic search. Breaking news triggers Telegram alerts when high-impact articles match fund tickers.
 
-**Tech Stack:** `@zvec/zvec` (vector DB), `@anysphere/fastembed` (local embeddings), `fast-xml-parser` (RSS), grammy (Telegram), Vitest
+**Tech Stack:** `@zvec/zvec` (vector DB), `fastembed` (local embeddings), `fast-xml-parser` (RSS), grammy (Telegram), Vitest
 
 **Spec:** `docs/superpowers/specs/2026-03-23-news-sources-design.md`
 
@@ -43,7 +43,7 @@
 - [ ] **Step 1: Install dependencies**
 
 ```bash
-pnpm add @zvec/zvec @anysphere/fastembed fast-xml-parser
+pnpm add @zvec/zvec fastembed fast-xml-parser
 ```
 
 - [ ] **Step 2: Add news schemas to `src/types.ts`**
@@ -148,7 +148,7 @@ vi.mock("@zvec/zvec", () => ({
   })),
 }));
 
-vi.mock("@anysphere/fastembed", () => ({
+vi.mock("fastembed", () => ({
   EmbeddingModel: { AllMiniLML6V2: "all-MiniLM-L6-v2" },
   FlagEmbedding: {
     init: vi.fn().mockResolvedValue({
@@ -358,7 +358,7 @@ async function getCollection(): Promise<unknown> {
 
 async function getEmbedder(): Promise<{ embed: (texts: string[]) => Promise<number[][]> }> {
   if (embedModel) return embedModel as { embed: (texts: string[]) => Promise<number[][]> };
-  const { FlagEmbedding, EmbeddingModel } = await import("@anysphere/fastembed");
+  const { FlagEmbedding, EmbeddingModel } = await import("fastembed");
   embedModel = await FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2 });
   return embedModel as { embed: (texts: string[]) => Promise<number[][]> };
 }
@@ -404,7 +404,12 @@ async function fetchSingleFeed(feed: NewsFeed, maxPerFeed: number, knownTickers:
   const newArticles: NewsArticle[] = [];
 
   for (const article of parsed) {
-    // TODO: check if article.id already exists in collection (dedup)
+    // Dedup: skip if article already in collection
+    try {
+      const existing = await (collection as any).get(article.id);
+      if (existing) continue;
+    } catch { /* not found — proceed to insert */ }
+
     article.symbols = detectTickers(`${article.title} ${article.snippet}`, knownTickers);
     const text = `${article.title} ${article.snippet}`;
     const [embedding] = await embedder.embed([text]);
@@ -453,10 +458,35 @@ export async function queryArticles(opts: {
   source?: string;
   hours?: number;
   limit?: number;
-}): Promise<NewsArticle[]> {
-  // TODO: implement zvec query with filters and optional semantic search
-  // For now, return empty — will be filled during implementation
-  return [];
+}): Promise<(NewsArticle & { score?: number })[]> {
+  const collection = await getCollection();
+  const maxResults = opts.limit ?? 20;
+  const cutoff = opts.hours ? new Date(Date.now() - opts.hours * 60 * 60 * 1000).toISOString() : undefined;
+
+  // Build metadata filters
+  const filters: Record<string, unknown> = {};
+  if (opts.source) filters.source = opts.source;
+  if (opts.category) filters.category = opts.category;
+  // Note: symbols and time range filtering will need adaptation to zvec's actual filter API
+
+  if (opts.query) {
+    // Semantic search — embed query and search by similarity
+    const embedder = await getEmbedder();
+    const [queryEmbedding] = await embedder.embed([opts.query]);
+    const results = await (collection as any).search(queryEmbedding, { limit: maxResults, filters });
+    return results.map((r: any) => ({
+      ...r.document,
+      symbols: JSON.parse(r.document.symbols || "[]"),
+      score: r.score,
+    }));
+  }
+
+  // Filter-only — retrieve by metadata
+  const results = await (collection as any).filter({ ...filters, limit: maxResults });
+  return results.map((r: any) => ({
+    ...r,
+    symbols: JSON.parse(r.symbols || "[]"),
+  }));
 }
 
 /** Check new articles for breaking news and send Telegram alerts */
@@ -497,15 +527,44 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
     }
 
     if (affectedFunds.length > 0) {
-      const msg =
-        `<b>[NEWS]</b> ${article.source}\n` +
-        `${article.symbols.length > 0 ? article.symbols.join(", ") + " mentioned\n\n" : "\n"}` +
-        `${article.title}\n\n` +
-        `Funds: ${affectedFunds.join(", ")}`;
-      try {
-        const { sendTelegramNotification } = await import("./gateway.service.js");
-        await sendTelegramNotification(msg);
-      } catch { /* best effort */ }
+      // Check quiet hours for each affected fund
+      const notifyFunds: string[] = [];
+      for (const fundName of affectedFunds) {
+        try {
+          const config = await loadFundConfig(fundName);
+          const qh = config.notifications?.quiet_hours;
+          if (qh?.enabled) {
+            const now = new Date();
+            const hour = now.getHours();
+            const min = now.getMinutes();
+            const current = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+            if (qh.start && qh.end && current >= qh.start || current <= qh.end) {
+              continue; // in quiet hours, skip
+            }
+          }
+          notifyFunds.push(fundName);
+        } catch {
+          notifyFunds.push(fundName); // on error, notify anyway
+        }
+      }
+
+      if (notifyFunds.length > 0) {
+        const msg =
+          `<b>[NEWS]</b> ${article.source}\n` +
+          `${article.symbols.length > 0 ? article.symbols.join(", ") + " mentioned\n\n" : "\n"}` +
+          `${article.title}\n\n` +
+          `Funds: ${notifyFunds.join(", ")}`;
+        try {
+          const { sendTelegramNotification } = await import("./gateway.service.js");
+          await sendTelegramNotification(msg);
+        } catch { /* best effort */ }
+
+        // Mark article as alerted in zvec
+        try {
+          const collection = await getCollection();
+          await (collection as any).update(article.id, { alerted: true });
+        } catch { /* best effort */ }
+      }
     }
   }
 }
@@ -515,7 +574,9 @@ export async function cleanOldArticles(): Promise<void> {
   const config = await loadGlobalConfig();
   const retentionDays = config.news?.retention_days ?? 7;
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  // TODO: delete articles from zvec where published_at < cutoff
+  const collection = await getCollection();
+  // Delete articles older than cutoff — adapt to zvec's actual delete/filter API
+  await (collection as any).delete({ filter: { published_at: { $lt: cutoff } } });
 }
 ```
 
@@ -581,15 +642,34 @@ Add a separate cron schedule after the existing `"* * * * *"` and `"0 9 * * *"` 
   });
 ```
 
-- [ ] **Step 2: Run tests**
+- [ ] **Step 2: Add news service mock to daemon integration tests**
+
+In `tests/daemon-integration.test.ts`, add:
+
+```typescript
+vi.mock("../src/services/news.service.js", () => ({
+  fetchAllFeeds: vi.fn().mockResolvedValue([]),
+  checkBreakingNews: vi.fn().mockResolvedValue(undefined),
+  cleanOldArticles: vi.fn().mockResolvedValue(undefined),
+}));
+```
+
+- [ ] **Step 3: Add barrel export**
+
+In `src/services/index.ts`, add:
+```typescript
+export * from "./news.service.js";
+```
+
+- [ ] **Step 4: Run tests**
 
 Run: `pnpm test -- tests/daemon-integration.test.ts`
-Expected: PASS (news imports will be resolved, mocked functions absorb calls)
+Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/services/daemon.service.ts
+git add src/services/daemon.service.ts src/services/index.ts tests/daemon-integration.test.ts
 git commit -m "feat(news): add RSS fetch cron and daily cleanup to daemon"
 ```
 
@@ -601,6 +681,8 @@ git commit -m "feat(news): add RSS fetch cron and daily cleanup to daemon"
 - Modify: `src/mcp/market-data.ts`
 
 - [ ] **Step 1: Add the `get_rss_news` tool**
+
+**Multi-process note:** MCP servers run as separate child processes. The `queryArticles` function opens its own zvec read-only connection in the MCP process. The daemon writes via a separate connection. Zvec uses RocksDB internally which supports concurrent readers + single writer across processes. If this causes issues during implementation, the fallback is: the daemon writes a `~/.fundx/news/latest.json` snapshot after each fetch, and the MCP tool reads from that file instead of zvec directly.
 
 Add import at top of file:
 ```typescript
