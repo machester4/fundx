@@ -157,6 +157,47 @@ export type Objective = z.infer<typeof objectiveSchema>;
 export type Risk = z.infer<typeof riskSchema>;
 export type Schedule = z.infer<typeof scheduleSchema>;
 
+// ── News Sources Schemas ─────────────────────────────────────
+
+export const newsFeedSchema = z.object({
+  name: z.string(),
+  url: z.string().url(),
+  category: z.string().default("market"),
+});
+
+export type NewsFeed = z.infer<typeof newsFeedSchema>;
+
+const DEFAULT_NEWS_FEEDS: z.infer<typeof newsFeedSchema>[] = [
+  { name: "Bloomberg", url: "https://feeds.bloomberg.com/markets/news.rss", category: "macro" },
+  { name: "Reuters", url: "https://www.reutersagency.com/feed/?best-topics=business-finance", category: "macro" },
+  { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "market" },
+  { name: "MarketWatch", url: "https://feeds.marketwatch.com/marketwatch/topstories", category: "market" },
+];
+
+export const newsConfigSchema = z.object({
+  feeds: z.array(newsFeedSchema).default(DEFAULT_NEWS_FEEDS),
+  fetch_interval_minutes: z.number().positive().default(5),
+  max_articles_per_feed: z.number().positive().default(20),
+  retention_days: z.number().positive().default(7),
+});
+
+export type NewsConfig = z.infer<typeof newsConfigSchema>;
+
+export const newsArticleSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  source: z.string(),
+  category: z.string(),
+  url: z.string(),
+  published_at: z.string(),
+  fetched_at: z.string(),
+  symbols: z.array(z.string()).default([]),
+  snippet: z.string().default(""),
+  alerted: z.boolean().default(false),
+});
+
+export type NewsArticle = z.infer<typeof newsArticleSchema>;
+
 // ── Global Config Schema ───────────────────────────────────────
 
 export const globalConfigSchema = z.object({
@@ -190,6 +231,7 @@ export const globalConfigSchema = z.object({
       token_expires_at: z.string().optional(),
     })
     .optional(),
+  news: newsConfigSchema.optional(),
 });
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
