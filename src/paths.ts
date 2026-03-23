@@ -31,6 +31,9 @@ export const DAEMON_LOG_MAX_SIZE = 5 * 1024 * 1024;
 /** Max number of rotated log files to keep */
 export const DAEMON_LOG_MAX_FILES = 3;
 
+/** News cache directory (zvec database) */
+export const NEWS_DIR = join(WORKSPACE, "news");
+
 /** Shared directory */
 export const SHARED_DIR = join(WORKSPACE, "shared");
 
