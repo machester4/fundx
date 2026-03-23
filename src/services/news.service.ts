@@ -1,0 +1,463 @@
+import { createHash } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { XMLParser } from "fast-xml-parser";
+import { NEWS_DIR } from "../paths.js";
+import { loadGlobalConfig } from "../config.js";
+import { listFundNames, loadFundConfig } from "./fund.service.js";
+import { readPortfolio } from "../state.js";
+import type { NewsArticle, NewsFeed } from "../types.js";
+
+// ── RSS Parsing ──────────────────────────────────────────────
+
+const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
+
+/** Safely parse a date string to ISO, falling back to current time on malformed input */
+function safeISODate(dateStr: string, fallback: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return fallback;
+    return d.toISOString();
+  } catch {
+    return fallback;
+  }
+}
+
+export function parseRssXml(xml: string, sourceName: string, category: string): Omit<NewsArticle, "alerted">[] {
+  const parsed = xmlParser.parse(xml);
+  const articles: Omit<NewsArticle, "alerted">[] = [];
+  const now = new Date().toISOString();
+
+  // RSS 2.0
+  const items = parsed?.rss?.channel?.item;
+  if (items) {
+    const list = Array.isArray(items) ? items : [items];
+    for (const item of list) {
+      const title = item.title ?? "";
+      const url = item.link ?? "";
+      const desc = typeof item.description === "string" ? item.description : "";
+      const pubDate = item.pubDate ?? now;
+      articles.push({
+        id: createHash("sha256").update(String(url)).digest("hex"),
+        title: String(title).trim(),
+        source: sourceName,
+        category,
+        url: String(url).trim(),
+        published_at: safeISODate(pubDate, now),
+        fetched_at: now,
+        symbols: [],
+        snippet: stripHtml(String(desc)).slice(0, 200),
+      });
+    }
+    return articles;
+  }
+
+  // Atom
+  const entries = parsed?.feed?.entry;
+  if (entries) {
+    const list = Array.isArray(entries) ? entries : [entries];
+    for (const entry of list) {
+      const title = entry.title ?? "";
+      const url = entry.link?.["@_href"] ?? entry.link ?? "";
+      const summary = entry.summary ?? entry.content ?? "";
+      const published = entry.published ?? entry.updated ?? now;
+      articles.push({
+        id: createHash("sha256").update(String(url)).digest("hex"),
+        title: String(title).trim(),
+        source: sourceName,
+        category,
+        url: String(url).trim(),
+        published_at: safeISODate(published, now),
+        fetched_at: now,
+        symbols: [],
+        snippet: stripHtml(String(summary)).slice(0, 200),
+      });
+    }
+  }
+
+  return articles;
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+// ── Ticker Detection ─────────────────────────────────────────
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function detectTickers(text: string, knownTickers: string[]): string[] {
+  const found: string[] = [];
+  for (const ticker of knownTickers) {
+    // Match $TICKER, (TICKER), or bare TICKER as whole word
+    const escaped = escapeRegex(ticker);
+    const pattern = new RegExp(`(\\$${escaped}\\b|\\(${escaped}\\)|\\b${escaped}\\b)`, "i");
+    if (pattern.test(text)) {
+      found.push(ticker);
+    }
+  }
+  return [...new Set(found)];
+}
+
+// ── High Impact Detection ────────────────────────────────────
+
+const HIGH_IMPACT_KEYWORDS = [
+  "breaking", "halt", "crash", "surge", "FDA", "FOMC", "earnings",
+  "bankruptcy", "acquisition", "downgrade", "upgrade", "default",
+  "sanctions", "emergency", "recession", "rate cut", "rate hike",
+];
+
+export function isHighImpact(text: string): boolean {
+  const lower = text.toLowerCase();
+  return HIGH_IMPACT_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
+// ── Zvec Storage ─────────────────────────────────────────────
+
+// Lazy-initialized zvec collection and fastembed model.
+// The zvec collection stores news articles with embeddings for semantic search.
+// fastembed provides local text embeddings (AllMiniLML6V2, 384 dimensions).
+
+import type { ZVecCollection, ZVecCollectionSchema as ZVecCollectionSchemaType } from "@zvec/zvec";
+import type { FlagEmbedding as FlagEmbeddingType } from "fastembed";
+
+let zvecCollection: ZVecCollection | null = null;
+let embedModel: FlagEmbeddingType | null = null;
+
+const COLLECTION_NAME = "news_articles";
+const EMBEDDING_DIM = 384; // AllMiniLML6V2
+
+async function getCollection(): Promise<ZVecCollection> {
+  if (zvecCollection) return zvecCollection;
+  await mkdir(NEWS_DIR, { recursive: true });
+  const zvec = await import("@zvec/zvec");
+
+  const collectionPath = join(NEWS_DIR, COLLECTION_NAME);
+
+  // Try opening existing collection first; create if it doesn't exist
+  try {
+    zvecCollection = zvec.ZVecOpen(collectionPath);
+    return zvecCollection;
+  } catch {
+    // Collection doesn't exist yet — create with schema
+  }
+
+  const schema = new zvec.ZVecCollectionSchema({
+    name: COLLECTION_NAME,
+    vectors: {
+      name: "embedding",
+      dataType: zvec.ZVecDataType.VECTOR_FP32,
+      dimension: EMBEDDING_DIM,
+      indexParams: {
+        indexType: zvec.ZVecIndexType.HNSW,
+        metricType: zvec.ZVecMetricType.COSINE,
+      },
+    },
+    fields: [
+      { name: "title", dataType: zvec.ZVecDataType.STRING },
+      { name: "source", dataType: zvec.ZVecDataType.STRING },
+      { name: "category", dataType: zvec.ZVecDataType.STRING },
+      { name: "url", dataType: zvec.ZVecDataType.STRING },
+      { name: "published_at", dataType: zvec.ZVecDataType.STRING },
+      { name: "fetched_at", dataType: zvec.ZVecDataType.STRING },
+      { name: "symbols", dataType: zvec.ZVecDataType.STRING }, // JSON-encoded array
+      { name: "snippet", dataType: zvec.ZVecDataType.STRING },
+      { name: "alerted", dataType: zvec.ZVecDataType.BOOL },
+    ],
+  });
+
+  zvecCollection = zvec.ZVecCreateAndOpen(collectionPath, schema);
+  return zvecCollection;
+}
+
+async function getEmbedder(): Promise<FlagEmbeddingType> {
+  if (embedModel) return embedModel;
+  const { FlagEmbedding, EmbeddingModel } = await import("fastembed");
+  embedModel = await FlagEmbedding.init({ model: EmbeddingModel.AllMiniLML6V2 });
+  return embedModel;
+}
+
+/** Helper: embed a single text using fastembed's AsyncGenerator API */
+async function embedText(embedder: FlagEmbeddingType, text: string): Promise<number[]> {
+  // queryEmbed returns Promise<number[]> for a single query string
+  return embedder.queryEmbed(text);
+}
+
+// ── Public API ───────────────────────────────────────────────
+
+/** Fetch all configured RSS feeds and store new articles */
+export async function fetchAllFeeds(): Promise<NewsArticle[]> {
+  const config = await loadGlobalConfig();
+  const feeds = config.news?.feeds ?? [];
+  const maxPerFeed = config.news?.max_articles_per_feed ?? 20;
+  const allNew: NewsArticle[] = [];
+
+  // Gather known tickers from all active funds
+  const knownTickers = await gatherKnownTickers();
+
+  for (const feed of feeds) {
+    try {
+      const articles = await fetchSingleFeed(feed, maxPerFeed, knownTickers);
+      allNew.push(...articles);
+    } catch (err) {
+      console.warn(`[news] Failed to fetch ${feed.name}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  return allNew;
+}
+
+async function fetchSingleFeed(feed: NewsFeed, maxPerFeed: number, knownTickers: string[]): Promise<NewsArticle[]> {
+  const response = await fetch(feed.url, {
+    headers: { "User-Agent": "FundX/1.0" },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const xml = await response.text();
+  const parsed = parseRssXml(xml, feed.name, feed.category).slice(0, maxPerFeed);
+
+  // Detect tickers and embed
+  const collection = await getCollection();
+  const embedder = await getEmbedder();
+  const newArticles: NewsArticle[] = [];
+
+  for (const article of parsed) {
+    // Dedup: skip if article already in collection
+    try {
+      const existing = collection.fetchSync(article.id);
+      if (existing && Object.keys(existing).length > 0) continue;
+    } catch { /* not found — proceed to insert */ }
+
+    article.symbols = detectTickers(`${article.title} ${article.snippet}`, knownTickers);
+    const text = `${article.title} ${article.snippet}`;
+    const embedding = await embedText(embedder, text);
+
+    // Insert into zvec
+    collection.upsertSync({
+      id: article.id,
+      vectors: { embedding },
+      fields: {
+        title: article.title,
+        source: article.source,
+        category: article.category,
+        url: article.url,
+        published_at: article.published_at,
+        fetched_at: article.fetched_at,
+        symbols: JSON.stringify(article.symbols),
+        snippet: article.snippet,
+        alerted: false,
+      },
+    });
+
+    newArticles.push({ ...article, alerted: false });
+  }
+
+  return newArticles;
+}
+
+async function gatherKnownTickers(): Promise<string[]> {
+  const tickers = new Set<string>();
+  const names = await listFundNames();
+  for (const name of names) {
+    try {
+      const config = await loadFundConfig(name);
+      if (config.fund.status !== "active") continue;
+      // Tickers from universe
+      for (const entry of config.universe.allowed) {
+        if (entry.tickers) entry.tickers.forEach((t) => tickers.add(t));
+      }
+      // Tickers from portfolio
+      const portfolio = await readPortfolio(name).catch(() => null);
+      if (portfolio) {
+        for (const pos of portfolio.positions) tickers.add(pos.symbol);
+      }
+    } catch { /* skip funds that fail to load */ }
+  }
+  return [...tickers];
+}
+
+/** Map a zvec result document to a NewsArticle (with optional score) */
+function mapZvecDoc(doc: { id: string; fields: Record<string, unknown>; score?: number }): NewsArticle & { score?: number } {
+  return {
+    id: doc.id,
+    title: doc.fields.title as string,
+    source: doc.fields.source as string,
+    category: doc.fields.category as string,
+    url: doc.fields.url as string,
+    published_at: doc.fields.published_at as string,
+    fetched_at: doc.fields.fetched_at as string,
+    symbols: JSON.parse((doc.fields.symbols as string) || "[]"),
+    snippet: doc.fields.snippet as string,
+    alerted: doc.fields.alerted as boolean,
+    ...(doc.score !== undefined && { score: doc.score }),
+  };
+}
+
+/** Search articles with optional semantic query and filters */
+export async function queryArticles(opts: {
+  query?: string;
+  symbols?: string;
+  category?: string;
+  source?: string;
+  hours?: number;
+  limit?: number;
+}): Promise<(NewsArticle & { score?: number })[]> {
+  let collection: ZVecCollection;
+  try {
+    collection = await getCollection();
+  } catch (err) {
+    // Graceful degradation if zvec multi-process locking fails (Issue 5)
+    console.warn(`[news] Failed to open zvec collection: ${err instanceof Error ? err.message : err}`);
+    return [];
+  }
+  const maxResults = opts.limit ?? 20;
+
+  // Build zvec filter expression parts
+  const filterParts: string[] = [];
+  if (opts.source) filterParts.push(`source == "${opts.source}"`);
+  if (opts.category) filterParts.push(`category == "${opts.category}"`);
+  if (opts.hours) {
+    const cutoff = new Date(Date.now() - opts.hours * 60 * 60 * 1000).toISOString();
+    filterParts.push(`published_at >= "${cutoff}"`);
+  }
+  const filter = filterParts.length > 0 ? filterParts.join(" and ") : undefined;
+
+  let results: (NewsArticle & { score?: number })[];
+
+  try {
+    if (opts.query) {
+      // Semantic search — embed query and search by vector similarity
+      const embedder = await getEmbedder();
+      const queryEmbedding = await embedText(embedder, opts.query);
+      const docs = collection.querySync({
+        fieldName: "embedding",
+        topk: maxResults,
+        vector: queryEmbedding,
+        filter,
+      });
+      results = docs.map(mapZvecDoc);
+    } else {
+      // Filter-only — query without vector (scalar filter)
+      const docs = collection.querySync({
+        topk: maxResults,
+        filter,
+      });
+      results = docs.map(mapZvecDoc);
+    }
+  } catch (err) {
+    // Graceful degradation if zvec query fails (e.g., multi-process locking)
+    console.warn(`[news] zvec query failed: ${err instanceof Error ? err.message : err}`);
+    return [];
+  }
+
+  // Post-filter by symbols (Issue 1): symbols are stored as JSON arrays in zvec,
+  // so we filter in JavaScript after fetching
+  if (opts.symbols) {
+    const wanted = opts.symbols.split(",").map((s) => s.trim().toUpperCase());
+    results = results.filter((r) => {
+      const articleSymbols: string[] = Array.isArray(r.symbols) ? r.symbols : JSON.parse(r.symbols || "[]");
+      return wanted.some((w) => articleSymbols.includes(w));
+    });
+  }
+
+  return results;
+}
+
+// Module-level cooldown map so it persists across invocations within the same daemon process
+const alertCooldowns = new Map<string, number>(); // fundName -> last alert timestamp
+
+/** Check new articles for breaking news and send Telegram alerts */
+export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<void> {
+  const names = await listFundNames();
+  const fundTickers = new Map<string, string[]>();
+
+  for (const name of names) {
+    try {
+      const config = await loadFundConfig(name);
+      if (config.fund.status !== "active") continue;
+      const tickers: string[] = [];
+      for (const entry of config.universe.allowed) {
+        if (entry.tickers) tickers.push(...entry.tickers);
+      }
+      const portfolio = await readPortfolio(name).catch(() => null);
+      if (portfolio) portfolio.positions.forEach((p) => tickers.push(p.symbol));
+      fundTickers.set(name, [...new Set(tickers)]);
+    } catch { /* skip */ }
+  }
+
+  for (const article of newArticles) {
+    if (article.alerted) continue;
+    if (!isHighImpact(article.title + " " + article.snippet)) continue;
+
+    const affectedFunds: string[] = [];
+    for (const [fundName, tickers] of fundTickers) {
+      const matched = detectTickers(`${article.title} ${article.snippet}`, tickers);
+      if (matched.length > 0) {
+        const lastAlert = alertCooldowns.get(fundName) ?? 0;
+        if (Date.now() - lastAlert > 10 * 60 * 1000) { // 10 min cooldown
+          affectedFunds.push(fundName);
+          alertCooldowns.set(fundName, Date.now());
+        }
+      }
+    }
+
+    if (affectedFunds.length > 0) {
+      // Check quiet hours for each affected fund
+      const notifyFunds: string[] = [];
+      for (const fundName of affectedFunds) {
+        try {
+          const config = await loadFundConfig(fundName);
+          const qh = config.notifications?.quiet_hours;
+          if (qh?.enabled && qh.start && qh.end) {
+            const now = new Date();
+            const hour = now.getHours();
+            const min = now.getMinutes();
+            const current = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+            const isQuiet = qh.start <= qh.end
+              ? (current >= qh.start && current <= qh.end)   // same-day: e.g. 12:00-14:00
+              : (current >= qh.start || current <= qh.end);  // overnight: e.g. 23:00-07:00
+            if (isQuiet) continue;
+          }
+          notifyFunds.push(fundName);
+        } catch {
+          notifyFunds.push(fundName); // on error, notify anyway
+        }
+      }
+
+      if (notifyFunds.length > 0) {
+        const msg =
+          `<b>[NEWS]</b> ${article.source}\n` +
+          `${article.symbols.length > 0 ? article.symbols.join(", ") + " mentioned\n\n" : "\n"}` +
+          `${article.title}\n\n` +
+          `Funds: ${notifyFunds.join(", ")}`;
+        try {
+          const { sendTelegramNotification } = await import("./gateway.service.js");
+          await sendTelegramNotification(msg);
+        } catch { /* best effort */ }
+
+        // Mark article as alerted in zvec
+        try {
+          const collection = await getCollection();
+          collection.updateSync({
+            id: article.id,
+            fields: { alerted: true },
+          });
+        } catch { /* best effort */ }
+      }
+    }
+  }
+}
+
+/** Remove articles older than retention period */
+export async function cleanOldArticles(): Promise<void> {
+  const config = await loadGlobalConfig();
+  const retentionDays = config.news?.retention_days ?? 7;
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const collection = await getCollection();
+  // Delete articles older than cutoff using zvec's filter-based delete
+  collection.deleteByFilterSync(`published_at < "${cutoff}"`);
+}
