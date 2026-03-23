@@ -19,3 +19,4 @@ export * from "./trades.service.js";
 export * from "./performance.service.js";
 export * from "./market.service.js";
 export * from "./sws.service.js";
+export * from "./news.service.js";
