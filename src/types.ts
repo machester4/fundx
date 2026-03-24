@@ -169,7 +169,7 @@ export type NewsFeed = z.infer<typeof newsFeedSchema>;
 
 const DEFAULT_NEWS_FEEDS: z.infer<typeof newsFeedSchema>[] = [
   { name: "Bloomberg", url: "https://feeds.bloomberg.com/markets/news.rss", category: "macro" },
-  { name: "Reuters", url: "https://www.reutersagency.com/feed/?best-topics=business-finance", category: "macro" },
+  { name: "Reuters", url: "https://news.google.com/rss/search?q=reuters+finance&hl=en-US", category: "macro" },
   { name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", category: "market" },
   { name: "MarketWatch", url: "https://feeds.marketwatch.com/marketwatch/topstories", category: "market" },
 ];

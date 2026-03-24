@@ -6,7 +6,7 @@ import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
 import { readPortfolio } from "../state.js";
-import type { NewsArticle, NewsFeed } from "../types.js";
+import { newsConfigSchema, type NewsArticle, type NewsFeed } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ const EMBEDDING_DIM = 384; // AllMiniLML6V2
 async function getCollection(): Promise<ZVecCollection> {
   if (zvecCollection) return zvecCollection;
   await mkdir(NEWS_DIR, { recursive: true });
-  const zvec = await import("@zvec/zvec");
+  const { default: zvec, ZVecDataType } = await import("@zvec/zvec");
 
   const collectionPath = join(NEWS_DIR, COLLECTION_NAME);
 
@@ -148,7 +148,7 @@ async function getCollection(): Promise<ZVecCollection> {
     name: COLLECTION_NAME,
     vectors: {
       name: "embedding",
-      dataType: zvec.ZVecDataType.VECTOR_FP32,
+      dataType: ZVecDataType.VECTOR_FP32,
       dimension: EMBEDDING_DIM,
       indexParams: {
         indexType: zvec.ZVecIndexType.HNSW,
@@ -156,15 +156,15 @@ async function getCollection(): Promise<ZVecCollection> {
       },
     },
     fields: [
-      { name: "title", dataType: zvec.ZVecDataType.STRING },
-      { name: "source", dataType: zvec.ZVecDataType.STRING },
-      { name: "category", dataType: zvec.ZVecDataType.STRING },
-      { name: "url", dataType: zvec.ZVecDataType.STRING },
-      { name: "published_at", dataType: zvec.ZVecDataType.STRING },
-      { name: "fetched_at", dataType: zvec.ZVecDataType.STRING },
-      { name: "symbols", dataType: zvec.ZVecDataType.STRING }, // JSON-encoded array
-      { name: "snippet", dataType: zvec.ZVecDataType.STRING },
-      { name: "alerted", dataType: zvec.ZVecDataType.BOOL },
+      { name: "title", dataType: ZVecDataType.STRING },
+      { name: "source", dataType: ZVecDataType.STRING },
+      { name: "category", dataType: ZVecDataType.STRING },
+      { name: "url", dataType: ZVecDataType.STRING },
+      { name: "published_at", dataType: ZVecDataType.STRING },
+      { name: "fetched_at", dataType: ZVecDataType.STRING },
+      { name: "symbols", dataType: ZVecDataType.STRING }, // JSON-encoded array
+      { name: "snippet", dataType: ZVecDataType.STRING },
+      { name: "alerted", dataType: ZVecDataType.BOOL },
     ],
   });
 
@@ -190,8 +190,9 @@ async function embedText(embedder: FlagEmbeddingType, text: string): Promise<num
 /** Fetch all configured RSS feeds and store new articles */
 export async function fetchAllFeeds(): Promise<NewsArticle[]> {
   const config = await loadGlobalConfig();
-  const feeds = config.news?.feeds ?? [];
-  const maxPerFeed = config.news?.max_articles_per_feed ?? 20;
+  const newsConfig = newsConfigSchema.parse(config.news ?? {});
+  const feeds = newsConfig.feeds;
+  const maxPerFeed = newsConfig.max_articles_per_feed;
   const allNew: NewsArticle[] = [];
 
   // Gather known tickers from all active funds
@@ -455,7 +456,8 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
 /** Remove articles older than retention period */
 export async function cleanOldArticles(): Promise<void> {
   const config = await loadGlobalConfig();
-  const retentionDays = config.news?.retention_days ?? 7;
+  const newsConfig = newsConfigSchema.parse(config.news ?? {});
+  const retentionDays = newsConfig.retention_days;
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
   const collection = await getCollection();
   // Delete articles older than cutoff using zvec's filter-based delete
