@@ -119,6 +119,7 @@ export const fundConfigSchema = z.object({
   broker: z.object({
     provider: z.enum(["alpaca", "ibkr", "binance", "manual"]).default("manual"),
     mode: z.enum(["paper", "live"]).default("paper"),
+    sync_enabled: z.boolean().default(true),
   }),
   notifications: z
     .object({
@@ -650,3 +651,12 @@ export const daemonPidInfoSchema = z.object({
   version: z.string(),
 });
 export type DaemonPidInfo = z.infer<typeof daemonPidInfoSchema>;
+
+// ── Fund Credentials Schema ──────────────────────────────────
+
+export const fundCredentialsSchema = z.object({
+  api_key: z.string(),
+  secret_key: z.string(),
+});
+
+export type FundCredentials = z.infer<typeof fundCredentialsSchema>;
