@@ -7,6 +7,7 @@ import { initFundState } from "../state.js";
 import { generateFundClaudeMd } from "../template.js";
 import { loadGlobalConfig } from "../config.js";
 import { ensureFundSkillFiles, ensureFundRules, ensureFundMemory, BUILTIN_SKILLS } from "../skills.js";
+import { hasFundCredentials } from "../credentials.js";
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -208,6 +209,20 @@ export async function upgradeFund(fundName: string): Promise<UpgradeResult> {
   // Write/overwrite per-fund rules
   await ensureFundRules(paths.claudeDir);
   await ensureFundMemory(paths.root, paths.claudeDir);
+
+  // Check if fund has dedicated broker credentials
+  const hasCreds = await hasFundCredentials(fundName);
+  if (!hasCreds) {
+    // Reset portfolio to initial capital — no dedicated broker account
+    await initFundState(fundName, config.capital.initial, config.objective.type);
+
+    // Disable sync to prevent shared-account corruption
+    if (config.broker.sync_enabled !== false) {
+      const updatedConfig = { ...config };
+      updatedConfig.broker = { ...config.broker, sync_enabled: false };
+      await saveFundConfig(updatedConfig);
+    }
+  }
 
   return { fundName, skillCount: BUILTIN_SKILLS.length };
 }

@@ -1,5 +1,6 @@
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
+import { loadFundCredentials } from "./credentials.js";
 
 // ── Alpaca Constants & Credentials ──────────────────────────
 
@@ -20,11 +21,21 @@ export async function getAlpacaCredentials(
   const globalConfig = await loadGlobalConfig();
   const fundConfig = await loadFundConfig(fundName);
 
+  // 1. Try per-fund credentials first
+  const fundCreds = await loadFundCredentials(fundName);
+  if (fundCreds) {
+    const mode = fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
+    const tradingUrl = mode === "live" ? ALPACA_LIVE_URL : ALPACA_PAPER_URL;
+    return { apiKey: fundCreds.apiKey, secretKey: fundCreds.secretKey, tradingUrl };
+  }
+
+  // 2. Fall back to global config credentials
   const apiKey = globalConfig.broker.api_key;
   const secretKey = globalConfig.broker.secret_key;
   if (!apiKey || !secretKey) {
     throw new Error(
-      "Broker API credentials not configured. Run 'fundx init' or set them in ~/.fundx/config.yaml",
+      `Broker API credentials not configured for fund '${fundName}'. ` +
+        `Run 'fundx fund credentials ${fundName} --set' or set them in ~/.fundx/config.yaml`,
     );
   }
 
