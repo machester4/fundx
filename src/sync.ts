@@ -1,5 +1,6 @@
 import { readPortfolio, writePortfolio } from "./state.js";
 import { getAlpacaCredentials, alpacaGet } from "./alpaca-helpers.js";
+import { loadFundConfig } from "./services/fund.service.js";
 import type { Portfolio } from "./types.js";
 
 // ── Sync Logic ────────────────────────────────────────────────
@@ -26,6 +27,11 @@ interface AlpacaPositionResponse {
  * Fetches current account and positions, updates portfolio.json.
  */
 export async function syncPortfolio(fundName: string): Promise<Portfolio> {
+  const fundConfig = await loadFundConfig(fundName);
+  if (fundConfig.broker.sync_enabled === false) {
+    return readPortfolio(fundName);
+  }
+
   const creds = await getAlpacaCredentials(fundName);
 
   const [account, positions] = await Promise.all([

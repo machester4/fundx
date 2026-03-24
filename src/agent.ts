@@ -8,6 +8,7 @@ import type {
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
 import { fundPaths, MCP_SERVERS, MCP_COMMAND } from "./paths.js";
+import { getAlpacaCredentials } from "./alpaca-helpers.js";
 
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
@@ -77,12 +78,14 @@ export async function buildMcpServers(
   const fundConfig = await loadFundConfig(fundName);
 
   const brokerEnv: Record<string, string> = {};
-  if (globalConfig.broker.api_key)
-    brokerEnv.ALPACA_API_KEY = globalConfig.broker.api_key;
-  if (globalConfig.broker.secret_key)
-    brokerEnv.ALPACA_SECRET_KEY = globalConfig.broker.secret_key;
-  brokerEnv.ALPACA_MODE =
-    fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
+  try {
+    const creds = await getAlpacaCredentials(fundName);
+    brokerEnv.ALPACA_API_KEY = creds.apiKey;
+    brokerEnv.ALPACA_SECRET_KEY = creds.secretKey;
+    brokerEnv.ALPACA_MODE = creds.tradingUrl.includes("paper") ? "paper" : "live";
+  } catch {
+    brokerEnv.ALPACA_MODE = fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
+  }
 
   const marketDataEnv: Record<string, string> = { ...brokerEnv };
   if (globalConfig.market_data?.fmp_api_key) {

@@ -94,5 +94,6 @@ export function fundPaths(fundName: string) {
     scripts: join(root, "scripts"),
     reports: join(root, "reports"),
     memory: join(root, "memory"),
+    credentials: join(root, "credentials.yaml"),
   };
 }
