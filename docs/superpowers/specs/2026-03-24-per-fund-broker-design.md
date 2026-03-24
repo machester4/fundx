@@ -193,11 +193,17 @@ Default is `true`. Set to `false` during upgrade for funds without credentials. 
 | `src/broker-adapter.ts` | Use resolved credentials |
 | `src/sync.ts` | Check `sync_enabled` before syncing |
 | `src/services/fund.service.ts` | Upgrade checks credentials, resets portfolio, sets sync_enabled |
-| `src/commands/fund/create.tsx` | Add credentials step to creation wizard |
+| `src/commands/fund/create.tsx` | Add credentials step to creation wizard (totalSteps 7 → 8) |
+| `.gitignore` | Add `credentials.yaml` pattern |
 
 ### Unchanged
 
 - `src/mcp/broker-alpaca.ts` — reads env vars, no change (env vars are set correctly by agent.ts)
 - `src/stoploss.ts` — calls `getAlpacaCredentials()`, benefits automatically
+- `src/services/portfolio.service.ts` — calls `syncPortfolio()`, benefits from sync_enabled guard automatically
 - `src/config.ts` — global config unchanged
 - `src/services/daemon.service.ts` — sync cron already calls `syncPortfolio()` which will check sync_enabled
+
+### Migration safety
+
+Funds that have not been upgraded will parse with `sync_enabled: true` (Zod default), so sync continues working as before. The migration only disables sync for funds explicitly processed by `fundx fund upgrade` that lack dedicated credentials.
