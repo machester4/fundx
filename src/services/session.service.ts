@@ -72,24 +72,8 @@ export async function runFundSession(
 
   const activeSession = await readActiveSession(fundName).catch(() => null);
 
-  let result = await runAgentQuery({
-    fundName,
-    prompt,
-    model,
-    maxTurns: DEFAULT_MAX_TURNS,
-    timeoutMs: timeout,
-    agents,
-    resumeSessionId: activeSession?.session_id,
-  });
-
-  // If resumption failed (expired session), retry without resume
-  if (
-    result.status === "error" &&
-    activeSession?.session_id &&
-    result.error &&
-    SESSION_EXPIRED_PATTERN.test(result.error)
-  ) {
-    console.warn(`[session] Session ${activeSession.session_id} expired, starting fresh`);
+  let result;
+  try {
     result = await runAgentQuery({
       fundName,
       prompt,
@@ -97,7 +81,32 @@ export async function runFundSession(
       maxTurns: DEFAULT_MAX_TURNS,
       timeoutMs: timeout,
       agents,
+      resumeSessionId: activeSession?.session_id,
     });
+
+    // If resumption failed (expired session), retry without resume
+    if (
+      result.status === "error" &&
+      activeSession?.session_id &&
+      result.error &&
+      SESSION_EXPIRED_PATTERN.test(result.error)
+    ) {
+      console.warn(`[session] Session ${activeSession.session_id} expired, starting fresh`);
+      result = await runAgentQuery({
+        fundName,
+        prompt,
+        model,
+        maxTurns: DEFAULT_MAX_TURNS,
+        timeoutMs: timeout,
+        agents,
+      });
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await notifySession(
+      `<b>${displayName}</b> — ${sessionType} FAILED\n<i>${errMsg.slice(0, 200)}</i>`,
+    );
+    throw err;
   }
 
   const log: SessionLogV2 = {
@@ -122,13 +131,11 @@ export async function runFundSession(
   const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);
   const durationStr = duration < 60 ? `${duration}s` : `${Math.floor(duration / 60)}m ${duration % 60}s`;
   const statusIcon = result.status === "success" ? "OK" : "ERR";
-  const tokensIn = sumTokens(result.usage, "inputTokens");
-  const tokensOut = sumTokens(result.usage, "outputTokens");
   const summary = result.output.slice(0, 200).replace(/\n/g, " ").trim();
 
   await notifySession(
     `<b>${displayName}</b> — ${sessionType} ${statusIcon} (${durationStr})\n` +
-    `Tokens: ${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out | ${log.num_turns} turns\n` +
+    `Tokens: ${(log.tokens_in ?? 0).toLocaleString()} in / ${(log.tokens_out ?? 0).toLocaleString()} out | ${log.num_turns} turns\n` +
     (summary ? `<i>${summary}${result.output.length > 200 ? "..." : ""}</i>` : ""),
   );
 
