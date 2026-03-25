@@ -7,6 +7,14 @@ import type { SessionLogV2 } from "../types.js";
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
 
+/** Send a Telegram notification (best-effort, never throws) */
+async function notifySession(message: string): Promise<void> {
+  try {
+    const { sendTelegramNotification } = await import("./gateway.service.js");
+    await sendTelegramNotification(message);
+  } catch { /* best effort */ }
+}
+
 /** Launch a Claude Code session for a fund */
 export async function runFundSession(
   fundName: string,
@@ -22,6 +30,12 @@ export async function runFundSession(
       `Session type '${sessionType}' not found in fund '${fundName}'`,
     );
   }
+
+  // Notify session start
+  const displayName = config.fund.display_name;
+  await notifySession(
+    `<b>${displayName}</b> — ${sessionType} started\n<i>${focus}</i>`,
+  );
 
   const today = new Date().toISOString().split("T")[0];
   const agents = buildAnalystAgents(fundName);
@@ -103,6 +117,20 @@ export async function runFundSession(
   };
 
   await writeSessionLog(fundName, log);
+
+  // Notify session completion
+  const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);
+  const durationStr = duration < 60 ? `${duration}s` : `${Math.floor(duration / 60)}m ${duration % 60}s`;
+  const statusIcon = result.status === "success" ? "OK" : "ERR";
+  const tokensIn = sumTokens(result.usage, "inputTokens");
+  const tokensOut = sumTokens(result.usage, "outputTokens");
+  const summary = result.output.slice(0, 200).replace(/\n/g, " ").trim();
+
+  await notifySession(
+    `<b>${displayName}</b> — ${sessionType} ${statusIcon} (${durationStr})\n` +
+    `Tokens: ${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out | ${log.num_turns} turns\n` +
+    (summary ? `<i>${summary}${result.output.length > 200 ? "..." : ""}</i>` : ""),
+  );
 
   // Update per-session-type history for catch-up detection
   try {
