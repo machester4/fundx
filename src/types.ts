@@ -670,8 +670,8 @@ export const pendingSessionSchema = z.object({
   scheduled_at: z.string(),
   created_at: z.string(),
   source: z.enum(["news", "agent"]),
-  max_turns: z.number().positive().default(10),
-  max_duration_minutes: z.number().positive().default(5),
+  max_turns: z.number().positive().max(25).default(10),
+  max_duration_minutes: z.number().positive().max(15).default(5),
   priority: z.enum(["high", "normal"]).default("normal"),
 });
 

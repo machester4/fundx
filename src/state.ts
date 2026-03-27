@@ -179,7 +179,11 @@ export async function readPendingSessions(fundName: string): Promise<PendingSess
   try {
     const data = await readJson(paths.state.pendingSessions);
     const arr = Array.isArray(data) ? data : [];
-    return arr.map((item) => pendingSessionSchema.parse(item));
+    // Use safeParse to tolerate malformed entries written by the agent
+    return arr
+      .map((item) => pendingSessionSchema.safeParse(item))
+      .filter((r): r is { success: true; data: PendingSession } => r.success)
+      .map((r) => r.data);
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && err.code === "ENOENT") return [];
     throw err;

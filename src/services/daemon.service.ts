@@ -595,38 +595,47 @@ export async function startDaemon(): Promise<void> {
                     }
                   }
 
-                  if (withinLimits && (await acquireFundLock(name, session.type))) {
-                    try {
-                      await log(`[proactive] Running ${session.type} for '${name}' (source: ${session.source})`);
-                      await withTimeout(
-                        runFundSession(name, session.type, {
-                          focus: session.focus,
-                          maxTurns: session.max_turns,
-                          maxDurationMinutes: session.max_duration_minutes,
-                        }),
-                        (session.max_duration_minutes ?? 5) * 60 * 1000,
-                      );
+                  let shouldRemove = false;
 
-                      // Update counts
-                      if (session.source === "agent") {
-                        counts.agent += 1;
-                        counts.last_agent_at = nowIso;
-                      } else {
-                        counts.news += 1;
-                        counts.last_news_at = nowIso;
+                  if (withinLimits) {
+                    const locked = await acquireFundLock(name, session.type);
+                    if (locked) {
+                      shouldRemove = true;
+                      try {
+                        await log(`[proactive] Running ${session.type} for '${name}' (source: ${session.source})`);
+                        await withTimeout(
+                          runFundSession(name, session.type, {
+                            focus: session.focus,
+                            maxTurns: session.max_turns,
+                            maxDurationMinutes: session.max_duration_minutes,
+                          }),
+                          (session.max_duration_minutes ?? 5) * 60 * 1000,
+                        );
+
+                        // Update counts
+                        if (session.source === "agent") {
+                          counts.agent += 1;
+                          counts.last_agent_at = nowIso;
+                        } else {
+                          counts.news += 1;
+                          counts.last_news_at = nowIso;
+                        }
+                        await writeSessionCounts(name, counts);
+                      } catch (err) {
+                        await log(`[proactive] Error in ${session.type} for '${name}': ${err}`);
+                      } finally {
+                        await releaseFundLock(name);
                       }
-                      await writeSessionCounts(name, counts);
-                    } catch (err) {
-                      await log(`[proactive] Error in ${session.type} for '${name}': ${err}`);
-                    } finally {
-                      await releaseFundLock(name);
                     }
-                  } else if (!withinLimits) {
+                    // else: lock held — leave in queue for next tick
+                  } else {
+                    shouldRemove = true;
                     await log(`[proactive] Limit reached for '${name}' (${session.source}), skipping ${session.type}`);
                   }
 
-                  // Remove executed or skipped session from queue
-                  pending = pending.filter((s) => s.id !== session.id);
+                  if (shouldRemove) {
+                    pending = pending.filter((s) => s.id !== session.id);
+                  }
                 }
 
                 // Write back cleaned pending list
