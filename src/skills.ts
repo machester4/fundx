@@ -426,6 +426,12 @@ Update \`state/objective_tracker.json\` with current progress metrics.
 Structured markdown: Decision Audit (graded), Bias Check (honest), Journal Updates
 (written to DB), Objective Progress (updated), and Next Session Focus (priorities
 for the next trading session).
+
+## Follow-Up Scheduling
+If during reflection you identify something that needs checking before the next
+regular session (e.g., price level to monitor, order to verify, catalyst window),
+schedule a follow-up by writing to \`state/pending_sessions.json\`.
+See \`.claude/rules/self-scheduling.md\` for the format.
 `,
   },
   {
