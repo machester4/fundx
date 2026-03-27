@@ -7,6 +7,11 @@ import type { SessionLogV2 } from "../types.js";
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
 
+/** Escape HTML entities for Telegram */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Send a Telegram notification (best-effort, never throws) */
 async function notifySession(message: string): Promise<void> {
   try {
@@ -32,9 +37,9 @@ export async function runFundSession(
   }
 
   // Notify session start
-  const displayName = config.fund.display_name;
+  const displayName = escapeHtml(config.fund.display_name);
   await notifySession(
-    `<b>${displayName}</b> — ${sessionType} started\n<i>${focus}</i>`,
+    `<b>${displayName}</b> — ${sessionType} started\n<i>${escapeHtml(focus)}</i>`,
   );
 
   const today = new Date().toISOString().split("T")[0];
@@ -104,7 +109,7 @@ export async function runFundSession(
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     await notifySession(
-      `<b>${displayName}</b> — ${sessionType} FAILED\n<i>${errMsg.slice(0, 200)}</i>`,
+      `\u274C <b>${displayName}</b> — ${sessionType} FAILED\n<i>${escapeHtml(errMsg.slice(0, 400))}</i>`,
     );
     throw err;
   }
@@ -130,13 +135,24 @@ export async function runFundSession(
   // Notify session completion
   const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);
   const durationStr = duration < 60 ? `${duration}s` : `${Math.floor(duration / 60)}m ${duration % 60}s`;
-  const statusIcon = result.status === "success" ? "OK" : "ERR";
-  const summary = result.output.slice(0, 200).replace(/\n/g, " ").trim();
+  const statusEmoji = result.status === "success" ? "\u2705" : "\u274C";
+  const tokensIn = log.tokens_in ?? 0;
+  const tokensOut = log.tokens_out ?? 0;
+
+  // Truncate and escape summary for Telegram (max 800 chars, strip markdown artifacts)
+  const rawSummary = result.output
+    .replace(/^#+\s+/gm, "")          // strip markdown headers
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // strip bold markers
+    .replace(/`([^`]+)`/g, "$1")       // strip inline code
+    .replace(/\n{3,}/g, "\n\n")        // collapse multiple newlines
+    .trim();
+  const summary = rawSummary.slice(0, 800);
+  const truncated = rawSummary.length > 800;
 
   await notifySession(
-    `<b>${displayName}</b> — ${sessionType} ${statusIcon} (${durationStr})\n` +
-    `Tokens: ${(log.tokens_in ?? 0).toLocaleString()} in / ${(log.tokens_out ?? 0).toLocaleString()} out | ${log.num_turns} turns\n` +
-    (summary ? `<i>${summary}${result.output.length > 200 ? "..." : ""}</i>` : ""),
+    `${statusEmoji} <b>${displayName}</b> — ${sessionType} (${durationStr})\n` +
+    `<i>${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out | ${log.num_turns} turns</i>\n\n` +
+    (summary ? `${escapeHtml(summary)}${truncated ? "..." : ""}` : "No output"),
   );
 
   // Update per-session-type history for catch-up detection
