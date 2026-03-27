@@ -13,6 +13,10 @@ import {
   type ChatHistory,
   type SessionHistory,
   sessionHistorySchema,
+  pendingSessionSchema,
+  sessionCountsSchema,
+  type PendingSession,
+  type SessionCounts,
 } from "./types.js";
 import { fundPaths } from "./paths.js";
 
@@ -166,6 +170,45 @@ export async function readSessionHistory(fundName: string): Promise<SessionHisto
 export async function writeSessionHistory(fundName: string, history: SessionHistory): Promise<void> {
   const paths = fundPaths(fundName);
   await writeJsonAtomic(paths.state.sessionHistory, history);
+}
+
+// ── Pending Sessions ──────────────────────────────────────────
+
+export async function readPendingSessions(fundName: string): Promise<PendingSession[]> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.pendingSessions);
+    const arr = Array.isArray(data) ? data : [];
+    return arr.map((item) => pendingSessionSchema.parse(item));
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+export async function writePendingSessions(fundName: string, sessions: PendingSession[]): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.pendingSessions, sessions);
+}
+
+// ── Session Counts ────────────────────────────────────────────
+
+export async function readSessionCounts(fundName: string): Promise<SessionCounts> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.sessionCounts);
+    return sessionCountsSchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return { date: new Date().toISOString().split("T")[0], agent: 0, news: 0 };
+    }
+    throw err;
+  }
+}
+
+export async function writeSessionCounts(fundName: string, counts: SessionCounts): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.sessionCounts, counts);
 }
 
 // ── Initialize state for a new fund ────────────────────────────
