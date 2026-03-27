@@ -5,11 +5,12 @@ import type { StreamingActivity } from "../hooks/useStreaming.js";
 interface StreamingIndicatorProps {
   charCount: number;
   activity?: StreamingActivity;
+  buffer?: string;
 }
 
 const DOTS = ["", ".", "..", "..."];
 
-export function StreamingIndicator({ charCount, activity }: StreamingIndicatorProps) {
+export function StreamingIndicator({ charCount, activity, buffer }: StreamingIndicatorProps) {
   const [dotIdx, setDotIdx] = useState(0);
 
   useEffect(() => {
@@ -61,9 +62,16 @@ export function StreamingIndicator({ charCount, activity }: StreamingIndicatorPr
 
   // Fallback
   if (lines.length === 0) {
-    if (charCount > 0) {
+    if (charCount > 0 && buffer) {
+      // Show last non-empty line as preview (truncated to ~100 chars)
+      const lastLine = buffer.trimEnd().split("\n").filter((l) => l.trim()).pop() ?? "";
+      const preview = lastLine.length > 100 ? lastLine.slice(0, 100) + "..." : lastLine;
       lines.push(
-        <Text key="streaming" dimColor>{"\u25CF"} Streaming{dots} ({charCount.toLocaleString()} chars)</Text>,
+        <Text key="streaming" dimColor>{"\u25CF"} {preview}</Text>,
+      );
+    } else if (charCount > 0) {
+      lines.push(
+        <Text key="streaming" dimColor>{"\u25CF"} Streaming{dots}</Text>,
       );
     } else {
       lines.push(
