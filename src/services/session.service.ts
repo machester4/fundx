@@ -24,7 +24,7 @@ async function notifySession(message: string): Promise<void> {
 export async function runFundSession(
   fundName: string,
   sessionType: string,
-  options?: { focus?: string; useDebateSkills?: boolean },
+  options?: { focus?: string; useDebateSkills?: boolean; maxTurns?: number; maxDurationMinutes?: number },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
 
@@ -71,7 +71,11 @@ export async function runFundSession(
   ].join("\n");
 
   const model = config.claude.model || undefined;
-  const timeout = (sessionConfig?.max_duration_minutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
+  const effectiveMaxTurns = options?.maxTurns ?? DEFAULT_MAX_TURNS;
+  const effectiveDuration = options?.maxDurationMinutes
+    ?? sessionConfig?.max_duration_minutes
+    ?? DEFAULT_SESSION_TIMEOUT_MINUTES;
+  const timeout = effectiveDuration * 60 * 1000;
 
   const startedAt = new Date().toISOString();
 
@@ -83,7 +87,7 @@ export async function runFundSession(
       fundName,
       prompt,
       model,
-      maxTurns: DEFAULT_MAX_TURNS,
+      maxTurns: effectiveMaxTurns,
       timeoutMs: timeout,
       agents,
       resumeSessionId: activeSession?.session_id,
@@ -101,7 +105,7 @@ export async function runFundSession(
         fundName,
         prompt,
         model,
-        maxTurns: DEFAULT_MAX_TURNS,
+        maxTurns: effectiveMaxTurns,
         timeoutMs: timeout,
         agents,
       });
