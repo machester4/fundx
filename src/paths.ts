@@ -89,6 +89,8 @@ export function fundPaths(fundName: string) {
       chatHistory: join(root, "state", "chat_history.json"),
       sessionHistory: join(root, "state", "session_history.json"),
       lock: join(root, "state", ".lock"),
+      pendingSessions: join(root, "state", "pending_sessions.json"),
+      sessionCounts: join(root, "state", "session_counts.json"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),

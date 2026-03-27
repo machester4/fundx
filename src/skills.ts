@@ -426,6 +426,12 @@ Update \`state/objective_tracker.json\` with current progress metrics.
 Structured markdown: Decision Audit (graded), Bias Check (honest), Journal Updates
 (written to DB), Objective Progress (updated), and Next Session Focus (priorities
 for the next trading session).
+
+## Follow-Up Scheduling
+If during reflection you identify something that needs checking before the next
+regular session (e.g., price level to monitor, order to verify, catalyst window),
+schedule a follow-up by writing to \`state/pending_sessions.json\`.
+See \`.claude/rules/self-scheduling.md\` for the format.
 `,
   },
   {
@@ -942,6 +948,56 @@ are within 24 hours:
 If a major event is within 24 hours and the thesis does not explicitly account for it,
 either wait or reduce size by 50%. "I will trade through it" is acceptable only if the
 thesis includes a specific scenario for the event outcome.
+`,
+  },
+  {
+    fileName: "self-scheduling.md",
+    content: `# Self-Scheduling
+
+You can schedule follow-up sessions by writing to \`state/pending_sessions.json\`.
+
+## When to Use
+- You need to check a price level later (support/resistance break)
+- You started an analysis but need fresh data in N minutes
+- You placed a limit order and want to verify execution
+- You want to review a position after a specific event window
+
+## How
+Read \`state/pending_sessions.json\` (create as \`[]\` if missing). Append an entry:
+
+\`\`\`json
+{
+  "id": "<generate a unique id>",
+  "type": "agent_followup",
+  "focus": "<specific objective for the follow-up session>",
+  "scheduled_at": "<ISO timestamp, minimum 5 min from now>",
+  "created_at": "<current ISO timestamp>",
+  "source": "agent",
+  "max_turns": 10,
+  "max_duration_minutes": 5,
+  "priority": "normal"
+}
+\`\`\`
+
+Then write the updated array back to \`state/pending_sessions.json\`.
+
+## Limits
+- Max 5 self-scheduled sessions per day
+- Minimum 5 minutes between sessions
+- Maximum 24 hours in the future
+- max_turns must not exceed 25
+- max_duration_minutes must not exceed 15
+- Keep follow-ups short and focused — one objective per session
+- Do NOT schedule follow-ups for routine work that the next regular session will handle
+
+## Good Follow-Up Reasons
+- "Check if GLD broke $420 support in the next 30 min"
+- "Verify limit order for 50 shares GDXJ filled after market open"
+- "Review portfolio after FOMC statement release at 14:30"
+
+## Bad Follow-Up Reasons
+- "Continue general analysis" (wait for next scheduled session)
+- "Check market again" (too vague — what specifically?)
 `,
   },
 ];
