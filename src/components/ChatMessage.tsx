@@ -23,8 +23,8 @@ export function ChatMessage({ sender, content }: ChatMessageProps) {
 
   if (sender === "you") {
     return (
-      <Box marginBottom={1}>
-        <Text backgroundColor="#333333" color="white">{` ${content} `}</Text>
+      <Box marginBottom={1} flexDirection="column">
+        <Text color="green" bold>{"❯ "}<Text color="white" bold>{content}</Text></Text>
       </Box>
     );
   }
