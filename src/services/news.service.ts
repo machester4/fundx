@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
-import { readPortfolio } from "../state.js";
+import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCounts } from "../state.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
@@ -448,6 +448,46 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
             fields: { alerted: true },
           });
         } catch { /* best effort */ }
+
+        // Enqueue news reaction session for each affected fund
+        for (const fundName of notifyFunds) {
+          try {
+            const counts = await readSessionCounts(fundName);
+            const today = new Date().toISOString().split("T")[0];
+
+            // Reset counts if date changed
+            if (counts.date !== today) {
+              counts.date = today;
+              counts.news = 0;
+              counts.agent = 0;
+              counts.last_news_at = undefined;
+              counts.last_agent_at = undefined;
+            }
+
+            // Check limits: max 5/day, max 1/hour
+            if (counts.news >= 5) continue;
+            if (counts.last_news_at) {
+              const elapsed = Date.now() - new Date(counts.last_news_at).getTime();
+              if (elapsed < 60 * 60 * 1000) continue;
+            }
+
+            // Enqueue pending session
+            const pending = await readPendingSessions(fundName);
+            const symbols = article.symbols.length > 0 ? article.symbols.join(", ") : "general market";
+            pending.push({
+              id: randomUUID(),
+              type: "news_reaction",
+              focus: `NEWS REACTION SESSION: ${article.source} reported "${article.title}".\nSymbols mentioned: ${symbols}.\nAnalyze the impact on your portfolio. If immediate action is needed (stop-loss adjustment, position reduction, hedge), execute it. If no action needed, document your reasoning in memory.\nThis is a short session (5 min, 10 turns) — be decisive.`,
+              scheduled_at: new Date(Date.now() + 60_000).toISOString(),
+              created_at: new Date().toISOString(),
+              source: "news",
+              max_turns: 10,
+              max_duration_minutes: 5,
+              priority: "high",
+            });
+            await writePendingSessions(fundName, pending);
+          } catch { /* best effort — alert was already sent */ }
+        }
       }
     }
   }

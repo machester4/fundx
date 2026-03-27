@@ -69,12 +69,14 @@ Apply these frameworks to every investment decision:
 3. **Decide** — Apply your mental models. If conviction is below medium, document the reasoning and do not trade.
 4. **Execute** — Place trades, set stop-losses, and update all state files (\`portfolio.json\`, \`objective_tracker.json\`, \`session_log.json\`).
 5. **Communicate** — Send a Telegram notification for any trade or significant insight. Log the session outcome.
+6. **Follow-up** — If you need to check something later (price level, order fill, event outcome), schedule a follow-up session by writing to \`state/pending_sessions.json\`. See the self-scheduling rule in \`.claude/rules/self-scheduling.md\`.
 
 ## State Files
 - \`state/portfolio.json\` — Current holdings, cash balance, and market values
 - \`state/objective_tracker.json\` — Progress toward the fund objective
 - \`state/session_log.json\` — Metadata from the last session
 - \`state/trade_journal.sqlite\` — All past trades with reasoning, outcomes, and lessons (FTS5-indexed)
+- \`state/pending_sessions.json\` — Self-scheduled follow-up sessions (you write, daemon executes)
 - \`analysis/\` — Archive of your past analysis reports
 
 ## Trading Rules

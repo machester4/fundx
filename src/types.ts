@@ -660,3 +660,29 @@ export const fundCredentialsSchema = z.object({
 });
 
 export type FundCredentials = z.infer<typeof fundCredentialsSchema>;
+
+// ── Proactive Agent Schemas ──────────────────────────────────
+
+export const pendingSessionSchema = z.object({
+  id: z.string(),
+  type: z.enum(["news_reaction", "agent_followup"]),
+  focus: z.string(),
+  scheduled_at: z.string(),
+  created_at: z.string(),
+  source: z.enum(["news", "agent"]),
+  max_turns: z.number().positive().max(25).default(10),
+  max_duration_minutes: z.number().positive().max(15).default(5),
+  priority: z.enum(["high", "normal"]).default("normal"),
+});
+
+export type PendingSession = z.infer<typeof pendingSessionSchema>;
+
+export const sessionCountsSchema = z.object({
+  date: z.string(),
+  agent: z.number().default(0),
+  news: z.number().default(0),
+  last_agent_at: z.string().optional(),
+  last_news_at: z.string().optional(),
+});
+
+export type SessionCounts = z.infer<typeof sessionCountsSchema>;

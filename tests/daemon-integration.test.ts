@@ -88,6 +88,10 @@ vi.mock("../src/state.js", () => ({
   writePortfolio: vi.fn().mockResolvedValue(undefined),
   readSessionHistory: vi.fn().mockResolvedValue({}),
   writeSessionHistory: vi.fn().mockResolvedValue(undefined),
+  readPendingSessions: vi.fn().mockResolvedValue([]),
+  writePendingSessions: vi.fn().mockResolvedValue(undefined),
+  readSessionCounts: vi.fn().mockResolvedValue({ date: "2026-01-01", agent: 0, news: 0 }),
+  writeSessionCounts: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/journal.js", () => ({

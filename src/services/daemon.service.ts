@@ -20,7 +20,7 @@ import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
-import { readSessionHistory } from "../state.js";
+import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts } from "../state.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -542,6 +542,107 @@ export async function startDaemon(): Promise<void> {
                   await releaseFundLock(name);
                 }
               }
+            }
+
+            // ── Pending sessions (proactive: news reactions, agent follow-ups) ──
+            try {
+              let pending = await readPendingSessions(name);
+              if (pending.length === 0) { /* skip */ }
+              else {
+                const nowMs = Date.now();
+                const nowIso = new Date().toISOString();
+                const today = nowIso.split("T")[0];
+
+                // Discard stale (>1h past) and too-far-future (>24h) entries
+                pending = pending.filter((s) => {
+                  const schedMs = new Date(s.scheduled_at).getTime();
+                  if (nowMs - schedMs > 60 * 60 * 1000) return false; // stale
+                  if (schedMs - nowMs > 24 * 60 * 60 * 1000) return false; // too far
+                  return true;
+                });
+
+                // Find due entries
+                const due = pending
+                  .filter((s) => new Date(s.scheduled_at).getTime() <= nowMs)
+                  .sort((a, b) => {
+                    const prio = (a.priority === "high" ? 0 : 1) - (b.priority === "high" ? 0 : 1);
+                    if (prio !== 0) return prio;
+                    return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+                  });
+
+                if (due.length > 0) {
+                  const session = due[0]!;
+                  let counts = await readSessionCounts(name);
+
+                  // Reset counts if date changed
+                  if (counts.date !== today) {
+                    counts = { date: today, agent: 0, news: 0 };
+                  }
+
+                  // Check source-specific limits
+                  let withinLimits = true;
+                  if (session.source === "agent") {
+                    if (counts.agent >= 5) withinLimits = false;
+                    if (counts.last_agent_at) {
+                      const elapsed = nowMs - new Date(counts.last_agent_at).getTime();
+                      if (elapsed < 5 * 60 * 1000) withinLimits = false;
+                    }
+                  } else if (session.source === "news") {
+                    if (counts.news >= 5) withinLimits = false;
+                    if (counts.last_news_at) {
+                      const elapsed = nowMs - new Date(counts.last_news_at).getTime();
+                      if (elapsed < 60 * 60 * 1000) withinLimits = false;
+                    }
+                  }
+
+                  let shouldRemove = false;
+
+                  if (withinLimits) {
+                    const locked = await acquireFundLock(name, session.type);
+                    if (locked) {
+                      shouldRemove = true;
+                      try {
+                        await log(`[proactive] Running ${session.type} for '${name}' (source: ${session.source})`);
+                        await withTimeout(
+                          runFundSession(name, session.type, {
+                            focus: session.focus,
+                            maxTurns: session.max_turns,
+                            maxDurationMinutes: session.max_duration_minutes,
+                          }),
+                          (session.max_duration_minutes ?? 5) * 60 * 1000,
+                        );
+
+                        // Update counts
+                        if (session.source === "agent") {
+                          counts.agent += 1;
+                          counts.last_agent_at = nowIso;
+                        } else {
+                          counts.news += 1;
+                          counts.last_news_at = nowIso;
+                        }
+                        await writeSessionCounts(name, counts);
+                      } catch (err) {
+                        await log(`[proactive] Error in ${session.type} for '${name}': ${err}`);
+                      } finally {
+                        await releaseFundLock(name);
+                      }
+                    }
+                    // else: lock held — leave in queue for next tick
+                  } else {
+                    shouldRemove = true;
+                    await log(`[proactive] Limit reached for '${name}' (${session.source}), skipping ${session.type}`);
+                  }
+
+                  if (shouldRemove) {
+                    pending = pending.filter((s) => s.id !== session.id);
+                  }
+                }
+
+                // Write back cleaned pending list
+                await writePendingSessions(name, pending);
+              }
+            } catch (err) {
+              await log(`[proactive] Error processing pending sessions for '${name}': ${err}`);
             }
           } catch (err) {
             await log(`Error checking fund '${name}': ${err}`);
