@@ -40,13 +40,19 @@ Shared infrastructure for both news-triggered and agent-scheduled sessions.
 Each tick of the per-minute cron (`* * * * *`), after checking regular and special sessions, the daemon:
 
 1. Reads `pending_sessions.json` for each active fund
-2. Filters entries where `scheduled_at <= now`
-3. Sorts by priority (`high` > `normal`), then by `scheduled_at` (oldest first)
-4. Checks limits via `session_counts.json`
-5. Executes the highest-priority due session (acquires fund lock first)
-6. Removes the executed session from the pending list
-7. Increments session counts
-8. If fund lock is held by another operation, waits for next tick
+2. Discard stale entries: `scheduled_at` more than 1 hour in the past (missed window)
+3. Discard invalid entries: `scheduled_at` more than 24 hours in the future (agent error)
+4. Filters entries where `scheduled_at <= now`
+5. Sorts by priority (`high` > `normal`), then by `scheduled_at` (oldest first)
+6. Checks limits via `session_counts.json`
+7. Executes the highest-priority due session (acquires fund lock first)
+8. Removes the executed session from the pending list
+9. Increments session counts and updates `last_agent_at` / `last_news_at`
+10. If fund lock is held by another operation, waits for next tick
+
+Processing happens **inside** the existing per-fund callback (after all other checks for that fund), within the same `Promise.allSettled` block. This is consistent with the existing pattern and ensures one fund's pending sessions don't block another fund's processing.
+
+**Cooldown vs. session limit interaction:** A fund can receive a Telegram news alert (10-min cooldown) but not get a news session (1-hour interval). This is intentional — alerts are lightweight, sessions are expensive.
 
 ### Session counts: `~/.fundx/funds/<name>/state/session_counts.json`
 
@@ -55,7 +61,8 @@ Each tick of the per-minute cron (`* * * * *`), after checking regular and speci
   "date": "2026-03-27",
   "agent": 3,
   "news": 2,
-  "last_news_at": "2026-03-27T14:30:00Z"
+  "last_agent_at": "2026-03-27T14:30:00Z",
+  "last_news_at": "2026-03-27T13:00:00Z"
 }
 ```
 
@@ -75,7 +82,7 @@ When limits are exceeded, the pending session is removed without execution and a
 ```typescript
 export const pendingSessionSchema = z.object({
   id: z.string(),
-  type: z.string(),
+  type: z.enum(["news_reaction", "agent_followup"]),
   focus: z.string(),
   scheduled_at: z.string(),
   created_at: z.string(),
@@ -91,6 +98,7 @@ export const sessionCountsSchema = z.object({
   date: z.string(),
   agent: z.number().default(0),
   news: z.number().default(0),
+  last_agent_at: z.string().optional(),
   last_news_at: z.string().optional(),
 });
 
@@ -236,7 +244,11 @@ export async function runFundSession(
 ): Promise<void>
 ```
 
-When provided, these override the defaults (50 turns, 15 min) and the fund config's `max_duration_minutes`.
+Override precedence chain:
+- `maxTurns`: `options.maxTurns` > `DEFAULT_MAX_TURNS` (50)
+- `maxDurationMinutes`: `options.maxDurationMinutes` > `sessionConfig?.max_duration_minutes` > `DEFAULT_SESSION_TIMEOUT_MINUTES` (15)
+
+This means pending sessions with `max_turns: 10` and `max_duration_minutes: 5` will be short and focused as intended.
 
 ### Modified files
 
