@@ -416,7 +416,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             <Text dimColor>{"\u2500".repeat(width)}</Text>
             {isStreaming ? (
               <Box paddingX={1}>
-                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
+                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
               </Box>
             ) : phase !== "error" ? (
               <Box paddingX={1}>
@@ -478,7 +478,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           <Box paddingX={1} flexDirection="column">
             {streaming.buffer ? (
               <Box flexDirection="column">
-                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} />
+                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
                 <MarkdownView content={streaming.buffer} />
               </Box>
             ) : (
