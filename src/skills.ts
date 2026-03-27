@@ -985,6 +985,8 @@ Then write the updated array back to \`state/pending_sessions.json\`.
 - Max 5 self-scheduled sessions per day
 - Minimum 5 minutes between sessions
 - Maximum 24 hours in the future
+- max_turns must not exceed 25
+- max_duration_minutes must not exceed 15
 - Keep follow-ups short and focused — one objective per session
 - Do NOT schedule follow-ups for routine work that the next regular session will handle
 

@@ -5,7 +5,7 @@ import { XMLParser } from "fast-xml-parser";
 import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
-import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts } from "../state.js";
+import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCounts } from "../state.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
@@ -486,11 +486,6 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
               priority: "high",
             });
             await writePendingSessions(fundName, pending);
-
-            // Update counts
-            counts.news += 1;
-            counts.last_news_at = new Date().toISOString();
-            await writeSessionCounts(fundName, counts);
           } catch { /* best effort — alert was already sent */ }
         }
       }
