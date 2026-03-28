@@ -43,13 +43,17 @@ export const BUILTIN_SKILLS: Skill[] = [
     name: "Investment Thesis",
     dirName: "investment-thesis",
     description:
-      "Develop, stress-test, and validate investment theses before any significant trade. Combines idea generation with bull/bear dialectical analysis.",
+      "Develop and stress-test investment theses before significant trades. Combines idea generation with bull/bear dialectical analysis.",
     content: `# Investment Thesis
 
 ## When to Use
 Before any significant trade: opening a new position, materially increasing an existing one,
-or making a major allocation shift. Skip for mechanical actions (stop-loss exits, scheduled
-rebalances, minor trims).
+or making a major allocation shift.
+
+## When NOT to Use
+- Mechanical stop-loss exits (the thesis already failed — just execute)
+- Scheduled rebalances that follow a predetermined plan
+- Trims under 2% of portfolio (minor position management, not a new decision)
 
 ## Technique
 
@@ -57,10 +61,14 @@ rebalances, minor trims).
 State the thesis in one sentence: what you are buying/selling, why, and the expected time
 horizon. If you cannot articulate it in one sentence, the idea is not ready.
 
-**Good:** "Buy GDXJ because gold miners are trading at 0.8x NAV while gold is above $2,300,
+<example type="good">
+"Buy GDXJ because gold miners are trading at 0.8x NAV while gold is above $2,300,
 with a 3-6 month horizon targeting a reversion to 1.0x NAV."
+</example>
 
-**Bad:** "Gold miners look interesting and could go up."
+<example type="bad">
+"Gold miners look interesting and could go up."
+</example>
 
 ### 2. Bull Case
 Build the strongest affirmative case using specific data:
@@ -83,10 +91,18 @@ Assume you are already wrong. Identify:
 - Whether you are anchored to a prior trade or narrative (check trade journal)
 - Whether this idea feels urgent — urgency is usually a red flag
 
+### 4.5 Pre-Mortem (Gary Klein)
+Assume 12 months from now this trade lost 20%. Write one paragraph explaining why. This is
+the single most effective debiasing exercise — it forces you to generate failure scenarios
+your optimistic brain would otherwise suppress. The pre-mortem output must be specific: name
+the macro scenario, the sector catalyst that failed, or the technical breakdown that occurred.
+
 ### 5. Historical Parallel
 Query the trade journal for similar past trades (same sector, similar setup, comparable
 regime). What happened? What was learned? If no history exists, note that explicitly — first
-trades in a new area deserve smaller sizing.
+trades in a new area deserve smaller sizing. First trades in a new sector/asset class deserve
+minimum sizing regardless of conviction — you lack the pattern recognition that comes from
+experience.
 
 ### 6. Conviction Assessment
 Rate conviction 1-5 based on evidence quality, not gut feeling:
@@ -104,23 +120,27 @@ Rate conviction 1-5 based on evidence quality, not gut feeling:
 - Bull and bear cases are roughly equal in depth
 - A specific invalidation trigger is defined (not "if things get worse")
 - Conviction score maps to a position size, not the other way around
+- The pre-mortem paragraph is written and specific
 
 ## Output
 Structured markdown with sections: Thesis, Bull Case, Bear Case, Devil's Advocate,
-Historical Parallel, Conviction (1-5), Recommended Action, Invalidation Trigger.
+Pre-Mortem, Historical Parallel, Conviction (1-5), Recommended Action, Invalidation Trigger.
 `,
   },
   {
     name: "Risk Assessment",
     dirName: "risk-assessment",
     description:
-      "Quantitative pre-execution risk check before placing any trade order. Validates position sizing, portfolio impact, and hard constraints.",
+      "Pre-execution risk check before placing any trade order. Validates expected value, position sizing, and portfolio impact.",
     content: `# Risk Assessment
 
 ## When to Use
 Immediately before placing any trade order — after the investment thesis is formed but
-before execution. This is a final gate, not a substitute for thesis quality. Every order
-passes through this check. No exceptions.
+before execution. This is a final gate, not a substitute for thesis quality.
+
+## When NOT to Use
+- Pure exit or trim decisions where risk is being reduced, not added
+- Mechanical stop-loss triggers (the stop was already validated at entry)
 
 ## Technique
 
@@ -131,49 +151,59 @@ Estimate the trade's expected value:
 - **Probability estimate:** Rough odds of success (be honest, not optimistic)
 - **EV = (P(win) x gain) - (P(loss) x loss)** — must be positive
 
-If EV is negative or unclear, do not trade. "I think it will go up" is not a valid EV
-calculation.
+If EV is negative or unclear, do not trade.
 
-### 2. Position Size
+<example type="good">
+"GDXJ entry at $42.15, target $48 (+13.9%), stop $38.50 (-8.6%).
+P(win) = 55%, P(loss) = 45%. EV = (0.55 x 13.9%) - (0.45 x 8.6%) = +3.8%."
+</example>
+
+<example type="bad">
+"I think GDXJ will go up because gold is strong. Risk/reward looks good."
+</example>
+
+### Drawdown Recovery Math
+Losses are asymmetric — the deeper the hole, the harder to climb out:
+
+| Loss | Gain to Recover |
+|------|-----------------|
+| -10% | +11.1% |
+| -20% | +25% |
+| -30% | +42.9% |
+| -40% | +66.7% |
+| -50% | +100% |
+| -60% | +150% |
+
+Always consider the recovery math before sizing. A -30% loss requires +42.9% gain to break
+even — math that may make the fund's objective unreachable.
+
+### 2. Position Size Validation
+Use at least TWO sizing methods (conviction-based AND Kelly criterion). Take the SMALLER
+result. If they diverge by more than 2x, your conviction estimate is likely miscalibrated
+— trust Kelly and investigate why your conviction is so high.
+
 Validate the proposed size against fund constraints:
 - Does it exceed \`risk.max_position_pct\`? → Reduce
 - Does it create a concentrated sector/factor bet? → Flag
 - Is it appropriate for the conviction level? (See Position Sizing skill)
 - Would a full loss at the stop violate \`risk.max_daily_loss_pct\`? → Reduce
 
-### 3. Portfolio Impact
-Assess what happens to the whole portfolio:
-- **Cash remaining:** After this trade, is cash above the fund's minimum reserve?
-- **Correlation:** Does this position move with existing holdings? If adding a gold miner
-  when you already hold gold ETFs, you are concentrating, not diversifying.
-- **Drawdown budget:** Current drawdown + worst-case loss on this trade — does it breach
-  \`risk.max_drawdown_pct\`?
-
-### 4. Hard Constraints
-Check every item — any failure is a veto:
-- [ ] Ticker is in \`universe.allowed\` and not in \`universe.forbidden\`
-- [ ] Broker mode matches intent (paper vs. live)
-- [ ] Position size ≤ \`risk.max_position_pct\` of portfolio
-- [ ] Stop-loss is defined and entered with the order
-- [ ] Post-trade cash ≥ minimum reserve for fund type
-- [ ] No earnings/FOMC/CPI within 24h unless thesis explicitly accounts for it
-
-### 5. Order Specification
+### 3. Order Specification
 Only after all checks pass, specify the exact order:
 - Symbol, side (buy/sell), quantity, order type (limit/market)
 - Stop-loss price and type
 - Take-profit level (if applicable)
 
 ## Output
-Structured checklist: EV calculation, size validation, portfolio impact summary,
-hard constraint pass/fail, and final order specification or rejection with reason.
+Structured checklist: EV calculation (with drawdown recovery context), dual-method size
+validation, and final order specification or rejection with reason.
 `,
   },
   {
     name: "Trade Memory",
     dirName: "trade-memory",
     description:
-      "Query trade journal for relevant past trades, win rates, and historical lessons before making a new trade decision.",
+      "Query trade journal for relevant past trades, win rates, and historical lessons before making decisions.",
     content: `# Trade Memory
 
 ## When to Use
@@ -181,27 +211,43 @@ Before any trade decision, query the trade journal to learn from history. Also u
 reviewing a sector, ticker, or strategy you have traded before. The journal is in
 \`state/trade_journal.sqlite\` with a \`trades\` table and \`trades_fts\` FTS5 index.
 
+## When NOT to Use
+When the fund has no trade history yet — skip the journal queries and note that this is a
+first trade with no historical context. Proceed with minimum sizing as appropriate.
+
 ## Technique
 
 ### Queries to Run
 
 **1. Same-ticker history:**
+
+<example type="good">
 \`\`\`sql
 SELECT symbol, side, entry_price, exit_price, pnl_pct, reasoning, lessons_learned,
        entry_date, exit_date
 FROM trades WHERE symbol = ? ORDER BY entry_date DESC LIMIT 10
 \`\`\`
+</example>
+
 What was your track record? Win rate? Average gain vs. average loss?
 
 **2. Similar-setup search (FTS5):**
+
+<example type="good">
 \`\`\`sql
 SELECT symbol, reasoning, lessons_learned, pnl_pct
 FROM trades_fts WHERE trades_fts MATCH ?
 ORDER BY rank LIMIT 10
 \`\`\`
-Use keywords from the current thesis: sector, catalyst type, regime, strategy name.
+</example>
+
+**FTS5 keyword guidance:** Search by: sector name, catalyst type (earnings, FDA, FOMC),
+market regime at entry (risk-on, risk-off), strategy name (breakout, mean-reversion,
+momentum). Combine keywords for more precise matches.
 
 **3. Recent performance:**
+
+<example type="good">
 \`\`\`sql
 SELECT COUNT(*) as total,
        SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
@@ -209,14 +255,31 @@ SELECT COUNT(*) as total,
        MIN(pnl_pct) as worst
 FROM trades WHERE exit_date > date('now', '-30 days')
 \`\`\`
+</example>
+
 Are you in a winning or losing streak? Adjust sizing accordingly.
 
 **4. Pattern detection:**
+
+<example type="good">
 \`\`\`sql
 SELECT symbol, side, pnl_pct, reasoning, lessons_learned
 FROM trades WHERE pnl_pct < -5 ORDER BY pnl_pct ASC LIMIT 5
 \`\`\`
+</example>
+
 What do your worst trades have in common? Are you about to repeat a pattern?
+
+### R-Multiple Framework
+Normalize all trades as multiples of initial risk (R). 1R = the dollar amount risked on the
+trade. A 3R winner means you gained 3x what you risked. This makes trades comparable across
+different position sizes and prices. Track your average R-multiple — positive means your
+winners outsize your losers.
+
+When querying the journal, compute R-multiples for past trades:
+- R = entry_price - stop_price (for longs)
+- R-multiple = (exit_price - entry_price) / R
+- Average R-multiple across last 20 trades is your edge metric
 
 ## Decision Rules
 - **Win rate < 40% on ticker** → Reduce size by 50% or skip
@@ -224,17 +287,18 @@ What do your worst trades have in common? Are you about to repeat a pattern?
 - **Past lesson directly applies** → Quote it in the thesis and adjust
 - **No history on this ticker/sector** → Treat as first trade, use minimum sizing
 - **Repeated same mistake** → Veto the trade until the pattern is addressed
+- **Average R-multiple negative over 20+ trades** → Strategy needs fundamental reassessment
 
 ## Output
-Summary of relevant past trades, key lessons that apply, win rate stats, and a
-clear recommendation: proceed (with adjustments), reduce size, or skip.
+Summary of relevant past trades, key lessons that apply, win rate stats, R-multiple
+analysis, and a clear recommendation: proceed (with adjustments), reduce size, or skip.
 `,
   },
   {
     name: "Market Regime",
     dirName: "market-regime",
     description:
-      "Classify the current market environment to calibrate position sizing and strategy. Run at the start of every trading session.",
+      "Classify the current market environment to calibrate position sizing and strategy selection. Run at the start of trading sessions.",
     content: `# Market Regime Classification
 
 ## When to Use
@@ -242,63 +306,114 @@ At the start of every trading session before making any decisions. Also re-run w
 macro event occurs (FOMC, CPI, NFP, geopolitical shock). The regime determines baseline
 position sizing, cash levels, and which strategies are appropriate.
 
+## When NOT to Use
+- Intraday scalping decisions (too short a timeframe for regime to matter)
+- Mechanical DCA programs where regime is irrelevant by design
+
 ## Technique
 
-Assess five dimensions using market data MCP:
+### Composite Regime Score
+Score = Volatility (30%) + Trend (30%) + Credit (20%) + Macro (20%)
+Each component scored 1-4:
+1 = risk-on signal, 2 = neutral, 3 = risk-off signal, 4 = crisis signal
+Composite: 1.0-1.5 = Risk-On | 1.5-2.5 = Transition | 2.5-3.5 = Risk-Off | 3.5-4.0 = Crisis
 
-### 1. Volatility
-- VIX level and trend (rising, stable, falling)
-- VIX term structure (contango = calm, backwardation = stress)
-- Realized vs. implied vol spread
+### 1. Volatility Component (30%)
+Score the volatility environment:
 
-### 2. Trend
-- S&P 500 vs. 50-day and 200-day moving averages
-- Trend direction and strength (strong up, weak up, range, weak down, strong down)
-- Key support/resistance levels nearby
+| Indicator | 1 (Risk-On) | 2 (Neutral) | 3 (Risk-Off) | 4 (Crisis) |
+|-----------|-------------|-------------|---------------|------------|
+| VIX level | <18 | 18-25 | 25-35 | >35 |
+| VIX term structure | Contango (calm) | Flat | Mild backwardation | Deep backwardation |
+| Realized vs implied | Implied > realized | ~Equal | Realized rising | Realized > implied |
 
-### 3. Breadth
-- Advance-decline ratio
-- % of stocks above 200-day MA
-- Sector rotation patterns (defensive vs. cyclical leadership)
+### 2. Trend Component (30%)
+Score the market trend:
 
-### 4. Rotation
-- Which sectors are leading and lagging?
-- Growth vs. value performance
-- Large cap vs. small cap spread
+| Indicator | 1 (Risk-On) | 2 (Neutral) | 3 (Risk-Off) | 4 (Crisis) |
+|-----------|-------------|-------------|---------------|------------|
+| SPX vs 50d MA | Above, rising | Above, flat | Below 50d | Below 50d, accelerating down |
+| SPX vs 200d MA | Above | Above | Near/testing | Below |
+| Advance-decline | Broadening | Flat | Narrowing | Collapsing |
+| % stocks above 200d | >60% | 40-60% | 25-40% | <25% |
 
-### 5. Macro Backdrop
-- Fed policy stance and next meeting date
-- Treasury yield curve (inverted, flat, steep)
-- Credit spreads (IG and HY) — widening = stress
-- Dollar strength (DXY trend)
+### 3. Credit Component (20%)
+Score the credit environment:
+
+| Indicator | 1 (Risk-On) | 2 (Neutral) | 3 (Risk-Off) | 4 (Crisis) |
+|-----------|-------------|-------------|---------------|------------|
+| IG spreads | Tightening | Stable | Widening | Blowing out |
+| HY spreads | Tightening | Stable | Widening | Blowing out |
+| OAS movement (5d) | Decreasing | Flat | +10-30bps | >+30bps |
+
+### 4. Macro Component (20%)
+Score the macro backdrop:
+
+| Indicator | 1 (Risk-On) | 2 (Neutral) | 3 (Risk-Off) | 4 (Crisis) |
+|-----------|-------------|-------------|---------------|------------|
+| Yield curve | Steepening, normal | Flat | Inverted | Deeply inverted or rapid shift |
+| DXY trend | Weakening | Stable | Strengthening | Spiking |
+| LEI | Rising | Flat | Declining | Declining >3 months |
+
+### Regime Transition Signals
+A regime transition is signaled when 2+ components shift by >=1 point in the same direction
+within 5 trading days. Transitions warrant immediate portfolio review.
+
+<example type="good">
+"Composite Score: 2.7 (Risk-Off). Volatility: 3 (VIX at 28, backwardation).
+Trend: 3 (SPX below 50d MA, 35% above 200d). Credit: 2 (IG stable, HY +8bps).
+Macro: 2 (curve flat, DXY stable). Regime shifted from Transition 3 days ago when
+VIX broke 25 and breadth narrowed — two components moved +1 in same direction."
+</example>
+
+<example type="bad">
+"Market feels risk-off. VIX is elevated. Things look uncertain."
+</example>
 
 ## Regime Classifications
 
-| Regime | VIX | Trend | Breadth | Sizing Multiplier | Cash Floor |
-|--------|-----|-------|---------|-------------------|------------|
-| **Risk-On** | <18, falling | Above 50/200 MA | >60% above 200d | 1.0x | Per fund min |
-| **Transition** | 18-25 or rising | Mixed signals | 40-60% | 0.7x | +10% cash |
-| **Risk-Off** | 25-35 | Below 50 MA | <40% | 0.5x | +20% cash |
-| **Crisis** | >35, backwardation | Below 200 MA | <25% | 0.25x | +40% cash |
+| Regime | Score Range | Sizing Multiplier | Cash Floor | Appropriate Strategies |
+|--------|-------------|-------------------|------------|----------------------|
+| **Risk-On** | 1.0-1.5 | 1.0x | Per fund min | Momentum, breakout |
+| **Transition** | 1.5-2.5 | 0.7x | +10% cash | Mean-reversion, quality factor |
+| **Risk-Off** | 2.5-3.5 | 0.5x | +20% cash | Defensive, income, short-duration |
+| **Crisis** | 3.5-4.0 | 0.25x | +40% cash | Cash, treasuries, gold only |
+
+### Regime-Dependent Strategy Constraints
+- **Risk-On:** Momentum and breakout strategies are appropriate. Full conviction sizing.
+- **Transition:** Mean-reversion and quality factor strategies preferred. Require conviction >= 3.
+- **Risk-Off:** Defensive, income, and short-duration strategies only. Actively trim risk.
+- **Crisis:** Cash, treasuries, and gold only. No new equity longs. Goal is survival.
+
+**Dalio's warning:** In stress, correlations converge to 1.0. Apparent diversification is
+illusory when you need it most. When regime is Risk-Off or Crisis, recalculate portfolio
+risk assuming all equity correlations are 0.8.
 
 ## Output
-Current regime classification with supporting data for each dimension, sizing multiplier
-to apply for the session, recommended cash floor adjustment, and any regime-specific
-warnings (e.g., "VIX term structure just inverted — monitor for escalation").
+Current regime classification with composite score and per-component breakdown, sizing
+multiplier for the session, recommended cash floor adjustment, strategy constraints, and
+any regime transition signals detected.
 `,
   },
   {
     name: "Position Sizing",
     dirName: "position-sizing",
     description:
-      "Calculate exact position size from conviction level, fund type, portfolio state, market regime, and Kelly criterion cross-check.",
+      "Calculate position size from conviction level, fund type, portfolio state, market regime, and Kelly criterion.",
     content: `# Position Sizing
 
 ## When to Use
 After forming a thesis and conviction score but before placing the order. This skill
 translates conviction into exact dollar amounts and share counts.
 
+## When NOT to Use
+- Exits, stop-loss triggers, or full-position closes (risk is being reduced, not added)
+- Trims where the decision is "how much to sell" rather than "how much to buy"
+
 ## Technique
+
+Always compute using two methods (conviction-based sizing AND Kelly criterion) and compare.
+Take the smaller result. If they diverge by more than 2x, investigate why.
 
 ### Step 1: Base Size from Conviction
 
@@ -309,6 +424,15 @@ translates conviction into exact dollar amounts and share counts.
 | 3 — Solid | 4-6% |
 | 4 — Strong | 6-8% |
 | 5 — Exceptional | 8-10% |
+
+<example type="good">
+"Conviction 3 (solid) → base 5%. Fund type runway x0.7 = 3.5%. Regime transition x0.7 = 2.45%.
+Half-Kelly from journal stats = 3.1%. Taking smaller: 2.45%. Max position check: 2.45% < 25% cap. OK."
+</example>
+
+<example type="bad">
+"High conviction, going with 8% position."
+</example>
 
 ### Step 2: Fund Type Adjustment
 
@@ -335,9 +459,15 @@ Apply the market regime sizing multiplier from the Market Regime skill:
 ### Step 5: Kelly Criterion Cross-Check
 Kelly % = (win_prob x avg_win / avg_loss) - (1 - win_prob) / (avg_win / avg_loss)
 
-Use half-Kelly (divide by 2) as the practical maximum. If the Kelly-optimal size is
-significantly smaller than your conviction-based size, trust Kelly — your conviction
-may be overconfident. Pull historical win rate from trade journal.
+Use half-Kelly (divide by 2) as the practical maximum. Always compute both conviction-based
+size AND Kelly-optimal size. Use the smaller. If conviction-size exceeds 2x Kelly-size, your
+conviction is likely miscalibrated — trust Kelly. Pull historical win rate from trade journal.
+
+### Quality Gate
+For individual equities, prefer Piotroski F-Score >= 6 (9-point financial quality scale).
+Stocks with F-Score >= 8 historically outperformed by 7.5% annually over 20-year studies.
+Below 4 is a red flag regardless of thesis quality. This gate applies to stock selection
+quality, not ETFs or index instruments.
 
 ### Step 6: Final Calculation
 \`\`\`
@@ -350,23 +480,28 @@ shares = floor((portfolio_value x final_pct) / current_price)
 dollar_amount = shares x current_price
 \`\`\`
 
-Verify: dollar_amount ≤ available cash. If not, reduce to what cash allows.
+Verify: dollar_amount <= available cash. If not, reduce to what cash allows.
 
 ## Output
 Table showing: base size, each adjustment, final %, dollar amount, share count, and
-the binding constraint (conviction, Kelly, max position, or cash).
+the binding constraint (conviction, Kelly, max position, or cash). Must show results from
+both the two methods (conviction-based and Kelly) for comparison.
 `,
   },
   {
     name: "Session Reflection",
     dirName: "session-reflection",
     description:
-      "End-of-session review: audit decisions honestly, detect biases, update trade journal with actionable lessons, and track objective progress. Non-negotiable final action of every session.",
+      "End-of-session review: audit decisions, detect biases, update trade journal, and track objective progress.",
     content: `# Session Reflection
 
 ## When to Use
-At the end of every trading session — this is non-negotiable. Even if "nothing happened,"
-you reflect on why and whether inaction was the right call.
+At the end of every trading session. Even if "nothing happened," reflect on why and whether
+inaction was the right call.
+
+## When NOT to Use
+Emergency single-action sessions (e.g., executing a stop-loss at market open) — just execute
+and log. Full reflection can happen at the next regular session.
 
 ## Technique
 
@@ -374,7 +509,7 @@ you reflect on why and whether inaction was the right call.
 For every decision made this session (trades, holds, skips):
 - **What was the thesis?** — Restate it in one sentence
 - **What actually happened?** — Price action, news, execution quality
-- **Was the process good?** — Did you follow the thesis → risk check → execute flow?
+- **Was the process good?** — Did you follow the thesis -> risk check -> execute flow?
 - **Grade: A/B/C/D/F** — Based on process quality, not outcome
 
 A good process with a bad outcome is still an A. A lucky win from a sloppy process is a D.
@@ -390,30 +525,51 @@ Honestly assess whether any of these biases influenced decisions:
 | **Recency** | Overweighted today's move vs. the thesis timeframe | Zoom out to thesis horizon |
 | **FOMO** | Chased a move after missing the entry | Missed trades have zero cost |
 | **Sunk cost** | Averaged down without new thesis support | Each add must stand alone as a new trade |
+| **Overconfidence** | Conviction score inflated without proportional evidence | Compare conviction-based size vs Kelly — divergence signals overconfidence |
+| **Disposition effect** | Sold winners too early, held losers too long | Compare holding periods: winners vs losers should be similar |
+| **Narrative fallacy** | Built a compelling story that overrides data | Check: would you still make this trade if the story were boring? |
+| **Herding** | Followed consensus or social sentiment without independent analysis | Verify thesis existed before reading others' views |
 
 If any bias was present, note it explicitly and describe how it affected the decision.
 
-### 3. Journal Updates
-Update the trade journal for every trade executed or closed:
+### 3. Calibration Score
+Over your last 20 predictions, compare predicted probability to actual hit rate. If you
+predict 70% confidence and win only 40% of the time, you are systematically overconfident
+— adjust future conviction scores down by the gap. Track this calibration score in
+memory/trading-patterns.md and update it each session.
 
-**Good journal entry:**
-\`\`\`
-Bought 50 shares GDXJ at $42.15. Thesis: gold miners undervalued at 0.8x NAV with
+<example type="good">
+"Last 20 predictions: avg predicted confidence 65%, actual hit rate 52%. Gap: -13%.
+Adjusting future conviction scores down by ~1 tier until calibration improves."
+</example>
+
+<example type="bad">
+"I think my predictions have been pretty accurate."
+</example>
+
+### 4. Journal Updates
+Update the trade journal for every trade executed or closed.
+
+Record initial risk (R) for every trade at entry. At exit, compute P&L as an R-multiple.
+Track average R-multiple in memory. A positive average R-multiple means your winners outsize
+your losers — this is the single most important metric for long-term profitability.
+
+<example type="good">
+"Bought 50 shares GDXJ at $42.15. Thesis: gold miners undervalued at 0.8x NAV with
 gold above $2,300. Regime: Transition. Conviction: 3. Stop: $38.50 (-8.6%).
-Catalyst: Fed pause expected within 60 days.
-\`\`\`
+R = $3.65/share. Catalyst: Fed pause expected within 60 days."
+</example>
 
-**Bad journal entry:**
-\`\`\`
-Bought GDXJ. Looks good.
-\`\`\`
+<example type="bad">
+"Bought GDXJ. Looks good."
+</example>
 
 For closed trades, always record:
-- Final P&L ($ and %)
+- Final P&L ($ and %) and R-multiple
 - Whether the exit matched the plan (hit target, hit stop, or discretionary)
 - One specific lesson learned
 
-### 4. Objective Progress
+### 5. Objective Progress
 Review the fund's objective tracker:
 - **Runway funds:** Current months of runway vs. target. Burn rate on track?
 - **Growth funds:** Current multiple vs. target. Pace to reach goal?
@@ -423,9 +579,11 @@ Review the fund's objective tracker:
 Update \`state/objective_tracker.json\` with current progress metrics.
 
 ## Output
-Structured markdown: Decision Audit (graded), Bias Check (honest), Journal Updates
-(written to DB), Objective Progress (updated), and Next Session Focus (priorities
-for the next trading session).
+Structured markdown: Decision Audit (graded), Bias Check (honest), Calibration Score
+(tracked), Journal Updates (written to DB with R-multiples), Objective Progress (updated),
+Next Session Focus (priorities for the next trading session), and for every trade reviewed:
+**What will I do differently next time?** This field is mandatory — reflection without
+behavioral change is just journaling.
 
 ## Follow-Up Scheduling
 If during reflection you identify something that needs checking before the next
@@ -438,7 +596,7 @@ See \`.claude/rules/self-scheduling.md\` for the format.
     name: "Portfolio Review",
     dirName: "portfolio-review",
     description:
-      "Holistic portfolio health check: position-by-position thesis validation, concentration analysis, correlation assessment, and rebalancing recommendations.",
+      "Holistic portfolio health check: position-by-position thesis validation, concentration analysis, and rebalancing recommendations.",
     content: `# Portfolio Review
 
 ## When to Use
@@ -447,6 +605,10 @@ At least once per week during a post-market session. Also trigger when:
 - Market regime has changed
 - A new position is being considered (to understand fit)
 - The fund is approaching a drawdown limit
+
+## When NOT to Use
+First session of a brand-new fund with no positions yet — there is nothing to review.
+Use the session to establish the initial investment plan instead.
 
 ## Technique
 
@@ -460,6 +622,16 @@ For each open position:
   Close (thesis invalidated or target reached)
 
 Positions without a valid current thesis should be closed. "I'm not sure" is a sell signal.
+
+<example type="good">
+"GDXJ: Thesis (gold miners undervalued at 0.8x NAV) still valid — NAV discount at 0.82x.
+P&L: +$315 (+3.7%). Stop $38.50 is 8.6% below current. Target $48 is 13.9% above.
+R/R still favorable. Action: HOLD. Catalyst (Fed pause) has not occurred yet."
+</example>
+
+<example type="bad">
+"GDXJ: Up a bit. Looks fine. Hold."
+</example>
 
 ### 2. Portfolio-Level Analysis
 - **Concentration:** Top 3 positions as % of portfolio — flag if >50%
@@ -480,10 +652,41 @@ Based on the above analysis:
 Rebalancing is not about perfection — it is about removing positions that no longer deserve
 capital and right-sizing those that do.
 
+### 4. Objective-Specific Review
+Tailor the portfolio review to the fund's objective type:
+
+- **Runway:** Months remaining vs target, burn rate sustainability, cash runway calculation.
+  Is the portfolio generating enough to offset monthly withdrawals? At current trajectory,
+  will the fund reach its target months?
+- **Growth:** Required return rate to reach target on time, pace assessment. If behind pace,
+  is the gap recoverable without excessive risk? Anti-revenge-trading check: do not increase
+  risk simply because you are behind schedule.
+- **Income:** Yield sustainability, diversification across 10+ income sources, coverage ratio
+  (income generated vs income target). Concentration in any single income source >20% is a
+  fragility risk.
+- **Accumulation:** Cost basis trend (improving or worsening?), DCA vs lump sum assessment,
+  target completion %. Is the remaining timeline sufficient at current acquisition rate?
+
+### 5. Survival Question
+"If I am completely wrong about everything — every thesis, every regime call, every macro
+view — does the fund survive?" If the answer is no, reduce risk until the answer is yes.
+This is the single most important question in portfolio management. A fund that survives
+its mistakes can always recover; a fund that does not survive cannot.
+
+### 6. Barbell Assessment
+Classify each position as:
+- **Essential** (protect capital, low risk): cash, treasuries, defensive positions
+- **Asymmetric** (limited downside, large upside): high-conviction theses with tight stops
+
+A healthy portfolio has both. A portfolio of only "medium risk" positions is fragile — it
+has neither the safety of the essential bucket nor the upside of the asymmetric bucket.
+Review the barbell balance and adjust if one side is empty.
+
 ## Output
 Position table (symbol, size, P&L, thesis status, action), portfolio-level metrics
-(concentration, sector, correlation, cash, drawdown), and prioritized rebalancing
-actions with reasoning.
+(concentration, sector, correlation, cash, drawdown), objective-specific progress,
+survival assessment, barbell classification, and prioritized rebalancing actions
+with reasoning.
 `,
   },
 ];
