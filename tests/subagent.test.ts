@@ -1,52 +1,173 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildAnalystAgents,
-} from "../src/subagent.js";
+import { buildAnalystAgents } from "../src/subagent.js";
 
 // ── buildAnalystAgents ────────────────────────────────────────
 
 describe("buildAnalystAgents", () => {
-  it("returns 5 agent definitions", () => {
-    const agents = buildAnalystAgents("test-fund");
-    const keys = Object.keys(agents);
-    expect(keys).toHaveLength(5);
-    expect(keys).toContain("macro-analyst");
-    expect(keys).toContain("technical-analyst");
-    expect(keys).toContain("sentiment-analyst");
-    expect(keys).toContain("news-analyst");
-    expect(keys).toContain("risk-analyst");
+  const agents = buildAnalystAgents("test-fund");
+  const keys = Object.keys(agents);
+
+  // ── Structure ───────────────────────────────────────────────
+
+  it("returns exactly 3 agent definitions", () => {
+    expect(keys).toHaveLength(3);
   });
 
+  it("contains the new agent names", () => {
+    expect(keys).toContain("market-analyst");
+    expect(keys).toContain("technical-analyst");
+    expect(keys).toContain("risk-guardian");
+  });
+
+  it("does NOT contain old agent names", () => {
+    expect(keys).not.toContain("macro-analyst");
+    expect(keys).not.toContain("sentiment-analyst");
+    expect(keys).not.toContain("news-analyst");
+    expect(keys).not.toContain("risk-analyst");
+  });
+
+  // ── Common fields ──────────────────────────────────────────
+
   it("each agent has required AgentDefinition fields", () => {
-    const agents = buildAnalystAgents("test-fund");
     for (const [, agent] of Object.entries(agents)) {
       expect(agent.description).toBeTruthy();
       expect(agent.prompt).toBeTruthy();
       expect(agent.model).toBe("sonnet");
-      expect(agent.maxTurns).toBe(20);
+      expect(typeof agent.maxTurns).toBe("number");
+      expect(agent.maxTurns).toBeGreaterThan(0);
     }
   });
 
-  it("includes fund name in agent prompts", () => {
-    const agents = buildAnalystAgents("my-fund");
-    for (const [, agent] of Object.entries(agents)) {
+  it("includes fund name in all agent prompts", () => {
+    const namedAgents = buildAnalystAgents("my-fund");
+    for (const [, agent] of Object.entries(namedAgents)) {
       expect(agent.prompt).toContain("my-fund");
     }
   });
 
-  it("assigns mcpServers to each agent", () => {
-    const agents = buildAnalystAgents("test-fund");
-    expect(agents["macro-analyst"].mcpServers).toContain("market-data");
-    expect(agents["risk-analyst"].mcpServers).toContain("broker-alpaca");
-    expect(agents["risk-analyst"].mcpServers).toContain("market-data");
-  });
-
-  it("assigns tools to each agent", () => {
-    const agents = buildAnalystAgents("test-fund");
+  it("all agents include Read in their tools", () => {
     for (const [, agent] of Object.entries(agents)) {
       expect(agent.tools).toBeDefined();
       expect(agent.tools!.length).toBeGreaterThan(0);
       expect(agent.tools).toContain("Read");
     }
+  });
+
+  // ── market-analyst ─────────────────────────────────────────
+
+  describe("market-analyst", () => {
+    const agent = agents["market-analyst"];
+
+    it("has market-data MCP server", () => {
+      expect(agent.mcpServers).toContain("market-data");
+    });
+
+    it("covers macro domain", () => {
+      expect(agent.prompt).toMatch(/monetary policy/i);
+      expect(agent.prompt).toMatch(/economic cycle/i);
+      expect(agent.prompt).toMatch(/geopolitical/i);
+    });
+
+    it("covers sentiment domain", () => {
+      expect(agent.prompt).toMatch(/VIX/);
+      expect(agent.prompt).toMatch(/put.call/i);
+      expect(agent.prompt).toMatch(/breadth/i);
+      expect(agent.prompt).toMatch(/contrarian/i);
+    });
+
+    it("covers news domain", () => {
+      expect(agent.prompt).toMatch(/breaking/i);
+      expect(agent.prompt).toMatch(/regulatory/i);
+      expect(agent.prompt).toMatch(/catalyst/i);
+      expect(agent.prompt).toMatch(/insider/i);
+    });
+
+    it("has anti-hallucination directive", () => {
+      expect(agent.prompt).toMatch(/never cite a price.*without retrieving/i);
+    });
+
+    it("outputs <market_assessment> XML", () => {
+      expect(agent.prompt).toContain("<market_assessment>");
+    });
+
+    it("has maxTurns of 25", () => {
+      expect(agent.maxTurns).toBe(25);
+    });
+
+    it("references MCP tool guidance", () => {
+      expect(agent.prompt).toMatch(/get_news/);
+      expect(agent.prompt).toMatch(/get_rss_news/);
+      expect(agent.prompt).toMatch(/get_market_movers/);
+    });
+  });
+
+  // ── technical-analyst ──────────────────────────────────────
+
+  describe("technical-analyst", () => {
+    const agent = agents["technical-analyst"];
+
+    it("has market-data MCP server", () => {
+      expect(agent.mcpServers).toContain("market-data");
+    });
+
+    it("has evidence-based guidance", () => {
+      expect(agent.prompt).toMatch(/evidence.based/i);
+      expect(agent.prompt).toMatch(/academic support/i);
+      expect(agent.prompt).toMatch(/200.day MA/i);
+    });
+
+    it("outputs <technical_assessment> XML", () => {
+      expect(agent.prompt).toContain("<technical_assessment>");
+    });
+
+    it("has maxTurns of 20", () => {
+      expect(agent.maxTurns).toBe(20);
+    });
+  });
+
+  // ── risk-guardian ──────────────────────────────────────────
+
+  describe("risk-guardian", () => {
+    const agent = agents["risk-guardian"];
+
+    it("has both broker-alpaca and market-data MCP servers", () => {
+      expect(agent.mcpServers).toContain("broker-alpaca");
+      expect(agent.mcpServers).toContain("market-data");
+    });
+
+    it("outputs APPROVED/REJECTED verdict in <risk_validation> XML", () => {
+      expect(agent.prompt).toContain("<risk_validation>");
+      expect(agent.prompt).toMatch(/APPROVED/);
+      expect(agent.prompt).toMatch(/REJECTED/);
+      expect(agent.prompt).toMatch(/VERDICT/);
+    });
+
+    it("has lower maxTurns than other agents", () => {
+      expect(agent.maxTurns).toBe(15);
+      expect(agent.maxTurns).toBeLessThan(agents["market-analyst"].maxTurns!);
+      expect(agent.maxTurns).toBeLessThan(agents["technical-analyst"].maxTurns!);
+    });
+
+    it("includes drawdown recovery table", () => {
+      expect(agent.prompt).toMatch(/-10%.*\+11\.1%/);
+      expect(agent.prompt).toMatch(/-50%.*\+100%/);
+    });
+
+    it("includes correlation rule", () => {
+      expect(agent.prompt).toMatch(/0\.7/);
+    });
+
+    it("includes drawdown budget tiers", () => {
+      expect(agent.prompt).toMatch(/50-75%/);
+      expect(agent.prompt).toMatch(/half sizing/i);
+    });
+
+    it("has adversarial behavioral directive", () => {
+      expect(agent.prompt).toMatch(/find reasons to reject/i);
+    });
+
+    it("has description mentioning hard gate", () => {
+      expect(agent.description).toMatch(/hard gate/i);
+    });
   });
 });
