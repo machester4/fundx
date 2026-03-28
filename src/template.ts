@@ -76,7 +76,7 @@ A 50% drawdown makes most fund objectives mathematically unreachable.
 
 ### Regime Classification
 
-| Regime     | VIX Range | Sizing Mult | Cash Adjustment        | Min Conviction |
+| Regime     | Score     | Sizing Mult | Cash Adjustment        | Min Conviction |
 |------------|-----------|-------------|------------------------|----------------|
 | Risk-On    | 1.0–1.5   | 1.0x        | Per fund min cash      | 1              |
 | Transition | 1.5–2.5   | 0.7x        | +10% cash              | 3              |
