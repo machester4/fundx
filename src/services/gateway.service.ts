@@ -329,6 +329,38 @@ async function wakeClaudeForQuestion(
 // ── Notification sender ──────────────────────────────────────
 
 const TELEGRAM_API = "https://api.telegram.org";
+const TELEGRAM_MAX_LENGTH = 4000; // Telegram limit is 4096, leave margin
+
+/** Split a long message into chunks at line boundaries */
+function splitMessage(message: string, maxLen: number): string[] {
+  if (message.length <= maxLen) return [message];
+
+  const chunks: string[] = [];
+  let remaining = message;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Find last newline within limit
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0) {
+      // No newline found - split at last space
+      splitAt = remaining.lastIndexOf(" ", maxLen);
+    }
+    if (splitAt <= 0) {
+      // No space either - hard cut
+      splitAt = maxLen;
+    }
+
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt + 1);
+  }
+
+  return chunks;
+}
 
 export async function sendTelegramNotification(
   message: string,
@@ -338,15 +370,19 @@ export async function sendTelegramNotification(
   if (!globalConfig.telegram.bot_token || !globalConfig.telegram.chat_id) return;
 
   const url = `${TELEGRAM_API}/bot${globalConfig.telegram.bot_token}/sendMessage`;
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: globalConfig.telegram.chat_id,
-      text: message,
-      parse_mode: parseMode,
-    }),
-  });
+  const chunks = splitMessage(message, TELEGRAM_MAX_LENGTH);
+
+  for (const chunk of chunks) {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: globalConfig.telegram.chat_id,
+        text: chunk,
+        parse_mode: parseMode,
+      }),
+    });
+  }
 }
 
 // ── Bot setup and start ──────────────────────────────────────
