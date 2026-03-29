@@ -301,13 +301,13 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
     │   ├── state-consistency.md       # config ↔ state sync rules
     │   └── communication.md           # Spanish interaction, English analysis
     └── skills/
-        ├── investment-debate/SKILL.md
-        ├── risk-matrix/SKILL.md
+        ├── investment-thesis/SKILL.md
+        ├── risk-assessment/SKILL.md
         ├── trade-memory/SKILL.md
         ├── market-regime/SKILL.md
         ├── position-sizing/SKILL.md
         ├── session-reflection/SKILL.md
-        └── investment-brainstorming/SKILL.md
+        └── portfolio-review/SKILL.md
 ```
 
 **SKILL.md format** (required frontmatter):

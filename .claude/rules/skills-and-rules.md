@@ -31,13 +31,13 @@ to a directory that contains a `.claude/` folder or `CLAUDE.md`:
     ├── rules/
     │   └── state-consistency.md       # config ↔ state sync rules
     └── skills/
-        ├── investment-debate/SKILL.md
-        ├── risk-matrix/SKILL.md
+        ├── investment-thesis/SKILL.md
+        ├── risk-assessment/SKILL.md
         ├── trade-memory/SKILL.md
         ├── market-regime/SKILL.md
         ├── position-sizing/SKILL.md
         ├── session-reflection/SKILL.md
-        └── investment-brainstorming/SKILL.md
+        └── portfolio-review/SKILL.md
 ```
 
 ## SKILL.md format
