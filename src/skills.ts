@@ -877,26 +877,7 @@ allowed assets, objective, etc.), you MUST update ALL affected files — not jus
     fileName: "decision-quality.md",
     content: `# Decision Quality Standards
 
-Every trade decision must meet these quality standards. No exceptions for "obvious" trades,
-hot tips, or time pressure. The process exists to protect the fund from its own biases.
-
-## Requirements Before Any Trade
-
-1. **Written thesis required** — No order is placed without a documented investment thesis
-   (see Investment Thesis skill). "It looks like a good setup" is not a thesis.
-
-2. **Positive expected value** — Every trade must have an explicit EV calculation:
-   EV = (P(win) x gain) - (P(loss) x loss). If EV is negative, zero, or "hard to estimate,"
-   do not trade.
-
-3. **Trade history consulted** — Query the trade journal for same-ticker and similar-setup
-   history before every new trade. Past lessons override current intuition.
-
-4. **No FOMO trades** — If the primary motivation is "it already moved and I missed it,"
-   the trade is vetoed. Missed moves have zero cost. Chasing moves has real cost.
-
-5. **No revenge trades** — After a loss, the next trade must meet a higher bar: conviction
-   ≥ 3 and explicit acknowledgment that this is not an attempt to "make it back."
+Why: Emotional overrides of systematic rules are the primary cause of preventable losses.
 
 ## Decision Hierarchy
 
@@ -915,48 +896,26 @@ When inputs conflict, follow this priority order:
 - Placing more than 3 trades in a single session (overtrading signal)
 - Conviction score that increased after you already decided to trade (rationalization)
 - Any trade where the reasoning starts with "I feel like..."
+
+## Analyst Disagreement
+When analysts disagree, weight the one with more specific data. Vague concerns do not override quantified analysis.
 `,
   },
   {
     fileName: "analysis-standards.md",
     content: `# Analysis Standards
 
-All analysis produced during trading sessions must meet institutional quality standards.
-Vague or superficial analysis leads to vague decisions and real losses.
+Why: Vague analysis leads to vague decisions. Specificity forces intellectual honesty.
 
-## Required Standards
+<example type="good">
+"GDXJ is trading at $42.15, down 12% from its 52-week high of $47.90, with RSI at
+38 and approaching the 200-day MA at $40.80. Base case (60%): rebounds to $45 within
+30 days on mean reversion. Downside (20%): breaks below $39 support if DXY > 107."
+</example>
 
-### Specific Numbers
-Every analytical claim must include concrete data:
-
-**Good:** "GDXJ is trading at $42.15, down 12% from its 52-week high of $47.90, with RSI at
-38 and approaching the 200-day MA at $40.80."
-
-**Bad:** "GDXJ is oversold and near support."
-
-### Sources Cited
-State where data comes from. When using market-data MCP, note the data point and timestamp.
-When citing a macro trend, reference the specific indicator (e.g., "10Y yield at 4.35%
-per Treasury data" not "yields are high").
-
-### Uncertainty Quantified
-Never present a single scenario as certain. Provide:
-- Base case with probability estimate
-- Upside scenario with probability
-- Downside scenario with probability
-- What would change your mind (specific trigger)
-
-**Good:** "Base case (60%): GDXJ rebounds to $45 within 30 days on mean reversion. Upside
-(20%): breaks above $48 if Fed signals cuts. Downside (20%): breaks below $39 support if
-dollar strengthens above DXY 107."
-
-**Bad:** "GDXJ should go up because gold miners are undervalued."
-
-### Alternatives Considered
-Before recommending any action, explicitly evaluate at least one alternative:
-- Why this ticker and not a competitor?
-- Why trade now and not wait?
-- Why this size and not smaller/larger?
+<example type="bad">
+"GDXJ is oversold and near support. It should go up because gold miners are undervalued."
+</example>
 
 ## Forbidden Patterns
 
@@ -981,6 +940,8 @@ Before recommending any action, explicitly evaluate at least one alternative:
   {
     fileName: "risk-discipline.md",
     content: `# Risk Discipline
+
+Why: A 50% drawdown requires 100% gain to recover — math that makes most fund objectives unreachable.
 
 Risk limits are hard constraints, not guidelines. They exist because the fund's objective
 depends on capital preservation. A 50% drawdown requires a 100% gain to recover — math
@@ -1018,6 +979,8 @@ that makes the objective unreachable.
    cash when opportunities are scarce is an active, intelligent decision — not a failure
    to find trades.
 
+5. **Stress correlation** — In Risk-Off/Crisis regime, recalculate all concentration limits assuming 0.8 correlation between equity positions. Apparent diversification evaporates under stress.
+
 ## Never
 
 - Never disable or widen a stop-loss to avoid being stopped out
@@ -1025,6 +988,8 @@ that makes the objective unreachable.
 - Never ignore the daily loss limit because "the market will come back"
 - Never treat unrealized gains as a cushion to take more risk
 - Never hold a position past an invalidation trigger you identified in the thesis
+
+See the Drawdown Recovery Table in CLAUDE.md frameworks section for the full loss-recovery math.
 `,
   },
   {
@@ -1087,26 +1052,7 @@ Every journal entry must answer: "What will I do differently next time in this s
     fileName: "market-awareness.md",
     content: `# Market Awareness
 
-Trading does not happen in a vacuum. The market environment determines what strategies work,
-how to size positions, and when to stay in cash. Ignoring the environment is the fastest
-way to blow up a fund.
-
-## Regime Respect
-
-The Market Regime classification (Risk-On, Transition, Risk-Off, Crisis) is not advisory —
-it is a binding constraint on behavior:
-
-- **Risk-On:** Normal operations. Full conviction-based sizing. Deploy cash when opportunities
-  meet quality standards.
-- **Transition:** Increased caution. Reduce sizing by 30%. Require conviction ≥ 3 for new
-  positions. Widen stop-losses by 20% to avoid noise shakeouts.
-- **Risk-Off:** Defensive posture. Reduce sizing by 50%. Only trade conviction 4-5. Actively
-  look for positions to trim. Raise cash to 30%+ of portfolio.
-- **Crisis:** Capital preservation mode. No new long positions. Trim aggressively. Cash
-  target 50%+. The goal is survival, not returns.
-
-If you find yourself rationalizing why the regime does not apply to your trade, that is
-the regime applying to your trade.
+Why: Calendar events create binary risk that sizing alone cannot manage.
 
 ## Correlation Awareness
 
@@ -1201,6 +1147,27 @@ Then write the updated array back to \`state/pending_sessions.json\`.
 ## Bad Follow-Up Reasons
 - "Continue general analysis" (wait for next scheduled session)
 - "Check market again" (too vague — what specifically?)
+`,
+  },
+  {
+    fileName: "communication.md",
+    content: `# Communication
+
+Why: The user operates in Spanish. Technical financial content stays in English because
+market terminology, ticker symbols, and financial ratios are universally expressed in English.
+
+Communicate with the user in Spanish via Telegram notifications and chat interactions.
+Analysis files, trade journal entries, and session reports remain in English for
+consistency and searchability.
+
+## Rules
+- Telegram messages: Spanish
+- Chat responses: Spanish
+- analysis/*.md files: English
+- Trade journal entries (reasoning, lessons_learned): English
+- Session reports: English
+- When quoting financial data in Spanish messages, keep ticker symbols and
+  numbers in their original form (e.g., "AAPL subió 3.2% a $185.40")
 `,
   },
 ];
