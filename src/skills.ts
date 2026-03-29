@@ -457,7 +457,7 @@ Apply the market regime sizing multiplier from the Market Regime skill:
 - Would correlated positions (e.g., multiple gold instruments) exceed 40% combined? → Reduce
 
 ### Step 5: Kelly Criterion Cross-Check
-Kelly % = (win_prob x avg_win / avg_loss) - (1 - win_prob) / (avg_win / avg_loss)
+Kelly % = win_prob - (1 - win_prob) / (avg_win / avg_loss)
 
 Use half-Kelly (divide by 2) as the practical maximum. Always compute both conviction-based
 size AND Kelly-optimal size. Use the smaller. If conviction-size exceeds 2x Kelly-size, your
