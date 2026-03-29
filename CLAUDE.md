@@ -30,7 +30,7 @@ Each Claude Code session:
 1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
 2. Reads persistent state (portfolio, journal, past analyses)
 3. Creates and executes analysis scripts as needed
-4. Optionally invokes analyst sub-agents via the Task tool (macro, technical, sentiment, risk, news)
+4. Optionally invokes sub-agents via the Task tool (market-analyst, technical-analyst, risk-guardian)
 5. Makes decisions within fund constraints
 6. Executes trades via MCP broker server
 7. Updates persistent state and generates reports
@@ -113,7 +113,7 @@ src/
   state.ts              # Per-fund state file CRUD (portfolio, tracker, session log)
   template.ts           # Per-fund CLAUDE.md generation from fund_config.yaml
   agent.ts              # Claude Agent SDK wrapper — single entry point for all AI queries
-  subagent.ts           # Analyst AgentDefinitions for the Task tool (macro, technical, sentiment, risk, news)
+  subagent.ts           # Agent definitions for the Task tool (market-analyst, technical-analyst, risk-guardian)
   embeddings.ts         # Trade journal FTS5 indexing + similarity search
   journal.ts            # Trade journal SQLite CRUD (open, insert, query, summary)
   alpaca-helpers.ts     # Shared Alpaca API helpers (credentials, fetch, orders)
@@ -226,6 +226,60 @@ src/
 - Credentials must NEVER be stored in per-fund configs or committed to git
 - The `.gitignore` already covers `.env` files — maintain this pattern
 
+## Prompting Conventions
+
+Rules for writing and maintaining the AI instruction layer (skills, rules,
+per-fund CLAUDE.md, sub-agent prompts). Based on Anthropic's official prompting
+best practices and investment domain research.
+
+### Prompt Structure
+- Follow Anthropic's optimal ordering: role > context > constraints > frameworks > instructions > examples > task
+- Place long-form dynamic data (portfolio state, journal entries) near the top of session prompts
+- Place the actual task/question at the end for best retrieval performance
+- Wrap dynamic content in descriptive XML tags: `<fund_objective>`, `<hard_constraints>`, `<portfolio_state>`, `<recent_trades>`, `<market_assessment>`
+
+### Language Calibration (Claude 4.6+)
+- Use natural language, not command language. "Use this when..." not "You MUST ALWAYS use..."
+- Reserve aggressive modifiers (MUST, NEVER, CRITICAL) for genuine hard constraints (risk limits)
+- Remove over-prompting for tool/skill triggering — Claude 4.6 triggers appropriately without "if in doubt, use X"
+- If Claude needs to be cautious, use explicit behavioral instructions, not emphasis/shouting
+- When in doubt, match the tone of a clear senior colleague explaining expectations to a competent new hire
+
+### Skill Authoring
+- Every SKILL.md requires: When to Use, When NOT to Use, Technique, Output Format
+- Wrap good/bad examples in `<example>` XML tags
+- Descriptions: one line, precise, differentiate from other skills
+- Skills own the HOW — technique and methodology. Don't duplicate in rules or CLAUDE.md
+- Test new/modified skills by running a paper-mode session after `fundx fund upgrade --all`
+
+### Rule Authoring
+- Rules are concise behavioral constraints (what to do / not do), not instruction manuals
+- Every rule includes a **Why:** line explaining the motivation (helps Claude generalize)
+- Rules never duplicate skill technique or CLAUDE.md framework content
+- Rules load on every session — keep them short to conserve token budget
+- One clear, non-overlapping scope per rule file
+
+### Sub-Agent Authoring
+- Each agent has a clear, non-overlapping domain boundary
+- Descriptions precisely differentiate agents for correct routing
+- Prompts include quality standards with good/bad examples in `<example>` tags
+- Output format uses structured fields wrapped in XML tags for reliable parsing
+- Limit tool access to what the agent needs (principle of least privilege)
+- Set reasonable maxTurns to prevent runaway costs
+
+### Anti-Hallucination
+- Any prompt analyzing market data must include: "Never cite a price, ratio, or statistic without retrieving it from a tool this session. If data is unavailable, state that explicitly."
+- Sub-agents with market-data MCP access get this instruction
+- Session prompts require Orient phase (read state files) before any analysis
+- Prefer structured output formats for data that can be validated programmatically
+
+### Prompt Testing
+- After modifying any skill, rule, or template in `src/skills.ts` or `src/template.ts`:
+  1. Run `pnpm build` to compile
+  2. Run `fundx fund upgrade --all` to propagate changes to existing funds
+  3. Run a test session in paper mode to verify behavior
+- Check for overtriggering: skills should activate when relevant, not on every session
+
 ### Skills and Rules Pattern
 
 FundX uses the Claude Agent SDK's native skill and rules system. Instructions live in files, not hardcoded in TypeScript strings.
@@ -244,7 +298,8 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
 ├── CLAUDE.md                          # fund AI manager identity (generated from fund_config.yaml)
 └── .claude/
     ├── rules/
-    │   └── state-consistency.md       # config ↔ state sync rules
+    │   ├── state-consistency.md       # config ↔ state sync rules
+    │   └── communication.md           # Spanish interaction, English analysis
     └── skills/
         ├── investment-debate/SKILL.md
         ├── risk-matrix/SKILL.md
@@ -340,7 +395,7 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx gateway start` — standalone gateway, `fundx gateway test` — send test message
 
 ### Phase 4 — Intelligence — COMPLETE
-- [x] Analyst AgentDefinitions via Task tool (`subagent.ts`) — macro, technical, sentiment, risk, news
+- [x] Agent definitions via Task tool (`subagent.ts`) — market-analyst, technical-analyst, risk-guardian
 - [x] `fundx ask` command with cross-fund analysis (`ask.ts`)
 - [x] Trade journal FTS5 vector embeddings + similarity search (`embeddings.ts`)
 - [x] Zod schemas for similar trade results (`types.ts`)
