@@ -57,7 +57,7 @@ export const IS_DEV = __dirname.endsWith("/src") || __dirname.endsWith("\\src");
 
 /** MCP server executables (resolved relative to __dirname) */
 export const MCP_SERVERS = {
-  brokerAlpaca: join(__dirname, "mcp", IS_DEV ? "broker-alpaca.ts" : "broker-alpaca.js"),
+  brokerLocal: join(__dirname, "mcp", IS_DEV ? "broker-local.ts" : "broker-local.js"),
   marketData: join(__dirname, "mcp", IS_DEV ? "market-data.ts" : "market-data.js"),
   telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
   sws: join(__dirname, "mcp", IS_DEV ? "sws.ts" : "sws.js"),
