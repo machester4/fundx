@@ -63,7 +63,7 @@ export async function runFundSession(
     `and actions as appropriate. Remember to:`,
     `1. Update state files after any changes`,
     `2. Write analysis to analysis/${today}_${sessionType}.md`,
-    `3. Use MCP broker-alpaca tools for trading and position management`,
+    `3. Use MCP broker-local tools for trading and position management`,
     `4. Use MCP market-data tools for price data and market analysis`,
     `5. Use MCP telegram-notify tools to send trade alerts, digests, and notifications (if available)`,
     `6. Update objective_tracker.json`,

@@ -1,7 +1,5 @@
 import { loadFundConfig } from "./fund.service.js";
 import { readPortfolio } from "../state.js";
-import { syncPortfolio } from "../sync.js";
-import type { Portfolio } from "../types.js";
 
 export interface PortfolioDisplayData {
   fundDisplayName: string;
@@ -12,7 +10,6 @@ export interface PortfolioDisplayData {
   initialCapital: number;
   pnl: number;
   pnlPct: number;
-  synced: boolean;
   positions: Array<{
     symbol: string;
     shares: number;
@@ -29,23 +26,9 @@ export interface PortfolioDisplayData {
 /** Get portfolio display data */
 export async function getPortfolioDisplay(
   fundName: string,
-  options?: { sync?: boolean },
 ): Promise<PortfolioDisplayData> {
   const config = await loadFundConfig(fundName);
-
-  let portfolio: Portfolio;
-  let synced = false;
-
-  if (options?.sync) {
-    try {
-      portfolio = await syncPortfolio(fundName);
-      synced = true;
-    } catch {
-      portfolio = await readPortfolio(fundName);
-    }
-  } else {
-    portfolio = await readPortfolio(fundName);
-  }
+  const portfolio = await readPortfolio(fundName);
 
   const pnl = portfolio.total_value - config.capital.initial;
   const pnlPct = (pnl / config.capital.initial) * 100;
@@ -63,7 +46,6 @@ export async function getPortfolioDisplay(
     initialCapital: config.capital.initial,
     pnl,
     pnlPct,
-    synced,
     positions: portfolio.positions.map((pos) => ({
       symbol: pos.symbol,
       shares: pos.shares,

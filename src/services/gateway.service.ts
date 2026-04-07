@@ -114,7 +114,7 @@ async function handleFundStatus(ctx: Context, fundName: string): Promise<void> {
     response += `Capital: $${config.capital.initial.toLocaleString()} \u2192 $${(portfolio?.total_value ?? config.capital.initial).toLocaleString()} ${pnlStr}\n`;
     response += `Objective: ${config.objective.type}\n`;
     response += `Risk: ${config.risk.profile}\n`;
-    response += `Broker: ${config.broker.provider} (${config.broker.mode})\n`;
+    response += `Mode: paper\n`;
 
     if (tracker) {
       response += `\nProgress: ${tracker.progress_pct.toFixed(1)}% \u2014 ${tracker.status}\n`;

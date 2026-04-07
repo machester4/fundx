@@ -5,7 +5,6 @@ import { getPerformanceData } from "./performance.service.js";
 import { computeCorrelationMatrix } from "./correlation.service.js";
 import { checkSpecialSessions, KNOWN_EVENTS } from "./special-sessions.service.js";
 import { loadGlobalConfig } from "../config.js";
-import { ALPACA_PAPER_URL } from "../alpaca-helpers.js";
 import { getMarketDataProvider } from "./market.service.js";
 import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import type { FundConfig, ServiceStatus, NextCronInfo } from "../types.js";
@@ -51,7 +50,7 @@ export async function getAllFundStatuses(): Promise<FundStatusData[]> {
         name,
         displayName: config.fund.display_name,
         status: config.fund.status,
-        brokerMode: config.broker.mode === "live" ? "live" : "paper",
+        brokerMode: "paper",
         initialCapital: config.capital.initial,
         currentValue,
         pnl,
@@ -155,7 +154,7 @@ async function checkTelegramStatus(): Promise<boolean> {
 }
 
 /** Check if the active market data provider is reachable */
-async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "alpaca" | "yfinance" | "none" }> {
+async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "yfinance" | "none" }> {
   const provider = await getMarketDataProvider();
 
   if (provider === "fmp") {
@@ -167,23 +166,6 @@ async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" |
         `https://financialmodelingprep.com/api/v3/is-the-market-open?apikey=${apiKey}`,
         { signal: AbortSignal.timeout(3000) },
       );
-      return { ok: resp.ok, provider };
-    } catch {
-      return { ok: false, provider };
-    }
-  }
-
-  if (provider === "alpaca") {
-    try {
-      const config = await loadGlobalConfig();
-      if (!config.broker.api_key || !config.broker.secret_key) return { ok: false, provider };
-      const resp = await fetch(`${ALPACA_PAPER_URL}/v2/account`, {
-        headers: {
-          "APCA-API-KEY-ID": config.broker.api_key,
-          "APCA-API-SECRET-KEY": config.broker.secret_key,
-        },
-        signal: AbortSignal.timeout(3000),
-      });
       return { ok: resp.ok, provider };
     } catch {
       return { ok: false, provider };

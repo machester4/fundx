@@ -7,7 +7,6 @@ import { initFundState } from "../state.js";
 import { generateFundClaudeMd } from "../template.js";
 import { loadGlobalConfig } from "../config.js";
 import { ensureFundSkillFiles, ensureFundRules, ensureFundMemory, BUILTIN_SKILLS } from "../skills.js";
-import { hasFundCredentials } from "../credentials.js";
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -74,7 +73,6 @@ export interface CreateFundParams {
   objective: FundConfig["objective"];
   riskProfile: string;
   tickers: string;
-  brokerMode: "paper" | "live";
 }
 
 /** Create a new fund from structured params (no prompts) */
@@ -120,7 +118,7 @@ export async function createFund(params: CreateFundParams): Promise<FundConfig> 
         },
       },
     },
-    broker: { provider: globalConfig.broker.provider, mode: params.brokerMode },
+    broker: { mode: "paper" as const },
     claude: { model: globalConfig.default_model ?? "sonnet" },
   });
 
@@ -209,20 +207,6 @@ export async function upgradeFund(fundName: string): Promise<UpgradeResult> {
   // Write/overwrite per-fund rules
   await ensureFundRules(paths.claudeDir);
   await ensureFundMemory(paths.root, paths.claudeDir);
-
-  // Check if fund has dedicated broker credentials
-  const hasCreds = await hasFundCredentials(fundName);
-  if (!hasCreds) {
-    // Reset portfolio to initial capital — no dedicated broker account
-    await initFundState(fundName, config.capital.initial, config.objective.type);
-
-    // Disable sync to prevent shared-account corruption
-    if (config.broker.sync_enabled !== false) {
-      const updatedConfig = { ...config };
-      updatedConfig.broker = { ...config.broker, sync_enabled: false };
-      await saveFundConfig(updatedConfig);
-    }
-  }
 
   return { fundName, skillCount: BUILTIN_SKILLS.length };
 }

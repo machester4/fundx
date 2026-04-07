@@ -1,6 +1,5 @@
 import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
-import { ALPACA_PAPER_URL, ALPACA_DATA_URL } from "../alpaca-helpers.js";
 import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData } from "../types.js";
 
 const yf = new YahooFinance();
@@ -33,16 +32,6 @@ const SECTOR_ETFS: Record<string, string> = {
   XLRE: "RE",
 };
 
-const ALPACA_INDICES: Record<string, string> = {
-  SPY: "S&P 500",
-  QQQ: "NASDAQ",
-  VIXY: "VIX",
-  GLD: "Gold",
-  SLV: "Silver",
-  IBIT: "BTC",
-  USO: "WTI",
-};
-
 const YFINANCE_INDICES: Record<string, string> = {
   "^GSPC": "S&P 500",
   "^IXIC": "NASDAQ",
@@ -57,7 +46,6 @@ const YFINANCE_INDICES: Record<string, string> = {
 
 type ProviderInfo =
   | { provider: "fmp"; fmpApiKey: string }
-  | { provider: "alpaca"; alpacaApiKey: string; alpacaSecretKey: string }
   | { provider: "yfinance" }
   | { provider: "none" };
 
@@ -68,12 +56,6 @@ async function detectProvider(): Promise<ProviderInfo> {
     const fmpKey = config.market_data?.fmp_api_key;
     if (fmpKey) {
       return { provider: "fmp", fmpApiKey: fmpKey };
-    }
-
-    const alpacaKey = config.broker.api_key;
-    const alpacaSecret = config.broker.secret_key;
-    if (alpacaKey && alpacaSecret) {
-      return { provider: "alpaca", alpacaApiKey: alpacaKey, alpacaSecretKey: alpacaSecret };
     }
 
     return { provider: "yfinance" };
@@ -301,191 +283,6 @@ async function fetchYFinanceMarketClock(): Promise<{ isOpen: boolean }> {
   }
 }
 
-// ── Alpaca provider (fallback) ───────────────────────────────
-
-function alpacaHeaders(apiKey: string, secretKey: string): Record<string, string> {
-  return {
-    "APCA-API-KEY-ID": apiKey,
-    "APCA-API-SECRET-KEY": secretKey,
-  };
-}
-
-async function fetchAlpacaIndices(
-  apiKey: string,
-  secretKey: string,
-): Promise<MarketIndexSnapshot[]> {
-  const symbols = Object.keys(ALPACA_INDICES);
-  const headers = alpacaHeaders(apiKey, secretKey);
-  const results: MarketIndexSnapshot[] = [];
-
-  try {
-    const params = new URLSearchParams({ symbols: symbols.join(","), feed: "iex" });
-    const snapResp = await fetch(
-      `${ALPACA_DATA_URL}/v2/stocks/snapshots?${params.toString()}`,
-      { headers, signal: AbortSignal.timeout(5000) },
-    );
-    if (!snapResp.ok) {
-      console.error(`[market] Alpaca snapshots request failed: HTTP ${snapResp.status}`);
-      return [];
-    }
-
-    const snapData = (await snapResp.json()) as Record<
-      string,
-      {
-        latestTrade?: { p: number };
-        dailyBar?: { c: number; o: number };
-        prevDailyBar?: { c: number };
-      }
-    >;
-
-    // Fetch intraday bars for sparklines
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(now.getHours() - 8, 0, 0, 0);
-    const barParams = new URLSearchParams({
-      symbols: symbols.join(","),
-      timeframe: "15Min",
-      start: startOfDay.toISOString(),
-      feed: "iex",
-      limit: "30",
-    });
-
-    let barData: Record<string, Array<{ c: number }>> = {};
-    try {
-      const barResp = await fetch(
-        `${ALPACA_DATA_URL}/v2/stocks/bars?${barParams.toString()}`,
-        { headers, signal: AbortSignal.timeout(5000) },
-      );
-      if (barResp.ok) {
-        const parsed = (await barResp.json()) as { bars: Record<string, Array<{ c: number }>> };
-        barData = parsed.bars ?? {};
-      }
-    } catch { /* sparklines are optional */ }
-
-    for (const symbol of symbols) {
-      const snap = snapData[symbol];
-      if (!snap) continue;
-
-      const price = snap.latestTrade?.p ?? snap.dailyBar?.c ?? 0;
-      const prevClose = snap.prevDailyBar?.c ?? snap.dailyBar?.o ?? price;
-      const change = price - prevClose;
-      const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
-      const sparklineValues = (barData[symbol] ?? []).map((b) => b.c);
-
-      results.push({
-        symbol,
-        name: ALPACA_INDICES[symbol] ?? symbol,
-        price,
-        change,
-        changePct,
-        sparklineValues,
-      });
-    }
-  } catch (err) {
-    console.error("[market] Alpaca indices fetch failed:", err);
-  }
-
-  return results;
-}
-
-async function fetchAlpacaSectors(
-  apiKey: string,
-  secretKey: string,
-): Promise<SectorSnapshot[]> {
-  const symbols = Object.keys(SECTOR_ETFS);
-  const headers = alpacaHeaders(apiKey, secretKey);
-  try {
-    const params = new URLSearchParams({ symbols: symbols.join(","), feed: "iex" });
-    const resp = await fetch(
-      `${ALPACA_DATA_URL}/v2/stocks/snapshots?${params.toString()}`,
-      { headers, signal: AbortSignal.timeout(5000) },
-    );
-    if (!resp.ok) {
-      console.error(`[market] Alpaca sectors request failed: HTTP ${resp.status}`);
-      return [];
-    }
-
-    const snapData = (await resp.json()) as Record<
-      string,
-      { dailyBar?: { c: number; o: number }; prevDailyBar?: { c: number } }
-    >;
-
-    return symbols
-      .filter((s) => snapData[s])
-      .map((s) => {
-        const snap = snapData[s];
-        const price = snap.dailyBar?.c ?? 0;
-        const prevClose = snap.prevDailyBar?.c ?? snap.dailyBar?.o ?? price;
-        const changePct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
-        return { symbol: s, name: SECTOR_ETFS[s], changePct };
-      })
-      .sort((a, b) => b.changePct - a.changePct);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchAlpacaNews(
-  apiKey: string,
-  secretKey: string,
-  limit = 5,
-): Promise<NewsHeadline[]> {
-  try {
-    const params = new URLSearchParams({ limit: String(limit), sort: "desc" });
-    const resp = await fetch(
-      `${ALPACA_DATA_URL}/v1beta1/news?${params.toString()}`,
-      { headers: alpacaHeaders(apiKey, secretKey), signal: AbortSignal.timeout(5000) },
-    );
-    if (!resp.ok) {
-      console.error(`[market] Alpaca news request failed: HTTP ${resp.status}`);
-      return [];
-    }
-
-    const data = (await resp.json()) as {
-      news: Array<{
-        id: number;
-        headline: string;
-        source: string;
-        created_at: string;
-        symbols: string[];
-        url?: string;
-      }>;
-    };
-
-    return (data.news ?? []).map((n) => ({
-      id: String(n.id),
-      headline: n.headline,
-      source: n.source,
-      timestamp: n.created_at,
-      symbols: n.symbols ?? [],
-      url: n.url,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-async function fetchAlpacaMarketClock(
-  apiKey: string,
-  secretKey: string,
-): Promise<{ isOpen: boolean }> {
-  try {
-    const resp = await fetch(`${ALPACA_PAPER_URL}/v2/clock`, {
-      headers: alpacaHeaders(apiKey, secretKey),
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!resp.ok) {
-      console.error(`[market] Alpaca market clock request failed: HTTP ${resp.status}`);
-      return { isOpen: false };
-    }
-
-    const data = (await resp.json()) as { is_open: boolean };
-    return { isOpen: data.is_open };
-  } catch {
-    return { isOpen: false };
-  }
-}
-
 // ── Ordering ─────────────────────────────────────────────────
 
 const INDEX_ORDER = ["S&P 500", "NASDAQ", "BTC", "VIX", "Gold", "Silver", "WTI"];
@@ -509,8 +306,6 @@ export async function fetchMarketIndices(): Promise<MarketIndexSnapshot[]> {
   let results: MarketIndexSnapshot[] = [];
   if (info.provider === "fmp") {
     results = await fetchFmpIndices(info.fmpApiKey).catch(() => []);
-  } else if (info.provider === "alpaca") {
-    results = await fetchAlpacaIndices(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
   } else if (info.provider === "yfinance") {
     results = await fetchYFinanceIndices().catch(() => []);
   }
@@ -522,9 +317,6 @@ export async function fetchSectorSnapshots(): Promise<SectorSnapshot[]> {
   const info = await detectProvider();
   if (info.provider === "fmp") {
     return fetchFmpSectors(info.fmpApiKey).catch(() => []);
-  }
-  if (info.provider === "alpaca") {
-    return fetchAlpacaSectors(info.alpacaApiKey, info.alpacaSecretKey).catch(() => []);
   }
   if (info.provider === "yfinance") {
     return fetchYFinanceSectors().catch(() => []);
@@ -538,9 +330,6 @@ export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
   if (info.provider === "fmp") {
     return fetchFmpNews(info.fmpApiKey, limit).catch(() => []);
   }
-  if (info.provider === "alpaca") {
-    return fetchAlpacaNews(info.alpacaApiKey, info.alpacaSecretKey, limit).catch(() => []);
-  }
   if (info.provider === "yfinance") {
     return fetchYFinanceNews(limit).catch(() => []);
   }
@@ -553,9 +342,6 @@ export async function fetchMarketClock(): Promise<{ isOpen: boolean }> {
   if (info.provider === "fmp") {
     return fetchFmpMarketClock(info.fmpApiKey).catch(() => ({ isOpen: false }));
   }
-  if (info.provider === "alpaca") {
-    return fetchAlpacaMarketClock(info.alpacaApiKey, info.alpacaSecretKey).catch(() => ({ isOpen: false }));
-  }
   if (info.provider === "yfinance") {
     return fetchYFinanceMarketClock().catch(() => ({ isOpen: false }));
   }
@@ -563,7 +349,7 @@ export async function fetchMarketClock(): Promise<{ isOpen: boolean }> {
 }
 
 /** Get the active market data provider name */
-export async function getMarketDataProvider(): Promise<"fmp" | "alpaca" | "yfinance" | "none"> {
+export async function getMarketDataProvider(): Promise<"fmp" | "yfinance" | "none"> {
   const info = await detectProvider();
   return info.provider;
 }

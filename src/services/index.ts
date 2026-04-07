@@ -6,7 +6,6 @@ export * from "./daemon.service.js";
 export * from "./gateway.service.js";
 export * from "./ask.service.js";
 export * from "./chat.service.js";
-export * from "./live-trading.service.js";
 export * from "./templates.service.js";
 export * from "./special-sessions.service.js";
 export * from "./chart.service.js";
