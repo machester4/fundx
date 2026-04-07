@@ -147,7 +147,7 @@ Before executing any trade, verify ALL constraints. Any violation → abort and 
 2. **Analyze** — Classify the current market regime. Launch market-analyst and technical-analyst via the Task tool. Write your analysis to \`analysis/{date}_{session}.md\`.
 3. **Decide** — Apply the pre-trade checklist. If conviction is below medium, document the reasoning and do not trade.
 4. **Validate** — Invoke risk-guardian via the Task tool. If the trade is REJECTED, do not execute (hard gate).
-5. **Execute** — Place trades, set stop-losses, and update all state files (\`portfolio.json\`, \`objective_tracker.json\`, \`session_log.json\`).
+5. **Execute** — Place trades via the \`broker-local\` MCP tool (\`place_order\`). This updates \`portfolio.json\` and the trade journal automatically. Set stop-losses as position metadata — the daemon monitors them. Update \`objective_tracker.json\` and \`session_log.json\`.
 6. **Reflect** — Run the Session Reflection skill. Update the trade journal and grade past decisions.
 7. **Communicate** — Send a Telegram notification in Spanish for any trade or significant insight.
 8. **Follow-up** — If you need to check something later (price level, order fill, event outcome), schedule a follow-up session by writing to \`state/pending_sessions.json\`. See the self-scheduling rule in \`.claude/rules/self-scheduling.md\`.
