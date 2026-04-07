@@ -8,7 +8,6 @@ import type {
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
 import { fundPaths, MCP_SERVERS, MCP_COMMAND } from "./paths.js";
-import { getAlpacaCredentials } from "./alpaca-helpers.js";
 
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
@@ -76,32 +75,27 @@ export async function buildMcpServers(
 ): Promise<Record<string, McpStdioConfig>> {
   const globalConfig = await loadGlobalConfig();
   const fundConfig = await loadFundConfig(fundName);
-
-  const brokerEnv: Record<string, string> = {};
-  try {
-    const creds = await getAlpacaCredentials(fundName);
-    brokerEnv.ALPACA_API_KEY = creds.apiKey;
-    brokerEnv.ALPACA_SECRET_KEY = creds.secretKey;
-    brokerEnv.ALPACA_MODE = creds.tradingUrl.includes("paper") ? "paper" : "live";
-  } catch {
-    brokerEnv.ALPACA_MODE = fundConfig.broker.mode ?? globalConfig.broker.mode ?? "paper";
-  }
-
-  const marketDataEnv: Record<string, string> = { ...brokerEnv };
-  if (globalConfig.market_data?.fmp_api_key) {
-    marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
-  }
+  const paths = fundPaths(fundName);
 
   const servers: Record<string, McpStdioConfig> = {
-    "broker-alpaca": {
+    "broker-local": {
       command: MCP_COMMAND,
-      args: [MCP_SERVERS.brokerAlpaca],
-      env: brokerEnv,
+      args: [MCP_SERVERS.brokerLocal],
+      env: {
+        FUND_DIR: paths.root,
+        ...(globalConfig.market_data?.fmp_api_key
+          ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
+          : {}),
+      },
     },
     "market-data": {
       command: MCP_COMMAND,
       args: [MCP_SERVERS.marketData],
-      env: marketDataEnv,
+      env: {
+        ...(globalConfig.market_data?.fmp_api_key
+          ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
+          : {}),
+      },
     },
   };
 
@@ -135,7 +129,6 @@ export async function buildMcpServers(
     };
   }
 
-  // Conditionally add SWS (Simply Wall St) — globally available if token is set
   if (globalConfig.sws?.auth_token) {
     servers["sws"] = {
       command: MCP_COMMAND,

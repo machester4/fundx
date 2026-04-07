@@ -1,12 +1,9 @@
-import { loadFundConfig } from "./services/fund.service.js";
+import { loadGlobalConfig } from "./config.js";
 import { readPortfolio, writePortfolio } from "./state.js";
 import { openJournal, insertTrade } from "./journal.js";
-import {
-  getAlpacaCredentials,
-  fetchLatestPrices,
-  placeMarketSell,
-} from "./alpaca-helpers.js";
-import type { Portfolio } from "./types.js";
+import { executeSell } from "./paper-trading.js";
+
+const FMP_BASE = "https://financialmodelingprep.com/api/v3";
 
 // ── Stop-Loss Check ───────────────────────────────────────────
 
@@ -20,10 +17,22 @@ export interface StopLossEvent {
   lossPct: number;
 }
 
-/**
- * Check all positions against their stop-loss levels.
- * Returns positions that have triggered their stop-loss.
- */
+async function fetchPricesFromFmp(symbols: string[]): Promise<Record<string, number>> {
+  const config = await loadGlobalConfig();
+  const apiKey = config.market_data?.fmp_api_key;
+  if (!apiKey) throw new Error("FMP_API_KEY not configured for stop-loss monitoring");
+
+  const resp = await fetch(
+    `${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`,
+    { signal: AbortSignal.timeout(5000) },
+  );
+  if (!resp.ok) throw new Error(`FMP API error ${resp.status}`);
+  const data = (await resp.json()) as Array<{ symbol: string; price: number }>;
+  const result: Record<string, number> = {};
+  for (const item of data) result[item.symbol] = item.price;
+  return result;
+}
+
 export async function checkStopLosses(
   fundName: string,
 ): Promise<StopLossEvent[]> {
@@ -35,9 +44,8 @@ export async function checkStopLosses(
 
   if (positionsWithStops.length === 0) return [];
 
-  const creds = await getAlpacaCredentials(fundName);
   const symbols = positionsWithStops.map((p) => p.symbol);
-  const prices = await fetchLatestPrices(creds, symbols);
+  const prices = await fetchPricesFromFmp(symbols);
 
   const triggered: StopLossEvent[] = [];
 
@@ -64,25 +72,27 @@ export async function checkStopLosses(
   return triggered;
 }
 
-/**
- * Execute stop-loss sells for triggered positions.
- * Places market sell orders and logs trades in the journal.
- */
 export async function executeStopLosses(
   fundName: string,
   events: StopLossEvent[],
 ): Promise<void> {
   if (events.length === 0) return;
 
-  const creds = await getAlpacaCredentials(fundName);
+  let portfolio = await readPortfolio(fundName);
   const db = openJournal(fundName);
 
   try {
     for (const event of events) {
-      // Place sell order
-      await placeMarketSell(creds, event.symbol, event.shares);
+      const result = executeSell(
+        portfolio,
+        event.symbol,
+        event.shares,
+        event.currentPrice,
+        `Stop-loss triggered at $${event.stopPrice.toFixed(2)}. Current price: $${event.currentPrice.toFixed(2)}. Loss: $${event.loss.toFixed(2)} (${event.lossPct.toFixed(1)}%)`,
+      );
 
-      // Log trade in journal
+      portfolio = result.portfolio;
+
       insertTrade(db, {
         timestamp: new Date().toISOString(),
         fund: fundName,
@@ -93,44 +103,18 @@ export async function executeStopLosses(
         total_value: event.currentPrice * event.shares,
         order_type: "market",
         session_type: "stop_loss",
-        reasoning: `Stop-loss triggered at $${event.stopPrice.toFixed(2)}. Current price: $${event.currentPrice.toFixed(2)}. Loss: $${event.loss.toFixed(2)} (${event.lossPct.toFixed(1)}%)`,
+        reasoning: result.trade.reason,
       });
     }
   } finally {
     db.close();
   }
 
-  // Update portfolio after stop-loss execution
-  const portfolio = await readPortfolio(fundName);
-  const updatedPositions = portfolio.positions.filter(
-    (p) => !events.some((e) => e.symbol === p.symbol),
-  );
-
-  // Add cash from sold positions
-  const cashFromSales = events.reduce(
-    (sum, e) => sum + e.currentPrice * e.shares,
-    0,
-  );
-
-  const updatedPortfolio: Portfolio = {
-    ...portfolio,
-    last_updated: new Date().toISOString(),
-    cash: portfolio.cash + cashFromSales,
-    positions: updatedPositions,
-    total_value:
-      portfolio.cash +
-      cashFromSales +
-      updatedPositions.reduce((sum, p) => sum + p.market_value, 0),
-  };
-
-  await writePortfolio(fundName, updatedPortfolio);
+  await writePortfolio(fundName, portfolio);
 }
 
-/**
- * Auto-apply stop-loss levels based on fund risk config.
- * Sets stop_loss for positions that don't have one.
- */
 export async function applyDefaultStopLosses(fundName: string): Promise<number> {
+  const { loadFundConfig } = await import("./services/fund.service.js");
   const config = await loadFundConfig(fundName);
   const portfolio = await readPortfolio(fundName);
   const stopLossPct = config.risk.stop_loss_pct;
