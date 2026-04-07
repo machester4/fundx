@@ -92,7 +92,7 @@ async function ensureWorkspaceRules(): Promise<void> {
       `# Fund Creation Assistant Rules
 
 - Before creating a fund, gather: initial capital, time horizon, risk tolerance, and target assets
-- Always set \`broker.mode: paper\` — users enable live trading explicitly via \`fundx live enable\`
+- The system operates in paper mode — trades execute locally against portfolio.json
 - The \`claude.personality\` and \`claude.decision_framework\` fields are the most important parts
   of a fund config — make them rich, specific, and actionable; they govern every trading session
 - Suggest risk parameters appropriate to the user's stated tolerance:
