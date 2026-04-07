@@ -117,10 +117,8 @@ export const fundConfigSchema = z.object({
   universe: universeSchema,
   schedule: scheduleSchema,
   broker: z.object({
-    provider: z.enum(["alpaca", "ibkr", "binance", "manual"]).default("manual"),
-    mode: z.enum(["paper", "live"]).default("paper"),
-    sync_enabled: z.boolean().default(true),
-  }),
+    mode: z.literal("paper").default("paper"),
+  }).passthrough(),
   notifications: z
     .object({
       telegram: z
@@ -206,12 +204,8 @@ export const globalConfigSchema = z.object({
   max_budget_usd: z.number().positive().optional(),
   timezone: z.string().default("UTC"),
   broker: z
-    .object({
-      provider: z.string().default("manual"),
-      api_key: z.string().optional(),
-      secret_key: z.string().optional(),
-      mode: z.enum(["paper", "live"]).default("paper"),
-    })
+    .object({})
+    .passthrough()
     .default({}),
   telegram: z
     .object({
@@ -222,7 +216,7 @@ export const globalConfigSchema = z.object({
     .default({}),
   market_data: z
     .object({
-      provider: z.enum(["fmp", "alpaca", "yfinance"]).default("fmp"),
+      provider: z.enum(["fmp", "yfinance"]).default("fmp"),
       fmp_api_key: z.string().optional(),
     })
     .default({}),
@@ -354,21 +348,6 @@ export const specialSessionTriggerSchema = z.object({
 
 export type SpecialSessionTrigger = z.infer<typeof specialSessionTriggerSchema>;
 
-// ── Phase 5: Live Trading Safety Schema ──────────────────────
-
-export const liveTradingConfirmationSchema = z.object({
-  fund: z.string(),
-  confirmed_at: z.string(),
-  confirmed_by: z.enum(["cli", "telegram"]),
-  previous_mode: z.enum(["paper", "live"]),
-  new_mode: z.enum(["paper", "live"]),
-  paper_trading_days: z.number().optional(),
-  total_paper_trades: z.number().optional(),
-  paper_pnl: z.number().optional(),
-});
-
-export type LiveTradingConfirmation = z.infer<typeof liveTradingConfirmationSchema>;
-
 // ── Phase 5: Fund Template Schema ────────────────────────────
 
 export const fundTemplateSchema = z.object({
@@ -381,21 +360,6 @@ export const fundTemplateSchema = z.object({
 });
 
 export type FundTemplate = z.infer<typeof fundTemplateSchema>;
-
-// ── Phase 5: Broker Adapter Schema ───────────────────────────
-
-export const brokerCapabilitiesSchema = z.object({
-  stocks: z.boolean().default(false),
-  etfs: z.boolean().default(false),
-  options: z.boolean().default(false),
-  crypto: z.boolean().default(false),
-  forex: z.boolean().default(false),
-  paper_trading: z.boolean().default(false),
-  live_trading: z.boolean().default(false),
-  streaming: z.boolean().default(false),
-});
-
-export type BrokerCapabilities = z.infer<typeof brokerCapabilitiesSchema>;
 
 // ── Phase 5: Correlation Schema ──────────────────────────────
 
@@ -491,7 +455,7 @@ export const serviceStatusSchema = z.object({
   daemon: z.boolean().default(false),
   telegram: z.boolean().default(false),
   marketData: z.boolean().default(false),
-  marketDataProvider: z.enum(["fmp", "alpaca", "yfinance", "none"]).default("none"),
+  marketDataProvider: z.enum(["fmp", "yfinance", "none"]).default("none"),
 });
 
 export type ServiceStatus = z.infer<typeof serviceStatusSchema>;
@@ -651,15 +615,6 @@ export const daemonPidInfoSchema = z.object({
   version: z.string(),
 });
 export type DaemonPidInfo = z.infer<typeof daemonPidInfoSchema>;
-
-// ── Fund Credentials Schema ──────────────────────────────────
-
-export const fundCredentialsSchema = z.object({
-  api_key: z.string(),
-  secret_key: z.string(),
-});
-
-export type FundCredentials = z.infer<typeof fundCredentialsSchema>;
 
 // ── Proactive Agent Schemas ──────────────────────────────────
 

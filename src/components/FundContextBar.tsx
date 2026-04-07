@@ -47,8 +47,8 @@ export function FundContextBar({ welcome: w, model, workspaceFunds = [] }: FundC
     );
   }
 
-  const modeLabel = w.isReadonly ? "READ-ONLY" : w.fundConfig.broker.mode === "live" ? "LIVE" : "PAPER";
-  const modeColor = w.isReadonly ? "gray" : w.fundConfig.broker.mode === "live" ? "red" : "yellow";
+  const modeLabel = w.isReadonly ? "READ-ONLY" : "PAPER";
+  const modeColor = w.isReadonly ? "gray" : "yellow";
 
   const pnl = w.portfolio
     ? w.portfolio.total_value - (w.tracker?.initial_capital ?? w.portfolio.total_value)

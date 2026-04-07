@@ -14,7 +14,7 @@ export async function buildFundContext(fundName: string): Promise<string> {
     sections.push(`Status: ${config.fund.status}`);
     sections.push(`Objective: ${config.objective.type}`);
     sections.push(`Risk: ${config.risk.profile}`);
-    sections.push(`Broker: ${config.broker.provider} (${config.broker.mode})`);
+    sections.push(`Mode: paper`);
     sections.push("");
   } catch {
     sections.push(`## Fund: ${fundName} (config unavailable)`);

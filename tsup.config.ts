@@ -12,7 +12,7 @@ export default defineConfig([
   },
   {
     entry: [
-      "src/mcp/broker-alpaca.ts",
+      "src/mcp/broker-local.ts",
       "src/mcp/market-data.ts",
       "src/mcp/telegram-notify.ts",
       "src/mcp/sws.ts",

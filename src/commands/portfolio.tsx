@@ -18,16 +18,12 @@ export const args = zod.tuple([
   zod.string().describe(argument({ name: "fund", description: "Fund name" })),
 ]);
 
-export const options = zod.object({
-  sync: zod.boolean().default(false).describe("Sync from broker before displaying"),
-});
+type Props = { args: zod.infer<typeof args> };
 
-type Props = { args: zod.infer<typeof args>; options: zod.infer<typeof options> };
-
-export default function Portfolio({ args: [fundName], options: opts }: Props) {
+export default function Portfolio({ args: [fundName] }: Props) {
   const { data, isLoading, error } = useAsyncAction(
-    () => getPortfolioDisplay(fundName, { sync: opts.sync }),
-    [fundName, opts.sync],
+    () => getPortfolioDisplay(fundName),
+    [fundName],
   );
   const { columns } = useTerminalSize();
   const [swsScores, setSwsScores] = useState<Map<string, SwsSnowflake>>(new Map());
@@ -68,7 +64,6 @@ export default function Portfolio({ args: [fundName], options: opts }: Props) {
     <Box flexDirection="column" paddingX={1} gap={1}>
       <Header>Portfolio: {data.fundDisplayName}</Header>
       <Text dimColor>Last updated: {data.lastUpdated}</Text>
-      {opts.sync && data.synced && <Text dimColor>Synced from broker.</Text>}
 
       <Box flexDirection="column">
         <Box gap={2}>

@@ -30,7 +30,7 @@ export default function FundInfo({ args: [name] }: Props) {
       <Text>Capital: ${c.capital.initial} {c.capital.currency}</Text>
       <Text>Objective: {c.objective.type}</Text>
       <Text>Risk: {c.risk.profile}</Text>
-      <Text>Broker: {c.broker.provider} ({c.broker.mode})</Text>
+      <Text>Mode: paper</Text>
     </Box>
   );
 }

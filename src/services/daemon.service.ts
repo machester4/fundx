@@ -16,7 +16,6 @@ import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
 import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.service.js";
-import { syncPortfolio } from "../sync.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
@@ -27,7 +26,6 @@ import { readSessionHistory, readPendingSessions, writePendingSessions, readSess
 const DAILY_REPORT_TIME = "18:30";
 const WEEKLY_REPORT_TIME = "19:00";
 const MONTHLY_REPORT_TIME = "19:00";
-const PORTFOLIO_SYNC_TIME = "09:30";
 const MARKET_OPEN_HOUR = 9;
 const MARKET_OPEN_MINUTE = 30;
 const MARKET_CLOSE_HOUR = 16;
@@ -501,21 +499,6 @@ export async function startDaemon(): Promise<void> {
               generateMonthlyReport(name).catch(async (err) => {
                 await log(`Monthly report error (${name}): ${err}`);
               });
-            }
-
-            // ── Portfolio sync (lock-gated) ──
-            if (currentTime === PORTFOLIO_SYNC_TIME) {
-              const locked = await acquireFundLock(name, "portfolio_sync");
-              if (locked) {
-                try {
-                  await syncPortfolio(name);
-                  clearError(name, "portfolio_sync");
-                } catch (err) {
-                  trackError(name, "portfolio_sync", err);
-                } finally {
-                  await releaseFundLock(name);
-                }
-              }
             }
 
             // ── Stop-loss checks (lock-gated) ──

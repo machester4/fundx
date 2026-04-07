@@ -272,7 +272,7 @@ export async function buildWorkspaceContext(): Promise<string> {
   return [
     `## Workspace State`,
     `Existing funds: ${allFunds.length === 0 ? "none yet" : allFunds.join(", ")}`,
-    `Broker: ${globalConfig.broker.provider} (${globalConfig.broker.mode} mode)`,
+    `Mode: paper trading`,
     `Model: ${globalConfig.default_model ?? "sonnet"}`,
   ].join("\n");
 }
@@ -288,7 +288,7 @@ export async function buildChatContext(fundName: string | null): Promise<string>
     sections.push(`Status: ${config.fund.status}`);
     sections.push(`Objective: ${config.objective.type}`);
     sections.push(`Risk: ${config.risk.profile}`);
-    sections.push(`Broker: ${config.broker.provider} (${config.broker.mode})`);
+    sections.push(`Mode: paper`);
     sections.push("");
   } catch {
     sections.push(`## Fund: ${fundName} (config unavailable)\n`);
@@ -655,10 +655,7 @@ export async function buildChatMcpServers(
 
   const globalConfig = await loadGlobalConfig();
   const marketDataEnv: Record<string, string> = {};
-  if (globalConfig.broker.api_key) marketDataEnv.ALPACA_API_KEY = globalConfig.broker.api_key;
-  if (globalConfig.broker.secret_key) marketDataEnv.ALPACA_SECRET_KEY = globalConfig.broker.secret_key;
   if (globalConfig.market_data?.fmp_api_key) marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
-  marketDataEnv.ALPACA_MODE = globalConfig.broker.mode ?? "paper";
 
   const servers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
     "market-data": {
