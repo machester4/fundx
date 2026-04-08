@@ -54,6 +54,20 @@ describe("fundPaths", () => {
     );
   });
 
+  it("includes dailySnapshot in state paths", () => {
+    const paths = fundPaths("test-fund");
+    expect(paths.state.dailySnapshot).toBe(
+      join(FUNDS_DIR, "test-fund", "state", "daily_snapshot.json"),
+    );
+  });
+
+  it("includes notifiedMilestones in state paths", () => {
+    const paths = fundPaths("test-fund");
+    expect(paths.state.notifiedMilestones).toBe(
+      join(FUNDS_DIR, "test-fund", "state", "notified_milestones.json"),
+    );
+  });
+
   it("returns correct auxiliary paths", () => {
     const paths = fundPaths("alpha");
     const fundRoot = join(home, ".fundx", "funds", "alpha");
