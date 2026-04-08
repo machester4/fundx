@@ -262,4 +262,11 @@ describe("runFundSession with agents", () => {
     expect(opts.prompt).not.toContain("Investment Debate");
     expect(opts.prompt).not.toContain("thorough analysis");
   });
+
+  it("prompt references session-init rule", async () => {
+    await runFundSession("test-fund", "pre_market");
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("session-init rule");
+    expect(opts.prompt).toContain("Session Protocol");
+  });
 });
