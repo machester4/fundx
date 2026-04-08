@@ -17,6 +17,10 @@ import {
   sessionCountsSchema,
   type PendingSession,
   type SessionCounts,
+  dailySnapshotSchema,
+  notifiedMilestonesSchema,
+  type DailySnapshot,
+  type NotifiedMilestones,
 } from "./types.js";
 import { fundPaths } from "./paths.js";
 
@@ -272,6 +276,44 @@ export async function writeSessionHandoff(fundName: string, content: string): Pr
   const tmp = paths.state.sessionHandoff + ".tmp";
   await writeFile(tmp, content, "utf-8");
   await rename(tmp, paths.state.sessionHandoff);
+}
+
+// ── Daily Snapshot ────────────────────────────────────────────
+
+export async function readDailySnapshot(fundName: string): Promise<DailySnapshot | null> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.dailySnapshot);
+    return dailySnapshotSchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+export async function writeDailySnapshot(fundName: string, snapshot: DailySnapshot): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.dailySnapshot, snapshot);
+}
+
+// ── Notified Milestones ──────────────────────────────────────
+
+export async function readNotifiedMilestones(fundName: string): Promise<NotifiedMilestones> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.notifiedMilestones);
+    return notifiedMilestonesSchema.parse(data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return notifiedMilestonesSchema.parse({});
+    }
+    throw err;
+  }
+}
+
+export async function writeNotifiedMilestones(fundName: string, milestones: NotifiedMilestones): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.notifiedMilestones, milestones);
 }
 
 // ── Initialize state for a new fund ────────────────────────────
