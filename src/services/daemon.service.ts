@@ -21,7 +21,7 @@ import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
-import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts } from "../state.js";
+import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -37,6 +37,69 @@ const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
 const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
 let isProcessing = false;
+
+// ── Notification Helpers ─────────────────────────────────────
+
+function isInQuietHoursForFund(start: string, end: string): boolean {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [startH, startM] = start.split(":").map(Number);
+  const [endH, endM] = end.split(":").map(Number);
+  const startMin = startH! * 60 + startM!;
+  const endMin = endH! * 60 + endM!;
+  if (startMin <= endMin) return currentMinutes >= startMin && currentMinutes < endMin;
+  return currentMinutes >= startMin || currentMinutes < endMin;
+}
+
+export async function sendDailyDigest(fundName: string): Promise<void> {
+  const config = await loadFundConfig(fundName);
+  if (!config.notifications.telegram.enabled || !config.notifications.telegram.daily_digest) return;
+
+  const qh = config.notifications.quiet_hours;
+  if (qh.enabled && isInQuietHoursForFund(qh.start, qh.end)) return;
+
+  const portfolio = await readPortfolio(fundName);
+  const tracker = await readTracker(fundName).catch(() => null);
+  const snapshot = await readDailySnapshot(fundName);
+
+  const today = new Date().toISOString().split("T")[0];
+  let pnlLine = "";
+  if (snapshot && snapshot.date === today) {
+    const pnl = portfolio.total_value - snapshot.total_value;
+    const pnlPct = snapshot.total_value > 0 ? (pnl / snapshot.total_value) * 100 : 0;
+    const sign = pnl >= 0 ? "+" : "";
+    pnlLine = `P&amp;L: ${sign}$${pnl.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)`;
+  } else {
+    pnlLine = `Value: $${portfolio.total_value.toFixed(2)}`;
+  }
+
+  const cashPct = portfolio.total_value > 0
+    ? ((portfolio.cash / portfolio.total_value) * 100).toFixed(1)
+    : "100.0";
+
+  let topMover = "";
+  if (portfolio.positions.length > 0) {
+    const best = portfolio.positions.reduce((a, b) =>
+      Math.abs(a.unrealized_pnl_pct) > Math.abs(b.unrealized_pnl_pct) ? a : b);
+    const sign = best.unrealized_pnl_pct >= 0 ? "+" : "";
+    topMover = `\nTop mover: ${best.symbol} ${sign}${best.unrealized_pnl_pct.toFixed(1)}%`;
+  }
+
+  const objectiveLine = tracker
+    ? `\nObjective: ${tracker.progress_pct.toFixed(1)}% toward goal`
+    : "";
+
+  const displayName = config.fund.display_name;
+  const message = [
+    `📊 <b>${displayName}</b> — Daily Digest (${today})`,
+    pnlLine,
+    `Portfolio: $${portfolio.total_value.toFixed(2)}`,
+    `Cash: ${cashPct}% | Positions: ${portfolio.positions.length}`,
+  ].join("\n") + topMover + objectiveLine;
+
+  const { sendTelegramNotification } = await import("./gateway.service.js");
+  await sendTelegramNotification(message);
+}
 
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
@@ -509,7 +572,11 @@ export async function startDaemon(): Promise<void> {
 
             // ── Reports (fire-and-forget, no lock) ──
             if (currentTime === DAILY_REPORT_TIME) {
-              generateDailyReport(name).catch(async (err) => {
+              generateDailyReport(name).then(async () => {
+                try { await sendDailyDigest(name); } catch (err) {
+                  await log(`Daily digest error (${name}): ${err}`);
+                }
+              }).catch(async (err) => {
                 await log(`Daily report error (${name}): ${err}`);
               });
             }
