@@ -376,60 +376,70 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
   if (isStatic) {
     return (
-      <>
-        {/* Completed messages — written permanently to terminal scrollback */}
-        <Static items={messages}>
-          {(msg) => (
-            <Box key={msg.id} paddingX={1}>
-              <ChatMessage
-                sender={msg.sender}
-                content={msg.content}
-                timestamp={msg.timestamp}
-                cost={msg.cost}
-                turns={msg.turns}
-              />
-            </Box>
-          )}
-        </Static>
-
-        {/* Dynamic bottom section — re-renders as streaming progresses */}
-        <Box flexDirection="column">
-          {!streaming.isStreaming && streaming.lastTurnMetrics && (
-            <Box paddingX={1} marginTop={1}>
-              <TurnSummary metrics={streaming.lastTurnMetrics} />
-            </Box>
-          )}
-
-          {phase === "error" && (
-            <Box paddingX={1} marginTop={1}>
-              <Text color="red">Error: {errorMsg}</Text>
-            </Box>
-          )}
-
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>{"\u2500".repeat(width)}</Text>
-            {isStreaming ? (
-              <Box paddingX={1}>
-                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
-              </Box>
-            ) : phase !== "error" ? (
-              <Box paddingX={1}>
-                <Text color="green">{"❯ "}</Text>
-                <TextInput
-                  placeholder="Message... (/help for commands)"
-                  onSubmit={handleSubmit}
+      <Box flexDirection="row" width={width}>
+        {/* Chat column */}
+        <Box flexDirection="column" width={chatWidth}>
+          {/* Completed messages — written permanently to terminal scrollback */}
+          <Static items={messages}>
+            {(msg) => (
+              <Box key={msg.id} paddingX={1}>
+                <ChatMessage
+                  sender={msg.sender}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                  cost={msg.cost}
+                  turns={msg.turns}
                 />
               </Box>
-            ) : null}
-            <Text dimColor>{"\u2500".repeat(width)}</Text>
-          </Box>
+            )}
+          </Static>
 
-          {/* Context bar — below input */}
-          {(welcomeData || isWorkspaceMode) && (
-            <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
-          )}
+          {/* Dynamic bottom section — re-renders as streaming progresses */}
+          <Box flexDirection="column">
+            {!streaming.isStreaming && streaming.lastTurnMetrics && (
+              <Box paddingX={1} marginTop={1}>
+                <TurnSummary metrics={streaming.lastTurnMetrics} />
+              </Box>
+            )}
+
+            {phase === "error" && (
+              <Box paddingX={1} marginTop={1}>
+                <Text color="red">Error: {errorMsg}</Text>
+              </Box>
+            )}
+
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
+              {isStreaming ? (
+                <Box paddingX={1}>
+                  <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
+                </Box>
+              ) : phase !== "error" ? (
+                <Box paddingX={1}>
+                  <Text color="green">{"❯ "}</Text>
+                  <TextInput
+                    placeholder="Message... (/help for commands)"
+                    onSubmit={handleSubmit}
+                  />
+                </Box>
+              ) : null}
+              <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
+            </Box>
+
+            {/* Context bar — below input */}
+            {(welcomeData || isWorkspaceMode) && (
+              <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+            )}
+          </Box>
         </Box>
-      </>
+
+        {/* Sidebar */}
+        {showSidebar && (
+          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor>
+            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
+          </Box>
+        )}
+      </Box>
     );
   }
 
