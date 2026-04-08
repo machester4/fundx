@@ -112,7 +112,7 @@ import cron from "node-cron";
 import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
 import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
 import { generateDailyReport } from "../src/services/reports.service.js";
-import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions } from "../src/services/daemon.service.js";
+import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions, cleanOldAnalysisFiles } from "../src/services/daemon.service.js";
 import { runFundSession } from "../src/services/session.service.js";
 import { readSessionHistory } from "../src/state.js";
 import type { FundConfig } from "../src/types.js";
@@ -316,6 +316,14 @@ describe("daemon cron callback", () => {
     await capturedCronCallback!();
 
     expect(generateDailyReport).toHaveBeenCalledWith("test-fund");
+  });
+});
+
+// ── cleanOldAnalysisFiles ────────────────────────────────────
+
+describe("cleanOldAnalysisFiles", () => {
+  it("is exported and callable", () => {
+    expect(typeof cleanOldAnalysisFiles).toBe("function");
   });
 });
 
