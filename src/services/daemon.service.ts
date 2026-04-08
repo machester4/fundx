@@ -101,6 +101,50 @@ export async function sendDailyDigest(fundName: string): Promise<void> {
   await sendTelegramNotification(message);
 }
 
+export async function sendWeeklyDigest(fundName: string): Promise<void> {
+  const config = await loadFundConfig(fundName);
+  if (!config.notifications.telegram.enabled || !config.notifications.telegram.weekly_digest) return;
+
+  const qh = config.notifications.quiet_hours;
+  if (qh.enabled && isInQuietHoursForFund(qh.start, qh.end)) return;
+
+  const portfolio = await readPortfolio(fundName);
+  const tracker = await readTracker(fundName).catch(() => null);
+
+  const { openJournal, getTradesInDays } = await import("../journal.js");
+  const db = openJournal(fundName);
+  let trades: Array<{ pnl?: number | null }> = [];
+  try {
+    trades = getTradesInDays(db, fundName, 7);
+  } finally {
+    db.close();
+  }
+
+  const wins = trades.filter((t) => (t.pnl ?? 0) > 0).length;
+  const losses = trades.filter((t) => (t.pnl ?? 0) < 0).length;
+  const bestPnl = trades.reduce((max, t) => Math.max(max, t.pnl ?? 0), 0);
+  const worstPnl = trades.reduce((min, t) => Math.min(min, t.pnl ?? 0), 0);
+
+  const today = new Date();
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekRange = `${weekAgo.toISOString().split("T")[0]} – ${today.toISOString().split("T")[0]}`;
+
+  const objectiveLine = tracker
+    ? `\nObjective: ${tracker.progress_pct.toFixed(1)}% toward goal`
+    : "";
+
+  const displayName = config.fund.display_name;
+  const message = [
+    `📅 <b>${displayName}</b> — Weekly Digest (${weekRange})`,
+    `Portfolio: $${portfolio.total_value.toFixed(2)}`,
+    `Trades: ${trades.length} (${wins} wins, ${losses} losses)`,
+    `Best: $${bestPnl.toFixed(2)} | Worst: $${worstPnl.toFixed(2)}`,
+  ].join("\n") + objectiveLine;
+
+  const { sendTelegramNotification } = await import("./gateway.service.js");
+  await sendTelegramNotification(message);
+}
+
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
@@ -581,7 +625,11 @@ export async function startDaemon(): Promise<void> {
               });
             }
             if (currentDay === "FRI" && currentTime === WEEKLY_REPORT_TIME) {
-              generateWeeklyReport(name).catch(async (err) => {
+              generateWeeklyReport(name).then(async () => {
+                try { await sendWeeklyDigest(name); } catch (err) {
+                  await log(`Weekly digest error (${name}): ${err}`);
+                }
+              }).catch(async (err) => {
                 await log(`Weekly report error (${name}): ${err}`);
               });
             }
