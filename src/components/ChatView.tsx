@@ -439,10 +439,10 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     <Box flexDirection="column" width={width} height={height}>
       {/* Messages area — fills available space */}
       <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-        {!isInline && messages.length === 0 && !isStreaming && (
+        {messages.length === 0 && !isStreaming && (
           <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
             {isWorkspaceMode ? (
-              <Text dimColor>Type a message or /help for commands.</Text>
+              !isInline && <Text dimColor>Type a message or /help for commands.</Text>
             ) : (
               <>
                 {welcomeData?.handoff && (
@@ -451,9 +451,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                     <Text dimColor>{welcomeData.handoff}</Text>
                   </Box>
                 )}
-                <Text dimColor>
-                  Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
-                </Text>
+                {!isInline && (
+                  <Text dimColor>
+                    Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
+                  </Text>
+                )}
               </>
             )}
           </Box>
