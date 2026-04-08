@@ -139,6 +139,25 @@ describe("BUILTIN_SKILLS", () => {
     expect(skill!.content).toContain("What will I do differently");
   });
 
+  it("Session Reflection skill includes contract evaluation section", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Session Reflection");
+    expect(skill!.content).toContain("Contract Evaluation");
+    expect(skill!.content).toContain("Stated intent");
+    expect(skill!.content).toContain("Actual outcome");
+    expect(skill!.content).toContain("deviation justified");
+  });
+
+  it("Session Reflection skill includes handoff generation section", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.name === "Session Reflection");
+    expect(skill!.content).toContain("Session Handoff");
+    expect(skill!.content).toContain("session-handoff.md");
+    expect(skill!.content).toContain("What I Did");
+    expect(skill!.content).toContain("Open Concerns");
+    expect(skill!.content).toContain("Deferred Decisions");
+    expect(skill!.content).toContain("Next Session Should");
+    expect(skill!.content).toContain("Market Context Snapshot");
+  });
+
   it("includes Portfolio Review skill with objective-specific review and survival", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Portfolio Review");
     expect(skill).toBeDefined();
