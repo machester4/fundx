@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 // Internal supervisor runner mode -- spawned as a detached background process by forkSupervisor()
 if (process.argv.includes("--_supervisor-mode")) {
   const { startSupervisor } = await import("./services/supervisor.service.js");
