@@ -36,7 +36,7 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - **Claude as artisan.** Each session, Claude invents analysis tools, writes scripts, searches the web, and makes decisions — not limited to pre-defined pipelines.
 - **Multi-fund architecture.** Run a conservative runway fund, an aggressive growth fund, and a BTC accumulation fund simultaneously, each with its own AI personality.
 - **Bidirectional Telegram.** Get trade alerts AND wake Claude anytime to ask questions about positions or past analyses.
-- **Paper first, live later.** Every fund starts in paper mode. Live trading requires explicit confirmation and safety checks.
+- **Paper mode.** All trading is simulated locally — you replicate positions in your real broker manually.
 
 ## Quick Start
 
@@ -62,8 +62,7 @@ fundx start
 - **Node.js** >= 20
 - **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
 - **pnpm** (recommended) or npm
-- **Alpaca** account for paper/live trading (optional for setup)
-- **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (optional, falls back to Alpaca)
+- **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (recommended, falls back to Yahoo Finance)
 - **Telegram** bot token for notifications (optional)
 
 ## Installation
@@ -155,14 +154,6 @@ fundx gateway start                 Start Telegram bot standalone
 fundx gateway test                  Send test message
 ```
 
-### Live Trading
-
-```
-fundx live enable <fund>            Enable live trading (with safety checks)
-fundx live disable <fund>           Switch back to paper trading
-fundx live status <fund>            View live trading status
-```
-
 ## Architecture
 
 ```mermaid
@@ -188,7 +179,7 @@ graph TB
     end
 
     subgraph MCP["MCP Servers"]
-        MCP1["broker-alpaca\ntrade execution · positions"]
+        MCP1["broker-local\npaper trade execution · positions"]
         MCP2["market-data\nprices · OHLCV · quotes"]
         MCP3["telegram-notify\nalerts · digests · milestones"]
     end
@@ -201,8 +192,8 @@ graph TB
     end
 
     subgraph Ext["External Services"]
-        EXT1["Alpaca API\npaper / live trading"]
-        EXT2["FMP · Alpaca Data\nmarket data · news"]
+        EXT1["portfolio.json\nlocal paper state"]
+        EXT2["FMP · Yahoo Finance\nmarket data · news"]
         EXT3["Telegram API"]
     end
 
@@ -230,7 +221,7 @@ Each Claude session:
 3. Creates and executes analysis scripts as needed
 4. Optionally invokes analyst sub-agents via the Task tool (macro, technical, sentiment, risk, news)
 5. Makes decisions within fund constraints
-6. Executes trades via MCP broker server
+6. Executes paper trades via `broker-local` MCP server (updates portfolio.json locally)
 7. Updates state and generates reports
 8. Sends notifications via Telegram
 
@@ -238,7 +229,7 @@ Each Claude session:
 
 ```
 ~/.fundx/
-├── config.yaml                     # Global config (broker keys, market data, Telegram token)
+├── config.yaml                     # Global config (market data, Telegram token)
 ├── daemon.pid / daemon.log         # Daemon state
 ├── funds/
 │   └── <fund-name>/
@@ -259,19 +250,9 @@ Each Claude session:
 
 | Server | Purpose |
 |--------|---------|
-| `broker-alpaca` | Trade execution, positions, account info |
-| `market-data` | Price data, OHLCV bars, quotes |
+| `broker-local` | Paper trade execution, positions, account info (local portfolio.json) |
+| `market-data` | Price data, OHLCV bars, quotes (FMP + Yahoo Finance) |
 | `telegram-notify` | Send notifications to Telegram |
-
-### Multi-Broker Support
-
-FundX uses a broker adapter interface. Currently Alpaca is implemented; additional brokers are planned:
-
-| Broker | Asset Types | Status |
-|--------|-------------|--------|
-| Alpaca | Stocks, ETFs, Crypto | Implemented |
-| Interactive Brokers | International markets | Planned |
-| Binance | Crypto | Planned |
 
 ### Market Data Providers
 
@@ -280,20 +261,20 @@ Dashboard indices (S&P 500, NASDAQ, VIX), news headlines, and market hours come 
 | Provider | Data | Status |
 |----------|------|--------|
 | FMP (Financial Modeling Prep) | Real index symbols (^GSPC, ^IXIC, ^VIX), news, market hours | Default, free tier (250 req/day) |
-| Alpaca Data API | ETF proxies (SPY, QQQ, VIXY), news, market clock | Fallback (uses broker credentials) |
+| Yahoo Finance | Fallback for quotes, bars, options | Fallback (no API key needed) |
 
-FMP is preferred because it provides actual index data instead of ETF proxies, and doesn't require brokerage credentials. If no FMP key is configured, the dashboard falls back to Alpaca data (if broker credentials are set), or shows empty panels gracefully.
+FMP is recommended because it provides actual index data and comprehensive financial APIs. If no FMP key is configured, the system falls back to Yahoo Finance.
 
 ## Configuration
 
 ### Global Config (`~/.fundx/config.yaml`)
 
-Created by `fundx init`. Stores broker credentials, market data provider, Telegram token, and default settings. Credentials are **never** stored in per-fund configs.
+Created by `fundx init`. Stores market data provider, Telegram token, and default settings.
 
 ```yaml
 # Market data provider (optional — dashboard indices, news, market hours)
 market_data:
-  provider: fmp           # "fmp" (default) or "alpaca"
+  provider: fmp           # "fmp" (default) or "yfinance"
   fmp_api_key: YOUR_KEY   # Free tier: 250 req/day at financialmodelingprep.com
 ```
 
@@ -307,7 +288,7 @@ Each fund is fully defined by its config. Key sections:
 - **risk** — Profile, max drawdown, stop-loss, position limits, custom rules
 - **universe** — Allowed/forbidden asset types and tickers
 - **schedule** — Trading sessions with times and focus areas
-- **broker** — Provider and mode (paper/live)
+- **broker** — Mode (paper)
 - **notifications** — Telegram alerts, quiet hours, priority overrides
 - **claude** — Model, personality, decision framework
 
@@ -408,8 +389,7 @@ schedule:
       max_duration_minutes: 30
 
 broker:
-  provider: alpaca                # alpaca | ibkr | binance | manual
-  mode: paper                     # paper | live
+  mode: paper                     # Paper trading (local simulation)
 
 notifications:
   telegram:
@@ -475,8 +455,8 @@ Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and ru
 | Telegram | grammy |
 | AI Engine | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP | @modelcontextprotocol/sdk |
-| Market Data | FMP (primary) / Alpaca Data API (fallback) |
-| Broker | Alpaca API |
+| Market Data | FMP (primary) / Yahoo Finance (fallback) |
+| Broker | Local paper trading (portfolio.json) |
 | Build | tsup (prod) / tsx (dev) |
 | Test | Vitest |
 
@@ -498,10 +478,10 @@ pnpm typecheck            # Type check (tsc --noEmit)
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 1 — MVP | CLI, fund CRUD, daemon, sessions | Done |
-| 2 — Trading | Alpaca broker, market data, portfolio sync | Done |
+| 2 — Trading | Local paper broker, market data (FMP) | Done |
 | 3 — Telegram | Gateway, notifications, bidirectional chat | Done |
 | 4 — Intelligence | Sub-agents, trade journal, embeddings | Done |
-| 5 — Advanced | Live trading, templates, Monte Carlo, reports | Done |
+| 5 — Advanced | Templates, Monte Carlo, reports, correlation | Done |
 | 6 — Community | npm distribution, docs, plugin system | **In progress** |
 
 See [open issues](https://github.com/machester4/fundx/issues) for contribution opportunities.
@@ -513,9 +493,9 @@ See [open issues](https://github.com/machester4/fundx/issues) for contribution o
 3. **Declarative funds.** A fund is fully defined by `fund_config.yaml`. Everything else is derived.
 4. **State is king.** Everything persists between sessions. Claude always knows where it left off.
 5. **Human in the loop, not in the way.** Autonomous operation with CLI/Telegram intervention available.
-6. **Paper first, live later.** Every fund starts in paper mode.
+6. **Paper mode.** All trading is simulated locally — replicate positions in your real broker.
 7. **Memory makes it smarter.** Trade journal + FTS5 search enables learning from history.
-8. **Open and extensible.** New brokers, MCP servers, and objective types are all pluggable.
+8. **Open and extensible.** New MCP servers and objective types are pluggable.
 
 ## Contributing
 
@@ -538,7 +518,7 @@ pnpm typecheck        # Type check
 | Project | What we take | What we improve |
 |---------|-------------|-----------------|
 | [TradingAgents](https://github.com/TauricResearch/TradingAgents) | Multi-agent debate architecture | FundX runs continuously with persistent memory and real execution |
-| [Prophet Trader](https://github.com/JakeNesler/Claude_Prophet) | Claude Code + MCP + Alpaca | FundX is multi-fund, goal-oriented |
+| [Prophet Trader](https://github.com/JakeNesler/Claude_Prophet) | Claude Code + MCP for trading | FundX is multi-fund, goal-oriented |
 | [Agentic Investment Management](https://github.com/hvkshetry/agentic-investment-management) | 12 specialist sub-agents, MCP servers | FundX provides a simple CLI with interactive setup |
 | [CC Trading Terminal](https://github.com/degentic-tools/claude-code-trading-terminal) | Sub-agents for parallel execution | FundX supports any asset class, not just crypto |
 
