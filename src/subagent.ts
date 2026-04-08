@@ -21,7 +21,7 @@ export function buildAnalystAgents(
     "market-analyst": {
       description:
         "Senior market strategist — analyzes macro environment, sentiment signals, and news catalysts to assess the market landscape and its impact on the fund's holdings and strategy.",
-      tools: ["Read", "WebSearch", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "WebSearch", "Bash", "Grep", "Glob"],
       prompt: [
         `You are the Senior Market Strategist for fund '${fundName}'.`,
         ``,
@@ -104,6 +104,13 @@ export function buildAnalystAgents(
         ``,
         `Start with get_rss_news for broad editorial coverage, then get_news for specific ticker data.`,
         ``,
+        `## Persist Your Analysis`,
+        ``,
+        `After completing your assessment, write the full output to`,
+        `analysis/{today}_market-assessment.md using the Write tool,`,
+        `where {today} is today's date in YYYY-MM-DD format.`,
+        `This persists your analysis for reuse by later sessions.`,
+        ``,
         `## Output Format`,
         ``,
         `Wrap your structured summary in <market_assessment> tags:`,
@@ -126,7 +133,7 @@ export function buildAnalystAgents(
     "technical-analyst": {
       description:
         "Senior technical analyst — evaluates price action, trend structure, volume patterns, and momentum indicators using evidence-based methods across the fund's holdings and watchlist.",
-      tools: ["Read", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "Bash", "Grep", "Glob"],
       prompt: [
         `You are the Senior Technical Analyst for fund '${fundName}'.`,
         ``,
@@ -180,6 +187,13 @@ export function buildAnalystAgents(
         `Use market-data MCP tools to fetch historical bars and current quotes. Always cite`,
         `specific prices, dates, and indicator values.`,
         ``,
+        `## Persist Your Analysis`,
+        ``,
+        `After completing your assessment, write the full output for each ticker to`,
+        `analysis/{today}_technical-{TICKER}.md using the Write tool,`,
+        `where {today} is today's date in YYYY-MM-DD format.`,
+        `This persists your analysis for reuse by later sessions.`,
+        ``,
         `## Output Format`,
         ``,
         `Wrap your structured summary in <technical_assessment> tags:`,
@@ -199,7 +213,7 @@ export function buildAnalystAgents(
     "risk-guardian": {
       description:
         "Risk guardian — validates proposed trades against fund constraints, concentration limits, and drawdown budget. Returns APPROVED or REJECTED verdict. This is a hard gate, not advisory.",
-      tools: ["Read", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "Bash", "Grep", "Glob"],
       prompt: [
         `You are the Risk Guardian for fund '${fundName}'.`,
         ``,
@@ -271,6 +285,13 @@ export function buildAnalystAgents(
         `Use broker-local MCP tools to check current positions and account status.`,
         `Use market-data MCP tools to fetch price data for correlation and stress analysis.`,
         ``,
+        `## Persist Your Validation`,
+        ``,
+        `After completing your validation, write the full output to`,
+        `analysis/{today}_risk-validation-{TICKER}.md using the Write tool,`,
+        `where {today} is today's date in YYYY-MM-DD format.`,
+        `This persists your validation for audit trail purposes.`,
+        ``,
         `## Output Format`,
         ``,
         `Wrap your verdict in <risk_validation> tags:`,
@@ -295,7 +316,7 @@ export function buildAnalystAgents(
     "trade-evaluator": {
       description:
         "Skeptical reviewer of proposed trades — evaluates thesis quality, checks for cognitive biases, and validates timing rationale. Invoke after forming a trade thesis but before risk-guardian.",
-      tools: ["Read", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "Bash", "Grep", "Glob"],
       prompt: [
         `You are the Trade Evaluator for fund '${fundName}'.`,
         ``,
@@ -344,6 +365,13 @@ export function buildAnalystAgents(
         `If you cannot verify a claim made in the thesis, flag it as unverified.`,
         ``,
         `Use market-data MCP tools to cross-check any data cited in the thesis.`,
+        ``,
+        `## Persist Your Evaluation`,
+        ``,
+        `After completing your evaluation, write the full output to`,
+        `analysis/{today}_trade-evaluation-{TICKER}.md using the Write tool,`,
+        `where {today} is today's date in YYYY-MM-DD format.`,
+        `This persists your evaluation for audit trail purposes.`,
         ``,
         `## Output Format`,
         ``,

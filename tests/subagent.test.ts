@@ -100,6 +100,15 @@ describe("buildAnalystAgents", () => {
       expect(agent.prompt).toMatch(/get_rss_news/);
       expect(agent.prompt).toMatch(/get_market_movers/);
     });
+
+    it("instructs agent to write analysis to file", () => {
+      expect(agent.prompt).toContain("analysis/");
+      expect(agent.prompt).toContain("_market-assessment.md");
+    });
+
+    it("has Write in tools", () => {
+      expect(agents["market-analyst"].tools).toContain("Write");
+    });
   });
 
   // ── technical-analyst ──────────────────────────────────────
@@ -123,6 +132,15 @@ describe("buildAnalystAgents", () => {
 
     it("has maxTurns of 20", () => {
       expect(agent.maxTurns).toBe(20);
+    });
+
+    it("instructs agent to write analysis to file", () => {
+      expect(agent.prompt).toContain("analysis/");
+      expect(agent.prompt).toContain("_technical-");
+    });
+
+    it("has Write in tools", () => {
+      expect(agents["technical-analyst"].tools).toContain("Write");
     });
   });
 
@@ -170,6 +188,15 @@ describe("buildAnalystAgents", () => {
     it("has description mentioning hard gate", () => {
       expect(agent.description).toMatch(/hard gate/i);
     });
+
+    it("instructs agent to write validation to file", () => {
+      expect(agent.prompt).toContain("analysis/");
+      expect(agent.prompt).toContain("_risk-validation-");
+    });
+
+    it("has Write in tools", () => {
+      expect(agents["risk-guardian"].tools).toContain("Write");
+    });
   });
 
   // ── trade-evaluator ────────────────────────────────────────
@@ -214,6 +241,15 @@ describe("buildAnalystAgents", () => {
     it("includes fund name in prompt", () => {
       const namedAgents = buildAnalystAgents("my-fund");
       expect(namedAgents["trade-evaluator"].prompt).toContain("my-fund");
+    });
+
+    it("instructs agent to write evaluation to file", () => {
+      expect(agent.prompt).toContain("analysis/");
+      expect(agent.prompt).toContain("_trade-evaluation-");
+    });
+
+    it("has Write in tools", () => {
+      expect(agents["trade-evaluator"].tools).toContain("Write");
     });
   });
 });
