@@ -581,15 +581,61 @@ Update \`state/objective_tracker.json\` with current progress metrics.
 ## Output
 Structured markdown: Decision Audit (graded), Bias Check (honest), Calibration Score
 (tracked), Journal Updates (written to DB with R-multiples), Objective Progress (updated),
-Next Session Focus (priorities for the next trading session), and for every trade reviewed:
-**What will I do differently next time?** This field is mandatory — reflection without
-behavioral change is just journaling.
+Next Session Focus (priorities for the next trading session), Contract Evaluation (feedback
+loop closed), Session Handoff (written to \`state/session-handoff.md\`), and for every trade
+reviewed: **What will I do differently next time?** This field is mandatory — reflection
+without behavioral change is just journaling.
 
 ## Follow-Up Scheduling
 If during reflection you identify something that needs checking before the next
 regular session (e.g., price level to monitor, order to verify, catalyst window),
 schedule a follow-up by writing to \`state/pending_sessions.json\`.
 See \`.claude/rules/self-scheduling.md\` for the format.
+
+### 6. Contract Evaluation
+Compare your Session Contract (written during Orient) against actual outcomes:
+
+- **Stated intent**: [copy the contract verbatim from session start]
+- **Actual outcome**: [what actually happened]
+- **Deviation**: [if any, describe what changed and why]
+- **Was the deviation justified?**: [yes/no + reasoning]
+
+This closes the feedback loop between session planning and execution. Patterns of unjustified
+deviation signal a problem with either planning or discipline.
+
+### 7. Session Handoff
+Write the full handoff to \`state/session-handoff.md\`. This file is read by the NEXT session
+(whether cron or interactive chat) to maintain continuity. The handoff replaces the minimal
+contract you wrote during Orient with the complete version.
+
+Format:
+
+\`\`\`markdown
+# Session Handoff — {date} {session_type}
+
+## Session Contract
+> [Copy original contract from Orient]
+
+## What I Did
+- [Concrete actions taken, decisions made, trades executed]
+
+## Open Concerns
+- [Issues identified but not resolved]
+
+## Deferred Decisions
+- [Decisions postponed with reasoning and timeline]
+
+## Next Session Should
+- [Specific priorities for the next session]
+
+## Market Context Snapshot
+- Regime: [classification + score]
+- VIX: [level]
+- Key events next 48h: [calendar items]
+\`\`\`
+
+This handoff is critical — every session type (cron, chat, catch-up, pending) reads it.
+An incomplete handoff breaks the continuity chain.
 `,
   },
   {
