@@ -254,6 +254,24 @@ export async function writeSessionCounts(fundName: string, counts: SessionCounts
   await writeJsonAtomic(paths.state.sessionCounts, counts);
 }
 
+// ── Session Handoff ────────────────────────────────────────────
+
+export async function readSessionHandoff(fundName: string): Promise<string | null> {
+  const paths = fundPaths(fundName);
+  try {
+    return await readFile(paths.state.sessionHandoff, "utf-8");
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+export async function writeSessionHandoff(fundName: string, content: string): Promise<void> {
+  const paths = fundPaths(fundName);
+  await mkdir(dirname(paths.state.sessionHandoff), { recursive: true });
+  await writeFile(paths.state.sessionHandoff, content, "utf-8");
+}
+
 // ── Initialize state for a new fund ────────────────────────────
 
 export async function initFundState(

@@ -19,6 +19,8 @@ import {
   readSessionLog,
   writeSessionLog,
   initFundState,
+  readSessionHandoff,
+  writeSessionHandoff,
 } from "../src/state.js";
 import type { Portfolio, ObjectiveTracker, SessionLog } from "../src/types.js";
 
@@ -212,5 +214,35 @@ describe("initFundState", () => {
     expect(trackerData.type).toBe("runway");
     expect(trackerData.initial_capital).toBe(50000);
     expect(trackerData.progress_pct).toBe(0);
+  });
+});
+
+describe("Session Handoff", () => {
+  it("reads handoff markdown from the correct path", async () => {
+    mockedReadFile.mockResolvedValueOnce("# Session Handoff — 2026-04-08 pre-market\n\n## Session Contract\n> Orient complete.");
+    const content = await readSessionHandoff("test-fund");
+    expect(content).toContain("# Session Handoff");
+    expect(mockedReadFile).toHaveBeenCalledWith(
+      expect.stringContaining("session-handoff.md"),
+      "utf-8",
+    );
+  });
+
+  it("returns null when handoff file does not exist", async () => {
+    const err = new Error("ENOENT") as NodeJS.ErrnoException;
+    err.code = "ENOENT";
+    mockedReadFile.mockRejectedValueOnce(err);
+    const content = await readSessionHandoff("test-fund");
+    expect(content).toBeNull();
+  });
+
+  it("writes handoff markdown to the correct path", async () => {
+    await writeSessionHandoff("test-fund", "# Handoff content");
+    expect(mockedMkdir).toHaveBeenCalled();
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining("session-handoff.md"),
+      "# Handoff content",
+      "utf-8",
+    );
   });
 });
