@@ -441,7 +441,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                 <Text key={i} dimColor>│</Text>
               ))}
             </Box>
-            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
+            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} height={height - 4} />
           </Box>
         )}
       </Box>
@@ -533,7 +533,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                 <Text key={i} dimColor>│</Text>
               ))}
             </Box>
-            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
+            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} height={height - 4} />
           </Box>
         )}
       </Box>
