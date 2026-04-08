@@ -61,7 +61,7 @@ vi.mock("../src/template.js", () => ({
 vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn().mockResolvedValue({
     default_model: "sonnet",
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     telegram: { enabled: false },
   }),
 }));
@@ -94,7 +94,6 @@ universe:
 schedule:
   sessions: {}
 broker:
-  provider: alpaca
   mode: paper
 claude:
   model: sonnet
@@ -131,10 +130,10 @@ describe("upgradeFund", () => {
   it("rewrites all builtin skills and rules", async () => {
     await upgradeFund("test-fund");
 
-    // mkdir is called once per skill + once for rules dir (ensureFundRules) + once for memory dir + once for rules dir again (ensureFundMemory) + once for saveFundConfig (migration, no creds)
-    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + 4);
-    // writeFile is called once per skill (SKILL.md) + once per rule file + 4 memory files + 1 memory-usage rule + 1 fund_config.yaml (migration)
-    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + getFundRuleCount() + 6);
+    // mkdir is called once per skill + once for rules dir (ensureFundRules) + once for memory dir + once for rules dir again (ensureFundMemory)
+    expect(mockedMkdir).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + 3);
+    // writeFile is called once per skill (SKILL.md) + once per rule file + 4 memory files + 1 memory-usage rule
+    expect(mockedWriteFile).toHaveBeenCalledTimes(BUILTIN_SKILLS.length + getFundRuleCount() + 5);
   });
 
   it("returns fund name and skill count", async () => {

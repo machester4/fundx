@@ -23,9 +23,6 @@ const makeGlobalConfig = (overrides: Record<string, unknown> = {}) => ({
   default_model: "sonnet",
   timezone: "America/New_York",
   broker: {
-    provider: "alpaca",
-    api_key: "ak-test-123",
-    secret_key: "sk-test-456",
     mode: "paper",
   },
   telegram: {
@@ -43,7 +40,7 @@ const makeFundConfig = (overrides: Record<string, unknown> = {}) => ({
   risk: { profile: "conservative" },
   universe: { allowed: [] },
   schedule: { sessions: {} },
-  broker: { provider: "alpaca", mode: "paper" },
+  broker: { mode: "paper" },
   claude: { model: "sonnet", personality: "Test" },
   notifications: {
     telegram: { enabled: false },
@@ -109,36 +106,32 @@ beforeEach(() => {
 // ── buildMcpServers ───────────────────────────────────────────
 
 describe("buildMcpServers", () => {
-  it("returns broker-alpaca and market-data by default", async () => {
+  it("returns broker-local and market-data by default", async () => {
     const servers = await buildMcpServers("test-fund");
 
-    expect(Object.keys(servers)).toEqual(["broker-alpaca", "market-data"]);
-    expect(servers["broker-alpaca"].command).toBe(MCP_COMMAND);
-    expect(servers["broker-alpaca"].args).toEqual([MCP_SERVERS.brokerAlpaca]);
+    expect(Object.keys(servers)).toEqual(["broker-local", "market-data"]);
+    expect(servers["broker-local"].command).toBe(MCP_COMMAND);
+    expect(servers["broker-local"].args).toEqual([MCP_SERVERS.brokerLocal]);
     expect(servers["market-data"].command).toBe(MCP_COMMAND);
     expect(servers["market-data"].args).toEqual([MCP_SERVERS.marketData]);
   });
 
-  it("passes Alpaca credentials to broker env", async () => {
+  it("passes FUND_DIR to broker-local env", async () => {
     const servers = await buildMcpServers("test-fund");
 
-    expect(servers["broker-alpaca"].env.ALPACA_API_KEY).toBe("ak-test-123");
-    expect(servers["broker-alpaca"].env.ALPACA_SECRET_KEY).toBe("sk-test-456");
-    expect(servers["broker-alpaca"].env.ALPACA_MODE).toBe("paper");
+    expect(servers["broker-local"].env.FUND_DIR).toBe(join(WORKSPACE, "funds", "test-fund"));
   });
 
-  it("omits API key env vars when credentials are empty", async () => {
+  it("passes FMP_API_KEY to broker-local env when configured", async () => {
     mockedGlobalConfig.mockResolvedValue(
       makeGlobalConfig({
-        broker: { provider: "alpaca", api_key: "", secret_key: "", mode: "paper" },
+        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
       }) as never,
     );
 
     const servers = await buildMcpServers("test-fund");
 
-    expect(servers["broker-alpaca"].env.ALPACA_API_KEY).toBeUndefined();
-    expect(servers["broker-alpaca"].env.ALPACA_SECRET_KEY).toBeUndefined();
-    expect(servers["broker-alpaca"].env.ALPACA_MODE).toBe("paper");
+    expect(servers["broker-local"].env.FMP_API_KEY).toBe("fmp-test-key");
   });
 
   it("includes telegram-notify when Telegram is fully configured", async () => {
@@ -275,16 +268,16 @@ describe("buildMcpServers", () => {
     expect(servers["telegram-notify"].env.QUIET_HOURS_ALLOW_CRITICAL).toBe("false");
   });
 
-  it("uses fund broker mode over global broker mode", async () => {
+  it("passes FUND_DIR regardless of fund broker mode", async () => {
     mockedFundConfig.mockResolvedValue(
       makeFundConfig({
-        broker: { provider: "alpaca", mode: "live" },
+        broker: { mode: "live" },
       }) as never,
     );
 
     const servers = await buildMcpServers("test-fund");
 
-    expect(servers["broker-alpaca"].env.ALPACA_MODE).toBe("live");
+    expect(servers["broker-local"].env.FUND_DIR).toBe(join(WORKSPACE, "funds", "test-fund"));
   });
 
   it("passes FMP_API_KEY to market-data when configured", async () => {
@@ -304,32 +297,6 @@ describe("buildMcpServers", () => {
     const servers = await buildMcpServers("test-fund");
 
     expect(servers["market-data"].env.FMP_API_KEY).toBeUndefined();
-  });
-
-  it("passes both Alpaca and FMP credentials to market-data when both configured", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-
-    expect(servers["market-data"].env.ALPACA_API_KEY).toBe("ak-test-123");
-    expect(servers["market-data"].env.ALPACA_SECRET_KEY).toBe("sk-test-456");
-    expect(servers["market-data"].env.FMP_API_KEY).toBe("fmp-test-key");
-  });
-
-  it("does not leak FMP_API_KEY to broker-alpaca", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-
-    expect(servers["broker-alpaca"].env.FMP_API_KEY).toBeUndefined();
   });
 
   it("includes sws server when sws token is configured", async () => {
@@ -621,7 +588,7 @@ describe("runAgentQuery", () => {
 
     const opts = capturedQueryParams?.options as Record<string, unknown>;
     const mcpServers = opts.mcpServers as Record<string, unknown>;
-    expect(mcpServers).toHaveProperty("broker-alpaca");
+    expect(mcpServers).toHaveProperty("broker-local");
     expect(mcpServers).toHaveProperty("market-data");
   });
 

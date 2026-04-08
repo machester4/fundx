@@ -61,10 +61,6 @@ vi.mock("../src/services/reports.service.js", () => ({
   generateMonthlyReport: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../src/sync.js", () => ({
-  syncPortfolio: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("../src/stoploss.js", () => ({
   checkStopLosses: vi.fn().mockResolvedValue([]),
   executeStopLosses: vi.fn().mockResolvedValue(undefined),
@@ -74,7 +70,7 @@ vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn().mockResolvedValue({
     default_model: "sonnet",
     timezone: "America/New_York",
-    broker: { provider: "alpaca", api_key: "k", secret_key: "s", mode: "paper" },
+    broker: { mode: "paper" },
   }),
 }));
 
@@ -114,7 +110,6 @@ vi.mock("../src/services/news.service.js", () => ({
 // Import after mocks
 import cron from "node-cron";
 import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
-import { syncPortfolio } from "../src/sync.js";
 import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
 import { generateDailyReport } from "../src/services/reports.service.js";
 import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions } from "../src/services/daemon.service.js";
@@ -157,7 +152,7 @@ const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
         pre_market: { time: "09:00", enabled: true, focus: "Morning" },
       },
     },
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     ...overrides,
   });
 
@@ -210,22 +205,6 @@ describe("daemon cron callback", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  it("calls syncPortfolio at 09:30 on trading days", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T09:30:00Z")); // Monday UTC
-    await capturedCronCallback!();
-
-    expect(syncPortfolio).toHaveBeenCalledWith("test-fund");
-  });
-
-  it("does NOT call syncPortfolio at other times", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-23T10:00:00Z")); // Monday 10:00 UTC
-    await capturedCronCallback!();
-
-    expect(syncPortfolio).not.toHaveBeenCalled();
   });
 
   it("calls checkStopLosses every 5 min during market hours", async () => {
@@ -303,7 +282,7 @@ describe("daemon cron callback", () => {
     expect(executeStopLosses).not.toHaveBeenCalled();
   });
 
-  it("skips inactive funds for sync and stoploss", async () => {
+  it("skips inactive funds for stoploss", async () => {
     vi.mocked(loadFundConfig).mockResolvedValue(
       makeFundConfig({
         fund: {
@@ -320,16 +299,14 @@ describe("daemon cron callback", () => {
     vi.setSystemTime(new Date("2026-02-23T09:30:00Z")); // UTC
     await capturedCronCallback!();
 
-    expect(syncPortfolio).not.toHaveBeenCalled();
     expect(checkStopLosses).not.toHaveBeenCalled();
   });
 
-  it("skips non-trading days for sync and stoploss", async () => {
+  it("skips non-trading days for stoploss", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-22T09:30:00Z")); // Sunday UTC
     await capturedCronCallback!();
 
-    expect(syncPortfolio).not.toHaveBeenCalled();
     expect(checkStopLosses).not.toHaveBeenCalled();
   });
 

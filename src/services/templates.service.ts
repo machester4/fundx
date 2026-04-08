@@ -284,7 +284,7 @@ export async function createFromBuiltinTemplate(
         },
       },
     },
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     claude: template.claude,
   });
 

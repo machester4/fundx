@@ -27,9 +27,6 @@ describe("loadGlobalConfig", () => {
     mockedReadFile.mockResolvedValue(`
 default_model: opus
 broker:
-  provider: alpaca
-  api_key: test-key
-  secret_key: test-secret
   mode: paper
 telegram:
   bot_token: "123:ABC"
@@ -39,8 +36,7 @@ telegram:
 
     const config = await loadGlobalConfig();
     expect(config.default_model).toBe("opus");
-    expect(config.broker.provider).toBe("alpaca");
-    expect(config.broker.api_key).toBe("test-key");
+    expect(config.broker.mode).toBe("paper");
     expect(config.telegram.bot_token).toBe("123:ABC");
     expect(config.telegram.enabled).toBe(true);
   });
@@ -50,8 +46,6 @@ telegram:
 
     const config = await loadGlobalConfig();
     expect(config.default_model).toBe("sonnet");
-    expect(config.broker.provider).toBe("manual");
-    expect(config.broker.mode).toBe("paper");
     expect(config.telegram.enabled).toBe(false);
   });
 
@@ -68,7 +62,6 @@ telegram:
     const config = await loadGlobalConfig();
     expect(config.default_model).toBe("haiku");
     expect(config.timezone).toBe("UTC");
-    expect(config.broker.mode).toBe("paper");
   });
 });
 
@@ -77,7 +70,7 @@ describe("saveGlobalConfig", () => {
     const config = {
       default_model: "opus",
       timezone: "US/Eastern",
-      broker: { provider: "alpaca", mode: "paper" as const },
+      broker: { mode: "paper" as const },
       telegram: { enabled: false },
     };
 

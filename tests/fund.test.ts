@@ -51,7 +51,7 @@ vi.mock("../src/template.js", () => ({
 vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn().mockResolvedValue({
     default_model: "sonnet",
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     telegram: { enabled: false },
   }),
 }));
@@ -89,7 +89,6 @@ universe:
 schedule:
   sessions: {}
 broker:
-  provider: alpaca
   mode: paper
 claude:
   model: sonnet

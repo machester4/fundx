@@ -7,14 +7,14 @@ import { WizardStep } from "../components/WizardStep.js";
 
 export const description = "Initialize FundX workspace";
 
-type Step = "check" | "timezone" | "model" | "broker" | "apiKey" | "secretKey" | "botToken" | "chatId" | "done";
+type Step = "check" | "timezone" | "model" | "botToken" | "chatId" | "done";
 
 export default function Init() {
   const [step, setStep] = useState<Step>("check");
   const [data, setData] = useState({
     timezone: "UTC",
     defaultModel: "sonnet",
-    brokerProvider: "alpaca",
+    brokerProvider: "paper",
     apiKey: "",
     secretKey: "",
     botToken: "",
@@ -62,7 +62,7 @@ export default function Init() {
 
   if (step === "model") {
     return (
-      <WizardStep step={2} totalSteps={4} title="Default Claude model">
+      <WizardStep step={2} totalSteps={3} title="Default Claude model">
         <Select
           options={[
             { label: "Sonnet (balanced)", value: "sonnet" },
@@ -71,53 +71,6 @@ export default function Init() {
           ]}
           onChange={(value) => {
             setData((d) => ({ ...d, defaultModel: value }));
-            setStep("broker");
-          }}
-        />
-      </WizardStep>
-    );
-  }
-
-  if (step === "broker") {
-    return (
-      <WizardStep step={3} totalSteps={4} title="Default broker">
-        <Select
-          options={[
-            { label: "Alpaca (stocks, ETFs)", value: "alpaca" },
-            { label: "Interactive Brokers", value: "ibkr" },
-            { label: "Binance (crypto)", value: "binance" },
-            { label: "Manual (no auto-execution)", value: "manual" },
-          ]}
-          onChange={(value) => {
-            setData((d) => ({ ...d, brokerProvider: value }));
-            setStep(value !== "manual" ? "apiKey" : "botToken");
-          }}
-        />
-      </WizardStep>
-    );
-  }
-
-  if (step === "apiKey") {
-    return (
-      <WizardStep step={4} totalSteps={4} title={`${data.brokerProvider} API key`}>
-        <TextInput
-          placeholder="Enter API key..."
-          onSubmit={(value) => {
-            setData((d) => ({ ...d, apiKey: value }));
-            setStep("secretKey");
-          }}
-        />
-      </WizardStep>
-    );
-  }
-
-  if (step === "secretKey") {
-    return (
-      <WizardStep step={4} totalSteps={4} title={`${data.brokerProvider} secret key`}>
-        <TextInput
-          placeholder="Enter secret key..."
-          onSubmit={(value) => {
-            setData((d) => ({ ...d, secretKey: value }));
             setStep("botToken");
           }}
         />
@@ -127,7 +80,7 @@ export default function Init() {
 
   if (step === "botToken") {
     return (
-      <WizardStep step={4} totalSteps={4} title="Telegram bot token (empty to skip)">
+      <WizardStep step={3} totalSteps={3} title="Telegram bot token (empty to skip)">
         <TextInput
           placeholder="Enter bot token or press Enter to skip..."
           onSubmit={(value) => {
@@ -146,7 +99,7 @@ export default function Init() {
 
   if (step === "chatId") {
     return (
-      <WizardStep step={4} totalSteps={4} title="Your Telegram chat ID">
+      <WizardStep step={3} totalSteps={3} title="Your Telegram chat ID">
         <TextInput
           placeholder="Enter chat ID..."
           onSubmit={(value) => {

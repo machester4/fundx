@@ -33,7 +33,7 @@ function makeConfig(
         max_duration_minutes: 15,
       })),
     },
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     notifications: { telegram: { enabled: false, trade_alerts: true, stop_loss_alerts: true, daily_digest: true, weekly_digest: true, milestone_alerts: true, drawdown_alerts: true }, quiet_hours: { enabled: true, start: "23:00", end: "07:00", allow_critical: true } },
     claude: { model: "sonnet", personality: "", decision_framework: "" },
   } as FundConfig;
