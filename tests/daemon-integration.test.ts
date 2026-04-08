@@ -82,17 +82,28 @@ vi.mock("../src/state.js", () => ({
     positions: [],
   }),
   writePortfolio: vi.fn().mockResolvedValue(undefined),
+  readTracker: vi.fn().mockResolvedValue(null),
   readSessionHistory: vi.fn().mockResolvedValue({}),
   writeSessionHistory: vi.fn().mockResolvedValue(undefined),
   readPendingSessions: vi.fn().mockResolvedValue([]),
   writePendingSessions: vi.fn().mockResolvedValue(undefined),
   readSessionCounts: vi.fn().mockResolvedValue({ date: "2026-01-01", agent: 0, news: 0 }),
   writeSessionCounts: vi.fn().mockResolvedValue(undefined),
+  readDailySnapshot: vi.fn().mockResolvedValue(null),
+  writeDailySnapshot: vi.fn().mockResolvedValue(undefined),
+  readNotifiedMilestones: vi.fn().mockResolvedValue({
+    thresholds_notified: [],
+    peak_value: 0,
+    drawdown_thresholds_notified: [],
+    last_checked: null,
+  }),
+  writeNotifiedMilestones: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/journal.js", () => ({
   openJournal: vi.fn().mockReturnValue({ close: vi.fn() }),
   insertTrade: vi.fn().mockReturnValue(1),
+  getTradesInDays: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock("../src/lock.js", () => ({
@@ -112,7 +123,7 @@ import cron from "node-cron";
 import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";
 import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
 import { generateDailyReport } from "../src/services/reports.service.js";
-import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions, cleanOldAnalysisFiles } from "../src/services/daemon.service.js";
+import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions, cleanOldAnalysisFiles, sendDailyDigest, sendWeeklyDigest, checkMilestonesAndDrawdown } from "../src/services/daemon.service.js";
 import { runFundSession } from "../src/services/session.service.js";
 import { readSessionHistory } from "../src/state.js";
 import type { FundConfig } from "../src/types.js";
@@ -438,5 +449,29 @@ describe("daemon catch-up on startup", () => {
         focus: expect.stringContaining("[CATCH-UP]"),
       }),
     );
+  });
+});
+
+// ── sendDailyDigest ──────────────────────────────────────────
+
+describe("sendDailyDigest", () => {
+  it("is exported and callable", () => {
+    expect(typeof sendDailyDigest).toBe("function");
+  });
+});
+
+// ── sendWeeklyDigest ─────────────────────────────────────────
+
+describe("sendWeeklyDigest", () => {
+  it("is exported and callable", () => {
+    expect(typeof sendWeeklyDigest).toBe("function");
+  });
+});
+
+// ── checkMilestonesAndDrawdown ───────────────────────────────
+
+describe("checkMilestonesAndDrawdown", () => {
+  it("is exported and callable", () => {
+    expect(typeof checkMilestonesAndDrawdown).toBe("function");
   });
 });
