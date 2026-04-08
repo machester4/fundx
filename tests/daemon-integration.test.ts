@@ -325,6 +325,34 @@ describe("cleanOldAnalysisFiles", () => {
   it("is exported and callable", () => {
     expect(typeof cleanOldAnalysisFiles).toBe("function");
   });
+
+  it("deletes .md files older than 30 days and keeps recent ones", async () => {
+    const { listFundNames } = await import("../src/services/fund.service.js");
+    const { readdir, stat, unlink } = await import("node:fs/promises");
+
+    vi.mocked(listFundNames).mockResolvedValueOnce(["test-fund"]);
+    vi.mocked(readdir).mockResolvedValueOnce(["old-analysis.md", "recent-analysis.md", "data.json"] as never);
+
+    const now = Date.now();
+    const thirtyOneDaysAgo = now - 31 * 24 * 60 * 60 * 1000;
+    const oneDayAgo = now - 1 * 24 * 60 * 60 * 1000;
+
+    vi.mocked(stat)
+      .mockResolvedValueOnce({ mtimeMs: thirtyOneDaysAgo } as never)  // old-analysis.md
+      .mockResolvedValueOnce({ mtimeMs: oneDayAgo } as never);         // recent-analysis.md
+
+    await cleanOldAnalysisFiles();
+
+    // Should delete old .md file
+    expect(unlink).toHaveBeenCalledWith(
+      expect.stringContaining("old-analysis.md"),
+    );
+    // Should NOT delete recent .md file
+    const unlinkCalls = vi.mocked(unlink).mock.calls.map((c) => c[0] as string);
+    expect(unlinkCalls.some((p) => p.includes("recent-analysis.md"))).toBe(false);
+    // Should skip non-.md files entirely (no stat call for data.json)
+    expect(stat).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ── Catch-up on startup ──────────────────────────────────────
