@@ -12,7 +12,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadFundConfig, listFundNames } from "./fund.service.js";
 import { loadGlobalConfig } from "../config.js";
-import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession, initFundState } from "../state.js";
+import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeActiveSession, readSessionHandoff, initFundState } from "../state.js";
 import { openJournal, getTradeSummary } from "../journal.js";
 import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
@@ -63,6 +63,7 @@ export interface ChatWelcomeData {
   tracker: ObjectiveTracker | null;
   lastSession: { session_type: string; started_at: string; trades_executed: number; summary?: string } | null;
   tradeSummary: TradeSummaryData | null;
+  handoff: string | null;
   daemon: { running: boolean; pid?: number };
   recentLogs: string[];
 }
@@ -228,9 +229,11 @@ export async function loadChatWelcomeData(
   let tracker: ObjectiveTracker | null = null;
   let lastSession: ChatWelcomeData["lastSession"] = null;
   let tradeSummary: TradeSummaryData | null = null;
+  let handoff: string | null = null;
 
   try { portfolio = await readPortfolio(fundName); } catch { /* noop */ }
   try { tracker = await readTracker(fundName); } catch { /* noop */ }
+  try { handoff = await readSessionHandoff(fundName); } catch { /* noop */ }
   try {
     const s = await readSessionLog(fundName);
     if (s) lastSession = s;
@@ -255,6 +258,7 @@ export async function loadChatWelcomeData(
     tracker,
     lastSession,
     tradeSummary,
+    handoff,
     daemon,
     recentLogs,
   };
