@@ -77,16 +77,36 @@ export async function buildMcpServers(
   const fundConfig = await loadFundConfig(fundName);
   const paths = fundPaths(fundName);
 
+  // Build broker-local env — include Telegram vars when notifications are enabled
+  const brokerLocalEnv: Record<string, string> = {
+    FUND_DIR: paths.root,
+    ...(globalConfig.market_data?.fmp_api_key
+      ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
+      : {}),
+  };
+  if (
+    globalConfig.telegram.bot_token &&
+    globalConfig.telegram.chat_id &&
+    fundConfig.notifications.telegram.enabled
+  ) {
+    const tg = fundConfig.notifications.telegram;
+    const qh = fundConfig.notifications.quiet_hours;
+    brokerLocalEnv.TELEGRAM_BOT_TOKEN = globalConfig.telegram.bot_token;
+    brokerLocalEnv.TELEGRAM_CHAT_ID = globalConfig.telegram.chat_id;
+    brokerLocalEnv.NOTIFY_TRADE_ALERTS = String(tg.trade_alerts);
+    brokerLocalEnv.NOTIFY_STOP_LOSS_ALERTS = String(tg.stop_loss_alerts);
+    if (qh.enabled) {
+      brokerLocalEnv.QUIET_HOURS_START = qh.start;
+      brokerLocalEnv.QUIET_HOURS_END = qh.end;
+      brokerLocalEnv.QUIET_HOURS_ALLOW_CRITICAL = String(qh.allow_critical);
+    }
+  }
+
   const servers: Record<string, McpStdioConfig> = {
     "broker-local": {
       command: MCP_COMMAND,
       args: [MCP_SERVERS.brokerLocal],
-      env: {
-        FUND_DIR: paths.root,
-        ...(globalConfig.market_data?.fmp_api_key
-          ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
-          : {}),
-      },
+      env: brokerLocalEnv,
     },
     "market-data": {
       command: MCP_COMMAND,
