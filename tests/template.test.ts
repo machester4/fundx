@@ -246,25 +246,40 @@ describe("generateFundClaudeMd", () => {
     expect(content).toContain("Via negativa");
   });
 
-  // --- 8-step Session Protocol with risk-guardian ---
+  // --- 8-step Session Protocol with two-gate validation ---
 
-  it("contains 8-step session protocol with risk-guardian", async () => {
+  it("contains 8-step session protocol with two-gate validation", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
     expect(content).toContain("## Session Protocol");
     expect(content).toContain("Orient");
+    expect(content).toContain("session-init");
+    expect(content).toContain("Session Contract");
     expect(content).toContain("Analyze");
     expect(content).toContain("Decide");
     expect(content).toContain("Validate");
+    expect(content).toContain("Two gates");
+    expect(content).toContain("trade-evaluator");
+    expect(content).toContain("risk-guardian");
     expect(content).toContain("Execute");
     expect(content).toContain("Reflect");
+    expect(content).toContain("session-handoff.md");
     expect(content).toContain("Communicate");
     expect(content).toContain("Follow-up");
-    expect(content).toContain("risk-guardian");
-    // 8 numbered steps
     expect(content).toContain("8. **Follow-up**");
+  });
+
+  it("State Files section includes session-handoff.md", async () => {
+    const config = makeConfig();
+    await generateFundClaudeMd(config);
+    const content = mockedWriteFile.mock.calls[0][1] as string;
+    const stateIdx = content.indexOf("## State Files");
+    const mentalIdx = content.indexOf("## Mental Models");
+    const stateBlock = content.slice(stateIdx, mentalIdx);
+    expect(stateBlock).toContain("session-handoff.md");
+    expect(stateBlock).toContain("Rich handoff context");
   });
 
   // --- Anti-hallucination directive ---

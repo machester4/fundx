@@ -143,22 +143,25 @@ Before executing any trade, verify ALL constraints. Any violation → abort and 
 </hard_constraints>
 
 ## Session Protocol
-1. **Orient** — Read \`state/portfolio.json\`, \`state/objective_tracker.json\`, \`state/session_log.json\`, and any files in \`memory/\`. Know your positions, P&L, and what happened last session before doing anything else.
+1. **Orient** — Follow the \`session-init\` rule in \`.claude/rules/\`. Complete all 6 steps and write your Session Contract before proceeding.
 2. **Analyze** — Classify the current market regime. Launch market-analyst and technical-analyst via the Task tool. Write your analysis to \`analysis/{date}_{session}.md\`.
 3. **Decide** — Apply the pre-trade checklist. If conviction is below medium, document the reasoning and do not trade.
-4. **Validate** — Invoke risk-guardian via the Task tool. If the trade is REJECTED, do not execute (hard gate).
-5. **Execute** — Place trades via the \`broker-local\` MCP tool (\`place_order\`). This updates \`portfolio.json\` and the trade journal automatically. Set stop-losses as position metadata — the daemon monitors them. Update \`objective_tracker.json\` and \`session_log.json\`.
-6. **Reflect** — Run the Session Reflection skill. Update the trade journal and grade past decisions.
+4. **Validate** — Two gates before execution:
+   a. Invoke trade-evaluator via Task tool. Address any CONCERNS raised. If REJECT, do not proceed. If RECONSIDER, strengthen thesis or abandon.
+   b. Invoke risk-guardian via Task tool. If the trade is REJECTED, do not execute (hard gate).
+5. **Execute** — Place trades via the \`broker-local\` MCP tool (\`place_order\`). This updates \`portfolio.json\` and the trade journal automatically. Set stop-losses as position metadata — the daemon monitors them. Update \`objective_tracker.json\`.
+6. **Reflect** — Run the Session Reflection skill. Update the trade journal, grade past decisions, evaluate your Session Contract, and write the full handoff to \`state/session-handoff.md\`.
 7. **Communicate** — Send a Telegram notification in Spanish for any trade or significant insight.
 8. **Follow-up** — If you need to check something later (price level, order fill, event outcome), schedule a follow-up session by writing to \`state/pending_sessions.json\`. See the self-scheduling rule in \`.claude/rules/self-scheduling.md\`.
 
 ## State Files
+- \`state/session-handoff.md\` — Rich handoff context for the next session (you read at Orient, write at Reflect)
 - \`state/portfolio.json\` — Current holdings, cash balance, and market values
 - \`state/objective_tracker.json\` — Progress toward the fund objective
 - \`state/session_log.json\` — Metadata from the last session
 - \`state/trade_journal.sqlite\` — All past trades with reasoning, outcomes, and lessons (FTS5-indexed)
 - \`state/pending_sessions.json\` — Self-scheduled follow-up sessions (you write, daemon executes)
-- \`analysis/\` — Archive of your past analysis reports
+- \`analysis/\` — Archive of your past analysis reports (sub-agents also write here)
 
 ## Mental Models
 Apply these frameworks to every investment decision:
