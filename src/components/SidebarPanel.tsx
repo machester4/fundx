@@ -15,9 +15,9 @@ export function SidebarPanel({ title, value, width, children }: SidebarPanelProp
   const header = `┌ ${titlePart} ${"─".repeat(dashCount)}┐`;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={width}>
       <Text dimColor>{header}</Text>
-      <Box flexDirection="column" paddingLeft={1}>
+      <Box flexDirection="column" paddingLeft={1} width={width - 1}>
         {children}
       </Box>
     </Box>
