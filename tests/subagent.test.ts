@@ -10,13 +10,14 @@ describe("buildAnalystAgents", () => {
   // ── Structure ───────────────────────────────────────────────
 
   it("returns exactly 3 agent definitions", () => {
-    expect(keys).toHaveLength(3);
+    expect(keys).toHaveLength(4);
   });
 
   it("contains the new agent names", () => {
     expect(keys).toContain("market-analyst");
     expect(keys).toContain("technical-analyst");
     expect(keys).toContain("risk-guardian");
+    expect(keys).toContain("trade-evaluator");
   });
 
   it("does NOT contain old agent names", () => {
@@ -168,6 +169,51 @@ describe("buildAnalystAgents", () => {
 
     it("has description mentioning hard gate", () => {
       expect(agent.description).toMatch(/hard gate/i);
+    });
+  });
+
+  // ── trade-evaluator ────────────────────────────────────────
+
+  describe("trade-evaluator", () => {
+    const agent = agents["trade-evaluator"];
+
+    it("has market-data MCP server", () => {
+      expect(agent.mcpServers).toContain("market-data");
+    });
+
+    it("has skepticism-tuned prompt", () => {
+      expect(agent.prompt).toMatch(/skeptical/i);
+      expect(agent.prompt).toMatch(/find reasons NOT to/i);
+    });
+
+    it("checks for cognitive biases", () => {
+      expect(agent.prompt).toMatch(/confirmation bias/i);
+      expect(agent.prompt).toMatch(/FOMO/i);
+      expect(agent.prompt).toMatch(/anchoring/i);
+      expect(agent.prompt).toMatch(/recency bias/i);
+    });
+
+    it("checks journal consultation", () => {
+      expect(agent.prompt).toMatch(/journal/i);
+      expect(agent.prompt).toMatch(/consulted/i);
+    });
+
+    it("outputs <trade_evaluation> XML", () => {
+      expect(agent.prompt).toContain("<trade_evaluation>");
+      expect(agent.prompt).toContain("SCORE");
+      expect(agent.prompt).toContain("RECOMMENDATION");
+      expect(agent.prompt).toContain("PROCEED");
+      expect(agent.prompt).toContain("RECONSIDER");
+      expect(agent.prompt).toContain("REJECT");
+    });
+
+    it("has maxTurns of 15", () => {
+      expect(agent.maxTurns).toBe(15);
+    });
+
+    it("includes fund name in prompt", () => {
+      const namedAgents = buildAnalystAgents("my-fund");
+      expect(namedAgents["trade-evaluator"].prompt).toContain("my-fund");
     });
   });
 });
