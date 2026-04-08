@@ -1201,6 +1201,96 @@ consistency and searchability.
   numbers in their original form (e.g., "AAPL subió 3.2% a $185.40")
 `,
   },
+  {
+    fileName: "session-init.md",
+    content: `# Session Initialization — Mandatory Sequence
+
+Before ANY analysis or action, complete these steps IN ORDER:
+
+1. **Read handoff** — Read \`state/session-handoff.md\`. Understand what the last session did,
+   what it deferred, and what it recommended for this session. If missing or stale (>24h),
+   note this and proceed — you will rely more heavily on state files.
+
+2. **Read state** — Read \`state/portfolio.json\` and \`state/objective_tracker.json\`.
+   Know current positions, cash, total value, and objective progress.
+
+3. **Read session log** — Read \`state/session_log.json\`. Check last session status, cost,
+   timing. If the last session errored, investigate why before proceeding.
+
+4. **Check pending** — Read \`state/pending_sessions.json\`. Was this session self-scheduled?
+   If so, the reason is in the pending entry — address it.
+
+5. **Verify state integrity** — Portfolio cash + sum(position market_values) should
+   approximate total_value (within 2%). If not, investigate before trading.
+
+6. **Write Session Contract** — Write a minimal handoff to \`state/session-handoff.md\` with
+   your session contract:
+
+   > Orient complete. Portfolio: $[cash] cash, [N] positions, [X]% toward objective.
+   > Last session: [type] on [date], status [ok/error].
+   > This session intent: [what you plan to do and why].
+
+   This serves two purposes: confirms you completed Orient, and ensures the next session
+   has context even if this session is interrupted.
+
+Only after completing all 6 steps, proceed with analysis.
+
+## Session-Type Priorities
+
+After Orient, prioritize based on session type:
+
+- **pre-market**: Overnight developments, regime check, plan today's actions, set alerts
+- **mid-session**: Verify morning thesis still valid, check price levels, execute if triggers hit
+- **post-market**: Close-of-day review, full reflection, comprehensive handoff for tomorrow
+- **catch-up**: Understand what was missed, compressed analysis, flag anything urgent
+- **pending (self-scheduled)**: Address the specific reason this session was scheduled
+- **chat (interactive)**: Read handoff for context, then respond to user's needs
+
+## Analysis Reuse
+
+After Orient, before launching sub-agents, check \`analysis/\` for assessments from
+the last 4 hours. If a market-assessment exists from today and conditions have not changed
+materially, you may reference it instead of re-running the market-analyst. This saves turns
+and cost.
+
+Reuse criteria: same trading day, no major news since assessment, regime has not shifted.
+`,
+  },
+  {
+    fileName: "session-completion.md",
+    content: `# Session Completion — Verification Required
+
+Before ending any session, verify ALL of the following:
+
+1. **Data-backed claims**: Every recommendation or assessment made this session has
+   supporting data retrieved from a tool call THIS session. No claims from memory or
+   prior sessions without fresh verification.
+
+2. **Trade integrity**: If trades were executed, verify:
+   - \`portfolio.json\` reflects the trades (read it back)
+   - Trade journal entry exists with thesis, stop-loss, and R-value
+   - Telegram notification was sent
+
+3. **Analysis quality**: If analysis was written to \`analysis/\`, verify it contains
+   specific numbers, dates, and sources. Flag and fix any vague language.
+
+4. **Handoff written**: \`state/session-handoff.md\` has been updated with the full
+   handoff (not just the contract from Orient).
+
+5. **Reflection completed**: Session Reflection skill has been run. Even "nothing
+   happened" sessions require reflection on why inaction was chosen and whether
+   it was correct.
+
+6. **Objective tracker current**: \`state/objective_tracker.json\` reflects current
+   portfolio value and progress.
+
+7. **Contract evaluated**: The Session Contract from Orient has been compared against
+   actual outcomes in the reflection.
+
+If any check fails, address it before ending. Do not skip checks because "the session
+is running low on turns" — an incomplete handoff costs more than an extra turn.
+`,
+  },
 ];
 
 /**

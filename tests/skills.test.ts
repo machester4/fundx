@@ -17,6 +17,7 @@ import {
   ensureSkillFiles,
   ensureFundSkillFiles,
   ensureWorkspaceSkillFiles,
+  ensureFundRules,
 } from "../src/skills.js";
 import { writeFile, mkdir } from "node:fs/promises";
 
@@ -246,5 +247,40 @@ describe("ensureWorkspaceSkillFiles", () => {
     expect(mockedWriteFile).toHaveBeenCalledTimes(1);
     const writtenPath = mockedWriteFile.mock.calls[0][0] as string;
     expect(writtenPath).toContain("create-fund/SKILL.md");
+  });
+});
+
+describe("FUND_RULES", () => {
+  it("includes session-init rule", async () => {
+    vi.clearAllMocks();
+    await ensureFundRules("/test/fund/.claude");
+    const calls = mockedWriteFile.mock.calls.map((c) => c[0] as string);
+    expect(calls.some((p) => p.endsWith("session-init.md"))).toBe(true);
+    const initCall = mockedWriteFile.mock.calls.find((c) => (c[0] as string).endsWith("session-init.md"));
+    const content = initCall![1] as string;
+    expect(content).toContain("Session Initialization");
+    expect(content).toContain("Read handoff");
+    expect(content).toContain("session-handoff.md");
+    expect(content).toContain("Session Contract");
+    expect(content).toContain("Session-Type Priorities");
+    expect(content).toContain("pre-market");
+    expect(content).toContain("post-market");
+    expect(content).toContain("catch-up");
+  });
+
+  it("includes session-completion rule", async () => {
+    vi.clearAllMocks();
+    await ensureFundRules("/test/fund/.claude");
+    const calls = mockedWriteFile.mock.calls.map((c) => c[0] as string);
+    expect(calls.some((p) => p.endsWith("session-completion.md"))).toBe(true);
+    const completionCall = mockedWriteFile.mock.calls.find((c) => (c[0] as string).endsWith("session-completion.md"));
+    const content = completionCall![1] as string;
+    expect(content).toContain("Session Completion");
+    expect(content).toContain("Verification Required");
+    expect(content).toContain("Data-backed claims");
+    expect(content).toContain("Handoff written");
+    expect(content).toContain("session-handoff.md");
+    expect(content).toContain("Reflection completed");
+    expect(content).toContain("Contract evaluated");
   });
 });
