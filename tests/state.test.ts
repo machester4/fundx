@@ -236,13 +236,17 @@ describe("Session Handoff", () => {
     expect(content).toBeNull();
   });
 
-  it("writes handoff markdown to the correct path", async () => {
+  it("writes handoff markdown atomically (tmp + rename)", async () => {
     await writeSessionHandoff("test-fund", "# Handoff content");
     expect(mockedMkdir).toHaveBeenCalled();
     expect(mockedWriteFile).toHaveBeenCalledWith(
-      expect.stringContaining("session-handoff.md"),
+      expect.stringContaining("session-handoff.md.tmp"),
       "# Handoff content",
       "utf-8",
+    );
+    expect(mockedRename).toHaveBeenCalledWith(
+      expect.stringContaining("session-handoff.md.tmp"),
+      expect.stringContaining("session-handoff.md"),
     );
   });
 });

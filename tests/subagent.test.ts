@@ -9,7 +9,7 @@ describe("buildAnalystAgents", () => {
 
   // ── Structure ───────────────────────────────────────────────
 
-  it("returns exactly 3 agent definitions", () => {
+  it("returns exactly 4 agent definitions", () => {
     expect(keys).toHaveLength(4);
   });
 
