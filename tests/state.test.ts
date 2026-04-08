@@ -21,6 +21,10 @@ import {
   initFundState,
   readSessionHandoff,
   writeSessionHandoff,
+  readDailySnapshot,
+  writeDailySnapshot,
+  readNotifiedMilestones,
+  writeNotifiedMilestones,
 } from "../src/state.js";
 import type { Portfolio, ObjectiveTracker, SessionLog } from "../src/types.js";
 
@@ -214,6 +218,73 @@ describe("initFundState", () => {
     expect(trackerData.type).toBe("runway");
     expect(trackerData.initial_capital).toBe(50000);
     expect(trackerData.progress_pct).toBe(0);
+  });
+});
+
+describe("Daily Snapshot", () => {
+  it("reads daily snapshot from the correct path", async () => {
+    mockedReadFile.mockResolvedValueOnce(JSON.stringify({ date: "2026-04-08", total_value: 10000 }));
+    const snapshot = await readDailySnapshot("test-fund");
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.date).toBe("2026-04-08");
+    expect(snapshot!.total_value).toBe(10000);
+  });
+
+  it("returns null when snapshot does not exist", async () => {
+    const err = new Error("ENOENT") as NodeJS.ErrnoException;
+    err.code = "ENOENT";
+    mockedReadFile.mockRejectedValueOnce(err);
+    const snapshot = await readDailySnapshot("test-fund");
+    expect(snapshot).toBeNull();
+  });
+
+  it("writes daily snapshot atomically", async () => {
+    await writeDailySnapshot("test-fund", { date: "2026-04-08", total_value: 10000 });
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining("daily_snapshot.json.tmp"),
+      expect.stringContaining("10000"),
+      "utf-8",
+    );
+    expect(mockedRename).toHaveBeenCalled();
+  });
+});
+
+describe("Notified Milestones", () => {
+  it("reads milestones from the correct path", async () => {
+    mockedReadFile.mockResolvedValueOnce(JSON.stringify({
+      thresholds_notified: [10, 25],
+      peak_value: 12500,
+      drawdown_thresholds_notified: [],
+      last_checked: "2026-04-08T15:30:00Z",
+    }));
+    const milestones = await readNotifiedMilestones("test-fund");
+    expect(milestones.thresholds_notified).toEqual([10, 25]);
+    expect(milestones.peak_value).toBe(12500);
+  });
+
+  it("returns defaults when file does not exist", async () => {
+    const err = new Error("ENOENT") as NodeJS.ErrnoException;
+    err.code = "ENOENT";
+    mockedReadFile.mockRejectedValueOnce(err);
+    const milestones = await readNotifiedMilestones("test-fund");
+    expect(milestones.thresholds_notified).toEqual([]);
+    expect(milestones.peak_value).toBe(0);
+    expect(milestones.drawdown_thresholds_notified).toEqual([]);
+  });
+
+  it("writes milestones atomically", async () => {
+    await writeNotifiedMilestones("test-fund", {
+      thresholds_notified: [10],
+      peak_value: 10500,
+      drawdown_thresholds_notified: [],
+      last_checked: "2026-04-08T16:00:00Z",
+    });
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining("notified_milestones.json.tmp"),
+      expect.stringContaining("10500"),
+      "utf-8",
+    );
+    expect(mockedRename).toHaveBeenCalled();
   });
 });
 
