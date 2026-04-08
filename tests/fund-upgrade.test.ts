@@ -51,6 +51,7 @@ vi.mock("../src/paths.js", () => ({
 
 vi.mock("../src/state.js", () => ({
   initFundState: vi.fn(),
+  clearActiveSession: vi.fn(),
 }));
 
 const mockedGenerateFundClaudeMd = vi.fn().mockResolvedValue(undefined);
