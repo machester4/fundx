@@ -444,9 +444,17 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             {isWorkspaceMode ? (
               <Text dimColor>Type a message or /help for commands.</Text>
             ) : (
-              <Text dimColor>
-                Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
-              </Text>
+              <>
+                {welcomeData?.handoff && (
+                  <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+                    <Text bold dimColor>Last Session Handoff</Text>
+                    <Text dimColor>{welcomeData.handoff}</Text>
+                  </Box>
+                )}
+                <Text dimColor>
+                  Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
+                </Text>
+              </>
             )}
           </Box>
         )}
