@@ -21,11 +21,13 @@ export function ChatSidebar({ data, width }: ChatSidebarProps) {
   }
 
   return (
-    <Box flexDirection="column" width={width} gap={0}>
+    <Box flexDirection="column" width={width} flexGrow={1}>
       <HandoffPanel handoff={data.handoff} width={width} />
       <PortfolioPanel portfolio={data.portfolio} width={width} />
       <UpcomingPanel items={data.upcoming} width={width} />
       <MarketPanel tickers={data.market} isMarketOpen={data.isMarketOpen} width={width} />
+      {/* Spacer fills remaining height */}
+      <Box flexGrow={1} />
     </Box>
   );
 }

@@ -522,7 +522,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
         {/* Sidebar */}
         {showSidebar && (
-          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor overflowY="hidden">
+          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor flexGrow={0}>
             <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
           </Box>
         )}
