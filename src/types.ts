@@ -266,6 +266,22 @@ export const objectiveTrackerSchema = z.object({
 
 export type ObjectiveTracker = z.infer<typeof objectiveTrackerSchema>;
 
+export const dailySnapshotSchema = z.object({
+  date: z.string(),
+  total_value: z.number(),
+});
+
+export type DailySnapshot = z.infer<typeof dailySnapshotSchema>;
+
+export const notifiedMilestonesSchema = z.object({
+  thresholds_notified: z.array(z.number()).default([]),
+  peak_value: z.number().default(0),
+  drawdown_thresholds_notified: z.array(z.number()).default([]),
+  last_checked: z.string().default(""),
+});
+
+export type NotifiedMilestones = z.infer<typeof notifiedMilestonesSchema>;
+
 export const sessionLogSchema = z.object({
   fund: z.string(),
   session_type: z.string(),

@@ -5,6 +5,8 @@ import {
   portfolioSchema,
   objectiveTrackerSchema,
   sessionLogSchema,
+  dailySnapshotSchema,
+  notifiedMilestonesSchema,
 } from "../src/types.js";
 
 describe("fundConfigSchema", () => {
@@ -165,6 +167,39 @@ describe("objectiveTrackerSchema", () => {
         status: "unknown",
       }),
     ).toThrow();
+  });
+});
+
+describe("dailySnapshotSchema", () => {
+  it("parses a valid daily snapshot", () => {
+    const result = dailySnapshotSchema.parse({
+      date: "2026-04-08",
+      total_value: 10024.41,
+    });
+    expect(result.date).toBe("2026-04-08");
+    expect(result.total_value).toBe(10024.41);
+  });
+});
+
+describe("notifiedMilestonesSchema", () => {
+  it("parses valid milestone tracking data", () => {
+    const result = notifiedMilestonesSchema.parse({
+      thresholds_notified: [10, 25],
+      peak_value: 12500,
+      drawdown_thresholds_notified: [50],
+      last_checked: "2026-04-08T15:30:00Z",
+    });
+    expect(result.thresholds_notified).toEqual([10, 25]);
+    expect(result.peak_value).toBe(12500);
+    expect(result.drawdown_thresholds_notified).toEqual([50]);
+  });
+
+  it("provides defaults for empty object", () => {
+    const result = notifiedMilestonesSchema.parse({});
+    expect(result.thresholds_notified).toEqual([]);
+    expect(result.peak_value).toBe(0);
+    expect(result.drawdown_thresholds_notified).toEqual([]);
+    expect(result.last_checked).toBe("");
   });
 });
 
