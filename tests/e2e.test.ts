@@ -94,7 +94,7 @@ vi.mock("../src/agent.js", () => ({
     status: "success",
   })),
   buildMcpServers: vi.fn(async () => ({
-    "broker-alpaca": { command: "node", args: ["broker-alpaca.js"], env: {} },
+    "broker-local": { command: "node", args: ["broker-local.js"], env: {} },
     "market-data": { command: "node", args: ["market-data.js"], env: {} },
   })),
 }));
@@ -125,9 +125,6 @@ describe("E2E: init → create fund → run session", () => {
       default_model: "sonnet",
       timezone: "America/New_York",
       broker: {
-        provider: "alpaca",
-        api_key: "test-key",
-        secret_key: "test-secret",
         mode: "paper",
       },
     });
@@ -138,7 +135,7 @@ describe("E2E: init → create fund → run session", () => {
     const loaded = await loadGlobalConfig();
     expect(loaded.default_model).toBe("sonnet");
     expect(loaded.timezone).toBe("America/New_York");
-    expect(loaded.broker.provider).toBe("alpaca");
+    expect(loaded.broker.mode).toBe("paper");
   });
 
   it("Step 2: Create a fund with runway objective", async () => {
@@ -184,7 +181,7 @@ describe("E2E: init → create fund → run session", () => {
           },
         },
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
       claude: {
         model: "sonnet",
         personality: "Conservative and methodical.",
@@ -263,7 +260,7 @@ describe("E2E: init → create fund → run session", () => {
           },
         },
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
 
     await saveFundConfig(fundConfig);
@@ -295,7 +292,7 @@ describe("E2E: init → create fund → run session", () => {
     const globalConfig = globalConfigSchema.parse({
       default_model: "sonnet",
       timezone: "America/New_York",
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
     await saveGlobalConfig(globalConfig);
 
@@ -323,7 +320,7 @@ describe("E2E: init → create fund → run session", () => {
           },
         },
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
 
     await saveFundConfig(fundConfig);

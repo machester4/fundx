@@ -74,7 +74,7 @@ const makeFundConfig = (sessionOverrides: Record<string, unknown> = {}) => ({
       },
     },
   },
-  broker: { provider: "alpaca", mode: "paper" },
+  broker: { mode: "paper" },
   claude: { model: "sonnet", personality: "Conservative." },
   notifications: {
     telegram: { enabled: false },

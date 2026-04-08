@@ -35,10 +35,49 @@ async function readJson(filePath: string): Promise<unknown> {
 
 // ── Portfolio ──────────────────────────────────────────────────
 
+/**
+ * Normalize position fields written by Claude sessions (alternative field names
+ * that Claude sometimes uses) to the canonical schema names. This prevents Zod
+ * validation errors when Claude writes portfolio.json with non-standard field names.
+ */
+function normalizePositions(data: unknown): unknown {
+  if (!data || typeof data !== "object" || !("positions" in data)) return data;
+  const obj = data as Record<string, unknown>;
+  const positions = obj.positions;
+  if (!Array.isArray(positions)) return data;
+
+  obj.positions = positions.map((pos: Record<string, unknown>) => {
+    const normalized = { ...pos };
+    // qty → shares
+    if (normalized.qty !== undefined && normalized.shares === undefined) {
+      normalized.shares = Number(normalized.qty);
+    }
+    // avg_entry_price → avg_cost
+    if (normalized.avg_entry_price !== undefined && normalized.avg_cost === undefined) {
+      normalized.avg_cost = Number(normalized.avg_entry_price);
+    }
+    // pct_of_portfolio → weight_pct
+    if (normalized.pct_of_portfolio !== undefined && normalized.weight_pct === undefined) {
+      normalized.weight_pct = Number(normalized.pct_of_portfolio);
+    }
+    // thesis → entry_reason
+    if (normalized.thesis !== undefined && (!normalized.entry_reason || normalized.entry_reason === "")) {
+      normalized.entry_reason = String(normalized.thesis);
+    }
+    // Ensure entry_date has a default
+    if (normalized.entry_date === undefined) {
+      normalized.entry_date = new Date().toISOString().split("T")[0];
+    }
+    return normalized;
+  });
+
+  return obj;
+}
+
 export async function readPortfolio(fundName: string): Promise<Portfolio> {
   const paths = fundPaths(fundName);
   const data = await readJson(paths.state.portfolio);
-  return portfolioSchema.parse(data);
+  return portfolioSchema.parse(normalizePositions(data));
 }
 
 export async function writePortfolio(

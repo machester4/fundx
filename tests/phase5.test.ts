@@ -52,7 +52,7 @@ describe("Phase 5 Zod Schemas", () => {
         risk: { profile: "moderate" },
         universe: {},
         schedule: {},
-        broker: { provider: "alpaca", mode: "paper" },
+        broker: { mode: "paper" },
       },
     });
 
@@ -275,7 +275,7 @@ describe("Special Sessions", () => {
           },
         ],
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
 
     // Feb 20, 2026 is a Friday and the 3rd Friday of the month
@@ -305,7 +305,7 @@ describe("Special Sessions", () => {
           },
         ],
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
 
     // Feb 23, 2026 is a Monday — not a Friday
@@ -335,7 +335,7 @@ describe("Special Sessions", () => {
           },
         ],
       },
-      broker: { provider: "alpaca", mode: "paper" },
+      broker: { mode: "paper" },
     });
 
     const thirdFriday = new Date(2026, 1, 20);
@@ -388,32 +388,6 @@ describe("Correlation Computation", () => {
   });
 });
 
-// ── Broker Adapter tests ─────────────────────────────────────
-
-describe("Broker Adapters", () => {
-  it("should create Alpaca adapter with correct capabilities", async () => {
-    const { AlpacaAdapter } = await import("../src/broker-adapter.js");
-
-    const adapter = new AlpacaAdapter("key", "secret", "https://paper-api.alpaca.markets");
-
-    expect(adapter.name).toBe("alpaca");
-    expect(adapter.capabilities.stocks).toBe(true);
-    expect(adapter.capabilities.etfs).toBe(true);
-    expect(adapter.capabilities.crypto).toBe(true);
-    expect(adapter.capabilities.paper_trading).toBe(true);
-    expect(adapter.capabilities.live_trading).toBe(true);
-  });
-
-  it("should export BrokerAdapter interface types", async () => {
-    const mod = await import("../src/broker-adapter.js");
-
-    // createBrokerAdapter factory should be exported
-    expect(typeof mod.createBrokerAdapter).toBe("function");
-    // AlpacaAdapter should be exported
-    expect(typeof mod.AlpacaAdapter).toBe("function");
-  });
-
-});
 
 // ── Template tests ───────────────────────────────────────────
 

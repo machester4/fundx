@@ -6,26 +6,6 @@ import { queryArticles } from "../services/news.service.js";
 
 const yf = new YahooFinance();
 
-// ── Alpaca Data API client ────────────────────────────────────
-
-const ALPACA_DATA_URL = "https://data.alpaca.markets";
-
-function hasAlpacaKeys(): boolean {
-  return !!(process.env.ALPACA_API_KEY && process.env.ALPACA_SECRET_KEY);
-}
-
-function getHeaders(): Record<string, string> {
-  const apiKey = process.env.ALPACA_API_KEY;
-  const secretKey = process.env.ALPACA_SECRET_KEY;
-  if (!apiKey || !secretKey) {
-    throw new Error("ALPACA_API_KEY and ALPACA_SECRET_KEY must be set");
-  }
-  return {
-    "APCA-API-KEY-ID": apiKey,
-    "APCA-API-SECRET-KEY": secretKey,
-  };
-}
-
 // ── Yahoo Finance interval mapping ────────────────────────────
 
 // yf.historical() only supports daily/weekly/monthly intervals.
@@ -34,16 +14,6 @@ function toYahooHistoricalInterval(tf: string): "1d" | "1wk" | "1mo" {
   if (tf === "1Week") return "1wk";
   if (tf === "1Month") return "1mo";
   return "1d";
-}
-
-async function dataRequest(path: string): Promise<unknown> {
-  const url = `${ALPACA_DATA_URL}${path}`;
-  const resp = await fetch(url, { headers: getHeaders() });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Alpaca Data API error ${resp.status}: ${text}`);
-  }
-  return resp.json();
 }
 
 // ── FMP Data API client ───────────────────────────────────────
@@ -67,7 +37,7 @@ function fmpNotConfigured(toolName: string) {
   return {
     content: [{
       type: "text" as const,
-      text: `${toolName}: FMP_API_KEY is not configured. Set market_data.fmp_api_key in ~/.fundx/config.yaml. Use Alpaca tools (get_snapshot, get_bars) as alternatives.`,
+      text: `${toolName}: FMP_API_KEY is not configured. Set market_data.fmp_api_key in ~/.fundx/config.yaml.`,
     }],
   };
 }
@@ -83,91 +53,59 @@ const server = new McpServer(
 
 server.tool(
   "get_latest_trade",
-  "Get the latest trade for a symbol (last executed trade price and size). Falls back to Yahoo Finance quote when Alpaca is not configured.",
+  "Get the latest trade for a symbol (last executed trade price and size) via Yahoo Finance quote.",
   { symbol: z.string().describe("Ticker symbol (e.g. AAPL, GDX)") },
   async ({ symbol }) => {
-    if (!hasAlpacaKeys()) {
-      const data = await yf.quote(symbol);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    }
-    const data = await dataRequest(
-      `/v2/stocks/${encodeURIComponent(symbol)}/trades/latest`,
-    );
+    const data = await yf.quote(symbol);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 
 server.tool(
   "get_latest_quote",
-  "Get the latest NBBO quote for a symbol (best bid/ask)",
+  "Get the latest quote for a symbol (bid/ask) via Yahoo Finance",
   { symbol: z.string().describe("Ticker symbol") },
   async ({ symbol }) => {
-    if (!hasAlpacaKeys()) {
-      const data = await yf.quote(symbol);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    }
-    const data = await dataRequest(
-      `/v2/stocks/${encodeURIComponent(symbol)}/quotes/latest`,
-    );
+    const data = await yf.quote(symbol);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 
 server.tool(
   "get_bars",
-  "Get historical OHLCV bars for a symbol. Useful for technical analysis, charting, and backtesting.",
+  "Get historical OHLCV bars for a symbol via Yahoo Finance. Useful for technical analysis, charting, and backtesting.",
   {
     symbol: z.string().describe("Ticker symbol"),
-    timeframe: z.string().default("1Day").describe("Bar timeframe: 1Min, 5Min, 15Min, 30Min, 1Hour, 4Hour, 1Day, 1Week, 1Month"),
+    timeframe: z.string().default("1Day").describe("Bar timeframe: 1Day, 1Week, 1Month (intraday clamped to 1Day)"),
     start: z.string().optional().describe("Start date/time (ISO 8601 or YYYY-MM-DD)"),
     end: z.string().optional().describe("End date/time (ISO 8601 or YYYY-MM-DD)"),
     limit: z.number().positive().max(10000).default(100).describe("Max number of bars to return"),
     sort: z.enum(["asc", "desc"]).default("asc").describe("Sort order by timestamp"),
   },
   async ({ symbol, timeframe, start, end, limit, sort }) => {
-    if (!hasAlpacaKeys()) {
-      const bars = await yf.historical(symbol, {
-        period1: start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
-        period2: end ? new Date(end) : new Date(),
-        interval: toYahooHistoricalInterval(timeframe),
-      });
-      const sorted = sort === "desc" ? [...bars].reverse() : bars;
-      return { content: [{ type: "text", text: JSON.stringify(sorted.slice(0, limit), null, 2) }] };
-    }
-    const params = new URLSearchParams({
-      timeframe,
-      limit: String(limit),
-      sort,
+    const bars = await yf.historical(symbol, {
+      period1: start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000),
+      period2: end ? new Date(end) : new Date(),
+      interval: toYahooHistoricalInterval(timeframe),
     });
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
-
-    const data = await dataRequest(
-      `/v2/stocks/${encodeURIComponent(symbol)}/bars?${params.toString()}`,
-    );
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    const sorted = sort === "desc" ? [...bars].reverse() : bars;
+    return { content: [{ type: "text", text: JSON.stringify(sorted.slice(0, limit), null, 2) }] };
   },
 );
 
 server.tool(
   "get_snapshot",
-  "Get a comprehensive snapshot of a symbol: latest trade, latest quote, minute bar, daily bar, and previous daily bar",
+  "Get a comprehensive snapshot of a symbol via Yahoo Finance: price, volume, market cap, day range, 52-week range",
   { symbol: z.string().describe("Ticker symbol") },
   async ({ symbol }) => {
-    if (!hasAlpacaKeys()) {
-      const data = await yf.quote(symbol);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    }
-    const data = await dataRequest(
-      `/v2/stocks/${encodeURIComponent(symbol)}/snapshot`,
-    );
+    const data = await yf.quote(symbol);
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 
 server.tool(
   "get_multi_bars",
-  "Get historical bars for multiple symbols at once. Falls back to Yahoo Finance when Alpaca is not configured.",
+  "Get historical bars for multiple symbols at once via Yahoo Finance.",
   {
     symbols: z.string().describe("Comma-separated ticker symbols (e.g. AAPL,MSFT,GDX)"),
     timeframe: z.string().default("1Day").describe("Bar timeframe"),
@@ -175,111 +113,70 @@ server.tool(
     end: z.string().optional().describe("End date (ISO 8601 or YYYY-MM-DD)"),
     limit: z.number().positive().max(10000).default(100).describe("Max bars per symbol"),
   },
-  async ({ symbols, timeframe, start, end, limit }) => {
-    if (!hasAlpacaKeys()) {
-      const symbolList = symbols.split(",").map((s) => s.trim());
-      const period1 = start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
-      const period2 = end ? new Date(end) : new Date();
-      const interval = toYahooHistoricalInterval(timeframe);
-      const results: Record<string, unknown[]> = {};
-      await Promise.all(
-        symbolList.map(async (sym) => {
-          results[sym] = await yf.historical(sym, { period1, period2, interval });
-        }),
-      );
-      return { content: [{ type: "text", text: JSON.stringify({ bars: results }, null, 2) }] };
-    }
-    const params = new URLSearchParams({
-      symbols,
-      timeframe,
-      limit: String(limit),
-    });
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
-
-    const data = await dataRequest(`/v2/stocks/bars?${params.toString()}`);
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  async ({ symbols, timeframe, start, end, limit: _limit }) => {
+    const symbolList = symbols.split(",").map((s) => s.trim());
+    const period1 = start ? new Date(start) : new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+    const period2 = end ? new Date(end) : new Date();
+    const interval = toYahooHistoricalInterval(timeframe);
+    const results: Record<string, unknown[]> = {};
+    await Promise.all(
+      symbolList.map(async (sym) => {
+        results[sym] = await yf.historical(sym, { period1, period2, interval });
+      }),
+    );
+    return { content: [{ type: "text", text: JSON.stringify({ bars: results }, null, 2) }] };
   },
 );
 
 server.tool(
   "get_multi_snapshots",
-  "Get snapshots for multiple symbols at once. Falls back to Yahoo Finance when Alpaca is not configured.",
+  "Get snapshots for multiple symbols at once via Yahoo Finance.",
   {
     symbols: z.string().describe("Comma-separated ticker symbols (e.g. GDX,GDXJ,SLV,GLD)"),
   },
   async ({ symbols }) => {
-    if (!hasAlpacaKeys()) {
-      const symbolList = symbols.split(",").map((s) => s.trim());
-      const data = await yf.quote(symbolList, { return: "array" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    }
-    const params = new URLSearchParams({ symbols });
-    const data = await dataRequest(`/v2/stocks/snapshots?${params.toString()}`);
+    const symbolList = symbols.split(",").map((s) => s.trim());
+    const data = await yf.quote(symbolList, { return: "array" });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 
 server.tool(
   "get_market_movers",
-  "Get top market movers (gainers and losers). Uses FMP if configured, falls back to Alpaca.",
+  "Get top market movers (gainers and losers) via FMP.",
   {
-    market_type: z.enum(["stocks", "etfs"]).default("stocks").describe("Market type to get movers for (Alpaca fallback only)"),
     top: z.number().positive().max(50).default(10).describe("Number of top movers to return"),
   },
-  async ({ market_type, top }) => {
-    if (getFmpApiKey()) {
-      const [gainers, losers] = await Promise.all([
-        fmpRequest(`/stock_market/gainers`),
-        fmpRequest(`/stock_market/losers`),
-      ]);
-      const result = {
-        gainers: Array.isArray(gainers) ? gainers.slice(0, top) : gainers,
-        losers: Array.isArray(losers) ? losers.slice(0, top) : losers,
-      };
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-    }
-    if (!hasAlpacaKeys()) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: "get_market_movers: Requires FMP_API_KEY or Alpaca credentials. Set market_data.fmp_api_key in ~/.fundx/config.yaml for FMP access.",
-        }],
-      };
-    }
-    const params = new URLSearchParams({ top: String(top) });
-    const data = await dataRequest(
-      `/v1beta1/screener/${market_type}/movers?${params.toString()}`,
-    );
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  async ({ top }) => {
+    if (!getFmpApiKey()) return fmpNotConfigured("get_market_movers");
+    const [gainers, losers] = await Promise.all([
+      fmpRequest(`/stock_market/gainers`),
+      fmpRequest(`/stock_market/losers`),
+    ]);
+    const result = {
+      gainers: Array.isArray(gainers) ? gainers.slice(0, top) : gainers,
+      losers: Array.isArray(losers) ? losers.slice(0, top) : losers,
+    };
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );
 
 server.tool(
   "get_news",
-  "Get recent financial news articles, optionally filtered by symbols. Uses FMP if configured, falls back to Alpaca.",
+  "Get recent financial news articles, optionally filtered by symbols. Uses FMP if configured, falls back to Yahoo Finance search.",
   {
     symbols: z.string().optional().describe("Comma-separated symbols to filter news (e.g. AAPL,MSFT)"),
     limit: z.number().positive().max(50).default(10).describe("Number of articles"),
-    start: z.string().optional().describe("Start date (YYYY-MM-DD). Maps to 'from' on FMP, 'start' on Alpaca."),
-    end: z.string().optional().describe("End date (YYYY-MM-DD). Maps to 'to' on FMP, 'end' on Alpaca."),
-    sort: z.enum(["asc", "desc"]).default("desc").describe("Sort order (Alpaca fallback only)"),
+    start: z.string().optional().describe("Start date (YYYY-MM-DD). Maps to 'from' on FMP."),
+    end: z.string().optional().describe("End date (YYYY-MM-DD). Maps to 'to' on FMP."),
   },
-  async ({ symbols, limit, start, end, sort }) => {
+  async ({ symbols, limit, start, end }) => {
     if (getFmpApiKey()) {
       const params = new URLSearchParams({ limit: String(limit) });
       if (symbols) params.set("tickers", symbols);
       if (start) params.set("from", start);
       if (end) params.set("to", end);
       const data = await fmpRequest(`/stock_news?${params.toString()}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    }
-    if (hasAlpacaKeys()) {
-      const params = new URLSearchParams({ limit: String(limit), sort });
-      if (symbols) params.set("symbols", symbols);
-      if (start) params.set("start", start);
-      if (end) params.set("end", end);
-      const data = await dataRequest(`/v1beta1/news?${params.toString()}`);
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     }
     const query = symbols ? symbols.split(",")[0] : "stock market";
@@ -319,33 +216,6 @@ server.tool(
     } catch (err) {
       return { content: [{ type: "text", text: `Error querying RSS news: ${err instanceof Error ? err.message : err}` }] };
     }
-  },
-);
-
-server.tool(
-  "get_most_active",
-  "Get the most actively traded symbols by volume or trade count",
-  {
-    by: z.enum(["volume", "trades"]).default("volume").describe("Sort by volume or trade count"),
-    top: z.number().positive().max(100).default(20).describe("Number of results"),
-  },
-  async ({ by, top }) => {
-    if (!hasAlpacaKeys()) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: "get_most_active: Requires Alpaca credentials. Set broker.api_key and broker.secret_key in ~/.fundx/config.yaml.",
-        }],
-      };
-    }
-    const params = new URLSearchParams({
-      by,
-      top: String(top),
-    });
-    const data = await dataRequest(
-      `/v1beta1/screener/stocks/most-actives?${params.toString()}`,
-    );
-    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
   },
 );
 

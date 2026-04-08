@@ -775,8 +775,7 @@ schedule:
     post_market: { time: "18:00", enabled: true,  focus: "Review day. Update journal." }
 
 broker:
-  provider: alpaca                 # use global config provider
-  mode: paper                      # ALWAYS paper — user enables live with 'fundx live enable'
+  mode: paper                      # ALWAYS paper
 
 claude:
   model: sonnet
@@ -793,7 +792,7 @@ claude:
 ## Key Principles
 - The \`personality\` and \`decision_framework\` fields are the most important — they are Claude's
   constitution for every autonomous trading session. Make them detailed, specific, and actionable.
-- Always \`mode: paper\` — live trading requires explicit user confirmation via CLI
+- Always paper mode
 - Use \`objective.type: custom\` for narrative goals; structured types for simple ones
 - \`custom_rules\` should capture any strategy-specific constraints not covered by risk parameters
 `,
@@ -852,6 +851,38 @@ allowed assets, objective, etc.), you MUST update ALL affected files — not jus
 | \`state/portfolio.json\` | Current cash, total_value, and positions |
 | \`state/objective_tracker.json\` | Progress toward the fund's goal |
 | \`CLAUDE.md\` | Generated from fund_config.yaml — do NOT edit directly |
+
+## portfolio.json Schema
+
+Use exactly these field names when writing positions. The daemon's stop-loss monitor
+and dashboard validate against this schema — wrong field names cause silent failures.
+
+\`\`\`json
+{
+  "last_updated": "ISO timestamp",
+  "cash": 10000,
+  "total_value": 10500,
+  "positions": [
+    {
+      "symbol": "AAPL",
+      "shares": 10,
+      "avg_cost": 150.00,
+      "current_price": 155.00,
+      "market_value": 1550.00,
+      "unrealized_pnl": 50.00,
+      "unrealized_pnl_pct": 3.33,
+      "weight_pct": 14.76,
+      "stop_loss": 142.50,
+      "entry_date": "2026-01-15",
+      "entry_reason": "Thesis summary here"
+    }
+  ]
+}
+\`\`\`
+
+Do NOT use alternative field names (\`qty\`, \`avg_entry_price\`, \`cost_basis\`,
+\`pct_of_portfolio\`, \`thesis\`). The correct names are: \`shares\`, \`avg_cost\`,
+\`weight_pct\`, \`entry_reason\`.
 
 ## Rules
 

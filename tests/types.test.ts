@@ -29,7 +29,7 @@ describe("fundConfigSchema", () => {
         },
       },
     },
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     claude: { model: "sonnet" },
   };
 
@@ -86,8 +86,6 @@ describe("globalConfigSchema", () => {
     const result = globalConfigSchema.parse({});
     expect(result.default_model).toBe("sonnet");
     expect(result.timezone).toBe("UTC");
-    expect(result.broker.provider).toBe("manual");
-    expect(result.broker.mode).toBe("paper");
   });
 
   it("parses a full config", () => {
@@ -95,9 +93,6 @@ describe("globalConfigSchema", () => {
       default_model: "opus",
       timezone: "America/New_York",
       broker: {
-        provider: "alpaca",
-        api_key: "test-key",
-        secret_key: "test-secret",
         mode: "paper",
       },
       telegram: {
@@ -106,7 +101,7 @@ describe("globalConfigSchema", () => {
       },
     });
     expect(result.default_model).toBe("opus");
-    expect(result.broker.api_key).toBe("test-key");
+    expect(result.broker.mode).toBe("paper");
     expect(result.telegram.bot_token).toBe("123:ABC");
   });
 });

@@ -34,7 +34,7 @@ function makeConfig(overrides: Partial<FundConfig> = {}): FundConfig {
     risk: { profile: "moderate" },
     universe: { allowed: [{ type: "etf", tickers: ["SPY", "QQQ"] }] },
     schedule: { sessions: {} },
-    broker: { provider: "alpaca", mode: "paper" },
+    broker: { mode: "paper" },
     claude: { model: "sonnet", personality: "Cautious and analytical." },
     ...overrides,
   });

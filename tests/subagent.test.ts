@@ -130,8 +130,8 @@ describe("buildAnalystAgents", () => {
   describe("risk-guardian", () => {
     const agent = agents["risk-guardian"];
 
-    it("has both broker-alpaca and market-data MCP servers", () => {
-      expect(agent.mcpServers).toContain("broker-alpaca");
+    it("has both broker-local and market-data MCP servers", () => {
+      expect(agent.mcpServers).toContain("broker-local");
       expect(agent.mcpServers).toContain("market-data");
     });
 
