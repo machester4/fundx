@@ -1,4 +1,5 @@
-import { writeFile, readFile, appendFile, unlink, stat, rename } from "node:fs/promises";
+import { writeFile, readFile, appendFile, unlink, stat, rename, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import cron from "node-cron";
@@ -9,6 +10,7 @@ import {
   DAEMON_HEARTBEAT,
   DAEMON_LOG_MAX_SIZE,
   DAEMON_LOG_MAX_FILES,
+  fundPaths,
 } from "../paths.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
@@ -377,6 +379,28 @@ export async function checkMissedSessions(): Promise<void> {
   }
 }
 
+/** Remove analysis files older than 30 days from all fund analysis/ directories */
+export async function cleanOldAnalysisFiles(): Promise<void> {
+  const fundNames = await listFundNames();
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const name of fundNames) {
+    const analysisDir = fundPaths(name).analysis;
+    try {
+      const files = await readdir(analysisDir);
+      for (const file of files) {
+        if (!file.endsWith(".md")) continue;
+        const filePath = join(analysisDir, file);
+        const stats = await stat(filePath);
+        if (stats.mtimeMs < cutoff) {
+          await unlink(filePath);
+        }
+      }
+    } catch {
+      // analysis dir may not exist for new funds
+    }
+  }
+}
+
 /** Start the scheduler daemon */
 export async function startDaemon(): Promise<void> {
   if (await isDaemonRunning()) {
@@ -665,13 +689,19 @@ export async function startDaemon(): Promise<void> {
     }
   });
 
-  // Daily cleanup of old news articles
+  // Daily cleanup of old news articles and analysis files
   cron.schedule("0 0 * * *", async () => {
     try {
       await cleanOldArticles();
       await log("[news] Old articles cleaned up");
     } catch (err) {
       await log(`[news] Cleanup error: ${err}`);
+    }
+    try {
+      await cleanOldAnalysisFiles();
+      await log("[analysis] Old analysis files cleaned up");
+    } catch (err) {
+      await log(`[analysis] Cleanup error: ${err}`);
     }
   });
 
