@@ -24,6 +24,8 @@ import { StreamingIndicator } from "./StreamingIndicator.js";
 import { FundContextBar } from "./FundContextBar.js";
 import { MarkdownView } from "./MarkdownView.js";
 import { TurnSummary } from "./TurnSummary.js";
+import { ChatSidebar } from "./ChatSidebar.js";
+import { useSidebarData } from "../hooks/useSidebarData.js";
 import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
 
 interface ChatViewProps {
@@ -49,6 +51,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const isInline = mode === "inline";
   const isStatic = mode === "static";
   const isWorkspaceMode = fundName === null;
+  const sidebarData = useSidebarData(fundName);
+  const MIN_SIDEBAR_WIDTH = 120;
+  const showSidebar = !isWorkspaceMode && !isInline && width >= MIN_SIDEBAR_WIDTH;
+  const sidebarWidth = showSidebar ? Math.floor(width * 0.3) : 0;
+  const chatWidth = showSidebar ? width - sidebarWidth : width;
   const [phase, setPhase] = useState<"loading" | "ready" | "streaming" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [welcomeData, setWelcomeData] = useState<ChatWelcomeData | null>(null);
@@ -437,72 +444,78 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
   return (
     <Box flexDirection="column" width={width} height={height}>
-      {/* Messages area — fills available space */}
-      <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-        {messages.length === 0 && !isStreaming && (
-          <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
-            {isWorkspaceMode ? (
-              !isInline && <Text dimColor>Type a message or /help for commands.</Text>
-            ) : (
-              <>
-                {welcomeData?.handoff && (
-                  <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
-                    <Text bold dimColor>Last Session Handoff</Text>
-                    <Text dimColor>{welcomeData.handoff}</Text>
-                  </Box>
+      <Box flexDirection="row" flexGrow={1}>
+        {/* Chat area */}
+        <Box flexDirection="column" width={chatWidth}>
+          {/* Messages area — fills available space */}
+          <Box flexDirection="column" flexGrow={1} overflowY="hidden">
+            {messages.length === 0 && !isStreaming && (
+              <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
+                {isWorkspaceMode ? (
+                  !isInline && <Text dimColor>Type a message or /help for commands.</Text>
+                ) : (
+                  <>
+                    {!isInline && (
+                      <Text dimColor>
+                        Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
+                      </Text>
+                    )}
+                  </>
                 )}
-                {!isInline && (
-                  <Text dimColor>
-                    Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
-                  </Text>
-                )}
-              </>
-            )}
-          </Box>
-        )}
-        {messages.map((msg) => (
-          <Box key={msg.id} paddingX={1}>
-            <ChatMessage
-              sender={msg.sender}
-              content={msg.content}
-              timestamp={msg.timestamp}
-              cost={msg.cost}
-              turns={msg.turns}
-            />
-          </Box>
-        ))}
-        {isStreaming && (
-          <Box paddingX={1} flexDirection="column">
-            {streaming.buffer ? (
-              <Box flexDirection="column">
-                <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
-                <MarkdownView content={streaming.buffer} />
               </Box>
-            ) : (
-              <StreamingIndicator charCount={0} activity={streaming.activity} />
+            )}
+            {messages.map((msg) => (
+              <Box key={msg.id} paddingX={1}>
+                <ChatMessage
+                  sender={msg.sender}
+                  content={msg.content}
+                  timestamp={msg.timestamp}
+                  cost={msg.cost}
+                  turns={msg.turns}
+                />
+              </Box>
+            ))}
+            {isStreaming && (
+              <Box paddingX={1} flexDirection="column">
+                {streaming.buffer ? (
+                  <Box flexDirection="column">
+                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
+                    <MarkdownView content={streaming.buffer} />
+                  </Box>
+                ) : (
+                  <StreamingIndicator charCount={0} activity={streaming.activity} />
+                )}
+              </Box>
+            )}
+            {!streaming.isStreaming && streaming.lastTurnMetrics && (
+              <Box paddingX={1}>
+                <TurnSummary metrics={streaming.lastTurnMetrics} />
+              </Box>
             )}
           </Box>
-        )}
-        {!streaming.isStreaming && streaming.lastTurnMetrics && (
-          <Box paddingX={1}>
-            <TurnSummary metrics={streaming.lastTurnMetrics} />
-          </Box>
-        )}
-      </Box>
 
-      {/* Input */}
-      <Box flexDirection="column" marginTop={1}>
-        <Text dimColor>{"\u2500".repeat(width)}</Text>
-        {!isStreaming && (
-          <Box paddingX={1}>
-            <Text color="green">{"❯ "}</Text>
-            <TextInput
-              placeholder="Message... (/help for commands)"
-              onSubmit={handleSubmit}
-            />
+          {/* Input */}
+          <Box flexDirection="column" marginTop={1}>
+            <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
+            {!isStreaming && (
+              <Box paddingX={1}>
+                <Text color="green">{"❯ "}</Text>
+                <TextInput
+                  placeholder="Message... (/help for commands)"
+                  onSubmit={handleSubmit}
+                />
+              </Box>
+            )}
+            <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
+          </Box>
+        </Box>
+
+        {/* Sidebar */}
+        {showSidebar && (
+          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor overflowY="hidden">
+            <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
           </Box>
         )}
-        <Text dimColor>{"\u2500".repeat(width)}</Text>
       </Box>
 
       {/* Context bar — below input */}
