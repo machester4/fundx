@@ -435,7 +435,12 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
         {/* Sidebar */}
         {showSidebar && (
-          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor>
+          <Box flexDirection="row" width={sidebarWidth}>
+            <Box flexDirection="column">
+              {Array.from({ length: height }).map((_, i) => (
+                <Text key={i} dimColor>│</Text>
+              ))}
+            </Box>
             <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
           </Box>
         )}
@@ -522,7 +527,12 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
         {/* Sidebar */}
         {showSidebar && (
-          <Box flexDirection="column" width={sidebarWidth} borderLeft borderDimColor flexGrow={0}>
+          <Box flexDirection="row" width={sidebarWidth}>
+            <Box flexDirection="column">
+              {Array.from({ length: height }).map((_, i) => (
+                <Text key={i} dimColor>│</Text>
+              ))}
+            </Box>
             <ChatSidebar data={sidebarData} width={sidebarWidth - 1} />
           </Box>
         )}
