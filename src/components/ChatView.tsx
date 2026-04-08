@@ -112,7 +112,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const sendMessage = useCallback(async (message: string, images?: ImageAttachment[]) => {
     setPhase("streaming");
     try {
-      const context = turnCount === 0
+      // First fund turn: agent does Orient via session-init rule, no pre-digested context needed.
+      // Subsequent turns and workspace mode: provide compact context refresh.
+      const context = turnCount === 0 && fundName
+        ? ""
+        : turnCount === 0
         ? await buildChatContext(fundName)
         : await buildCompactContext(fundName);
 

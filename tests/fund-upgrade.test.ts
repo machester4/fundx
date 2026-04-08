@@ -144,6 +144,13 @@ describe("upgradeFund", () => {
     expect(result.skillCount).toBe(BUILTIN_SKILLS.length);
   });
 
+  it("clears active session so next chat starts fresh", async () => {
+    const { clearActiveSession } = await import("../src/state.js");
+    await upgradeFund("test-fund");
+
+    expect(clearActiveSession).toHaveBeenCalledWith("test-fund");
+  });
+
   it("throws when fund config is invalid", async () => {
     mockedReadFile.mockResolvedValue("invalid: :::yaml");
 
