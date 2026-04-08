@@ -27,14 +27,14 @@ CLI (fundx) → Daemon/Scheduler → Claude Code Session → MCP Servers (broker
 ```
 
 Each Claude Code session:
-1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
-2. Reads persistent state (portfolio, journal, past analyses)
-3. Creates and executes analysis scripts as needed
-4. Optionally invokes sub-agents via the Task tool (market-analyst, technical-analyst, risk-guardian)
-5. Makes decisions within fund constraints
-6. Executes trades via `broker-local` MCP server (paper trading, updates portfolio.json locally)
-7. Updates persistent state and generates reports
-8. Sends notifications via Telegram
+1. **Orient** — Follows the `session-init` rule: reads `session-handoff.md`, portfolio, objective tracker, session log. Writes a Session Contract.
+2. **Analyze** — Classifies market regime. Invokes market-analyst and technical-analyst sub-agents via the Task tool.
+3. **Decide** — Applies pre-trade checklist. Skips if conviction below threshold.
+4. **Validate** — Two gates: trade-evaluator (skeptical thesis review) → risk-guardian (hard constraint check).
+5. **Execute** — Trades via `broker-local` MCP server (paper trading, updates portfolio.json locally).
+6. **Reflect** — Grades decisions, evaluates Session Contract, writes full handoff to `session-handoff.md`.
+7. **Communicate** — Sends notifications via Telegram.
+8. **Follow-up** — Optionally self-schedules future sessions.
 
 ### Directory Structure
 
@@ -110,10 +110,10 @@ src/
   types.ts              # Zod schemas + inferred TypeScript types (single source of truth)
   paths.ts              # ~/.fundx path constants and per-fund path helpers
   config.ts             # Global config read/write (~/.fundx/config.yaml)
-  state.ts              # Per-fund state file CRUD (portfolio, tracker, session log)
+  state.ts              # Per-fund state file CRUD (portfolio, tracker, session log, session handoff)
   template.ts           # Per-fund CLAUDE.md generation from fund_config.yaml
   agent.ts              # Claude Agent SDK wrapper — single entry point for all AI queries
-  subagent.ts           # Agent definitions for the Task tool (market-analyst, technical-analyst, risk-guardian)
+  subagent.ts           # Agent definitions for the Task tool (market-analyst, technical-analyst, risk-guardian, trade-evaluator)
   embeddings.ts         # Trade journal FTS5 indexing + similarity search
   journal.ts            # Trade journal SQLite CRUD (open, insert, query, summary)
   paper-trading.ts      # Pure buy/sell execution functions for local paper trading
@@ -295,6 +295,8 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
 └── .claude/
     ├── rules/
     │   ├── state-consistency.md       # config ↔ state sync rules
+    │   ├── session-init.md            # mandatory 6-step init sequence + session contract
+    │   ├── session-completion.md      # verification checklist before ending session
     │   └── communication.md           # Spanish interaction, English analysis
     └── skills/
         ├── investment-thesis/SKILL.md
@@ -349,6 +351,7 @@ When implementing fund logic, support these objective types:
 
 ### State Files (per fund)
 
+- `session-handoff.md` — Rich handoff context between sessions (read at Orient, written at Reflect)
 - `portfolio.json` — Current holdings, cash, market values
 - `objective_tracker.json` — Progress toward fund goal
 - `trade_journal.sqlite` — All trades with reasoning, outcomes, embeddings
@@ -391,7 +394,7 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] `fundx gateway start` — standalone gateway, `fundx gateway test` — send test message
 
 ### Phase 4 — Intelligence — COMPLETE
-- [x] Agent definitions via Task tool (`subagent.ts`) — market-analyst, technical-analyst, risk-guardian
+- [x] Agent definitions via Task tool (`subagent.ts`) — market-analyst, technical-analyst, risk-guardian, trade-evaluator
 - [x] `fundx ask` command with cross-fund analysis (`ask.ts`)
 - [x] Trade journal FTS5 vector embeddings + similarity search (`embeddings.ts`)
 - [x] Zod schemas for similar trade results (`types.ts`)

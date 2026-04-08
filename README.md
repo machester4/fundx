@@ -168,13 +168,12 @@ graph TB
     end
 
     subgraph Session["Claude Agent SDK Session"]
-        CLAUDE["Claude\nclaude-opus-4-5"]
+        CLAUDE["Claude\nclaude-opus-4-6"]
         subgraph SubAgents["Analyst Sub-Agents — Task tool"]
-            SA1["Macro"]
-            SA2["Technical"]
-            SA3["Sentiment"]
-            SA4["Risk"]
-            SA5["News"]
+            SA1["Market Analyst\nmacro · sentiment · news"]
+            SA2["Technical Analyst\nprice action · momentum"]
+            SA3["Trade Evaluator\nskeptical thesis review"]
+            SA4["Risk Guardian\nhard gate · constraints"]
         end
     end
 
@@ -216,14 +215,14 @@ graph TB
 ```
 
 Each Claude session:
-1. Reads the fund's `CLAUDE.md` (its constitution) and `fund_config.yaml`
-2. Reads persistent state (portfolio, journal, past analyses)
-3. Creates and executes analysis scripts as needed
-4. Optionally invokes analyst sub-agents via the Task tool (macro, technical, sentiment, risk, news)
-5. Makes decisions within fund constraints
-6. Executes paper trades via `broker-local` MCP server (updates portfolio.json locally)
-7. Updates state and generates reports
-8. Sends notifications via Telegram
+1. **Orient** — Reads `session-handoff.md` from the last session, portfolio, objective tracker, and session log. Writes a Session Contract declaring intent.
+2. **Analyze** — Classifies market regime. Invokes market-analyst and technical-analyst sub-agents via the Task tool. Writes analysis to `analysis/`.
+3. **Decide** — Applies the pre-trade checklist. Skips if conviction is below threshold.
+4. **Validate** — Two gates: trade-evaluator (skeptical thesis review) → risk-guardian (hard constraint check). Both must pass.
+5. **Execute** — Paper trades via `broker-local` MCP server (updates portfolio.json locally).
+6. **Reflect** — Grades decisions, evaluates Session Contract, writes full handoff to `session-handoff.md` for the next session.
+7. **Communicate** — Sends Telegram notifications for trades and insights.
+8. **Follow-up** — Optionally self-schedules future sessions for monitoring.
 
 ### Workspace Structure
 
@@ -236,7 +235,8 @@ Each Claude session:
 │       ├── CLAUDE.md               # AI constitution (auto-generated)
 │       ├── fund_config.yaml        # Fund parameters
 │       ├── state/                  # portfolio.json, objective_tracker.json,
-│       │                           # trade_journal.sqlite, session_log.json
+│       │                           # trade_journal.sqlite, session_log.json,
+│       │                           # session-handoff.md
 │       ├── analysis/               # Session analysis archive
 │       ├── scripts/                # Reusable scripts Claude created
 │       └── reports/                # daily/, weekly/, monthly/
