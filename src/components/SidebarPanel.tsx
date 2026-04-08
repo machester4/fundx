@@ -17,7 +17,7 @@ export function SidebarPanel({ title, value, width, children }: SidebarPanelProp
   return (
     <Box flexDirection="column" width={width}>
       <Text dimColor>{header}</Text>
-      <Box flexDirection="column" paddingLeft={1} width={width - 1}>
+      <Box flexDirection="column" paddingX={1} width={width - 2}>
         {children}
       </Box>
     </Box>
