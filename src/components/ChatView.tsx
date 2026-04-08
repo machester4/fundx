@@ -9,14 +9,13 @@ import {
   buildCompactContext,
   loadChatWelcomeData,
   persistChatSession,
-  loadActiveSessionId,
   completeFundSetup,
   extractImagePaths,
   loadImageAttachment,
 } from "../services/chat.service.js";
 import type { ImageAttachment } from "../services/chat.service.js";
 import { listFundNames, upgradeFund } from "../services/fund.service.js";
-import { clearActiveSession, readChatHistory, writeChatHistory, clearChatHistory } from "../state.js";
+import { clearActiveSession, writeChatHistory, clearChatHistory } from "../state.js";
 import { getPortfolioDisplay } from "../services/portfolio.service.js";
 import { getTradesDisplay } from "../services/trades.service.js";
 import { useStreaming } from "../hooks/useStreaming.js";
@@ -97,26 +96,10 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
         const welcome = await loadChatWelcomeData(fundName, resolvedModel, options.readonly);
         setWelcomeData(welcome);
 
-        // Resume from a previous chat or daemon session if one exists
-        const activeSessionId = await loadActiveSessionId(fundName);
-        if (activeSessionId) {
-          setSessionId(activeSessionId);
-          setTurnCount(1); // Skip full context injection since history is in the resumed session
-
-          // Restore persisted messages that belong to this session
-          const history = await readChatHistory(fundName).catch(() => null);
-          if (history && history.session_id === activeSessionId && history.messages.length > 0) {
-            setMessages(
-              history.messages.map((m) => ({
-                ...m,
-                timestamp: new Date(m.timestamp),
-              })),
-            );
-            // Derive the next ID from the maximum stored ID to avoid duplicates
-            const maxId = history.messages.reduce((max, m) => Math.max(max, m.id), 0);
-            nextIdRef.current = maxId + 1;
-          }
-        }
+        // Always start a fresh session — the session-handoff.md file provides
+        // continuity between sessions. Resuming stale sessions leads to degraded
+        // context and outdated instructions (per Anthropic harness design research:
+        // "context resets outperformed simple compaction").
 
         setPhase("ready");
       } catch (err: unknown) {
