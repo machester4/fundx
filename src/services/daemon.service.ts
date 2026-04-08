@@ -145,6 +145,85 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
   await sendTelegramNotification(message);
 }
 
+const MILESTONE_THRESHOLDS = [10, 25, 50, 75, 100];
+const DRAWDOWN_BUDGET_THRESHOLDS = [50, 75];
+
+export async function checkMilestonesAndDrawdown(fundName: string): Promise<void> {
+  const config = await loadFundConfig(fundName);
+  if (!config.notifications.telegram.enabled) return;
+
+  const portfolio = await readPortfolio(fundName);
+  const tracker = await readTracker(fundName).catch(() => null);
+  const milestones = await readNotifiedMilestones(fundName);
+
+  const displayName = config.fund.display_name;
+  const { sendTelegramNotification } = await import("./gateway.service.js");
+
+  // Update peak value
+  if (portfolio.total_value > milestones.peak_value) {
+    milestones.peak_value = portfolio.total_value;
+    milestones.drawdown_thresholds_notified = [];
+  }
+
+  // Milestone check
+  if (tracker && config.notifications.telegram.milestone_alerts) {
+    const qh = config.notifications.quiet_hours;
+    const suppressed = qh.enabled && isInQuietHoursForFund(qh.start, qh.end);
+
+    if (!suppressed) {
+      for (const threshold of MILESTONE_THRESHOLDS) {
+        if (
+          tracker.progress_pct >= threshold &&
+          !milestones.thresholds_notified.includes(threshold)
+        ) {
+          milestones.thresholds_notified.push(threshold);
+          const gain = portfolio.total_value - tracker.initial_capital;
+          const sign = gain >= 0 ? "+" : "";
+          await sendTelegramNotification(
+            `🎯 <b>${displayName}</b> — Milestone: ${threshold}% of objective reached\n` +
+            `$${tracker.initial_capital.toLocaleString()} → $${portfolio.total_value.toLocaleString()} (${sign}$${gain.toFixed(2)})`,
+          );
+        }
+      }
+    }
+  }
+
+  // Drawdown check (CRITICAL — bypasses quiet hours with allow_critical)
+  if (config.notifications.telegram.drawdown_alerts && milestones.peak_value > 0) {
+    const drawdownPct = ((milestones.peak_value - portfolio.total_value) / milestones.peak_value) * 100;
+    const maxDrawdown = config.risk.max_drawdown_pct;
+    const budgetUsed = maxDrawdown > 0 ? (drawdownPct / maxDrawdown) * 100 : 0;
+
+    const qh = config.notifications.quiet_hours;
+    const inQuiet = qh.enabled && isInQuietHoursForFund(qh.start, qh.end);
+    const allowCrit = qh.allow_critical;
+    const suppressed = inQuiet && !allowCrit;
+
+    if (!suppressed) {
+      for (const threshold of DRAWDOWN_BUDGET_THRESHOLDS) {
+        if (
+          budgetUsed >= threshold &&
+          !milestones.drawdown_thresholds_notified.includes(threshold)
+        ) {
+          milestones.drawdown_thresholds_notified.push(threshold);
+          const action = threshold >= 75
+            ? "No new positions, reduce-only mode"
+            : "Half sizing on new positions";
+          await sendTelegramNotification(
+            `📉 <b>${displayName}</b> — Drawdown Warning\n` +
+            `-$${(milestones.peak_value - portfolio.total_value).toFixed(2)} (-${drawdownPct.toFixed(1)}%) from peak $${milestones.peak_value.toLocaleString()}\n` +
+            `Drawdown budget: ${budgetUsed.toFixed(0)}% used (max -${maxDrawdown}%)\n` +
+            `Action: ${action}`,
+          );
+        }
+      }
+    }
+  }
+
+  milestones.last_checked = new Date().toISOString();
+  await writeNotifiedMilestones(fundName, milestones);
+}
+
 /** Append a timestamped line to the daemon log file */
 async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
@@ -650,6 +729,16 @@ export async function startDaemon(): Promise<void> {
               const locked = await acquireFundLock(name, "stoploss");
               if (locked) {
                 try {
+                  // Write daily snapshot at first check of the day
+                  try {
+                    const today = new Date().toISOString().split("T")[0];
+                    const snap = await readDailySnapshot(name);
+                    if (!snap || snap.date !== today) {
+                      const port = await readPortfolio(name);
+                      await writeDailySnapshot(name, { date: today, total_value: port.total_value });
+                    }
+                  } catch { /* non-critical */ }
+
                   const triggered = await checkStopLosses(name);
                   if (triggered.length > 0) {
                     await log(
@@ -658,6 +747,13 @@ export async function startDaemon(): Promise<void> {
                     await executeStopLosses(name, triggered);
                   }
                   clearError(name, "stoploss");
+
+                  // Check milestones and drawdown
+                  try {
+                    await checkMilestonesAndDrawdown(name);
+                  } catch (err) {
+                    await log(`Milestone/drawdown check error (${name}): ${err}`);
+                  }
                 } catch (err) {
                   trackError(name, "stoploss", err);
                 } finally {
