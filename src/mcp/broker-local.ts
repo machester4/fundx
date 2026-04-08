@@ -250,8 +250,8 @@ server.tool(
       const fundDisplayName = FUND_DIR.split("/").pop() ?? "unknown";
       const isStopLoss = /stop/i.test(entry_reason ?? "");
       const notifyEnabled = isStopLoss
-        ? process.env.NOTIFY_STOP_LOSS_ALERTS !== "false"
-        : process.env.NOTIFY_TRADE_ALERTS !== "false";
+        ? process.env.NOTIFY_STOP_LOSS_ALERTS === "true"
+        : process.env.NOTIFY_TRADE_ALERTS === "true";
 
       if (notifyEnabled) {
         const inQuiet = isInQuietHoursEnv(
@@ -276,6 +276,11 @@ server.tool(
               lossPct,
             );
           } else {
+            // For regular sells, compute realized P&L
+            const sellPnl = preSellPosition ? (price - preSellPosition.avg_cost) * qty : undefined;
+            const sellPnlPct = preSellPosition && preSellPosition.avg_cost > 0
+              ? ((price - preSellPosition.avg_cost) / preSellPosition.avg_cost) * 100
+              : undefined;
             message = formatTradeAlert(
               fundDisplayName,
               symbol.toUpperCase(),
@@ -283,6 +288,8 @@ server.tool(
               qty,
               price,
               entry_reason,
+              sellPnl,
+              sellPnlPct,
             );
           }
           await sendTelegram(botToken, chatId, message);

@@ -65,6 +65,15 @@ describe("formatTradeAlert", () => {
     expect(msg).not.toContain("Reason:");
   });
 
+  it("formats a sell alert with P&L", () => {
+    const msg = formatTradeAlert("Growth", "URA", "sell", 6, 52.00, "Target reached", 20.04, 6.87);
+    expect(msg).toContain("🔴");
+    expect(msg).toContain("SELL");
+    expect(msg).toContain("P&amp;L:");
+    expect(msg).toContain("+$20.04");
+    expect(msg).toContain("+6.9%");
+  });
+
   it("includes total value", () => {
     const msg = formatTradeAlert("MyFund", "AAPL", "buy", 10, 175.5);
     expect(msg).toContain("Total: $1755.00");
@@ -72,15 +81,23 @@ describe("formatTradeAlert", () => {
 });
 
 describe("formatStopLossAlert", () => {
-  it("formats a stop-loss alert", () => {
+  it("formats a stop-loss alert with loss", () => {
     const msg = formatStopLossAlert("Growth", "URA", 6, 46.00, -15.96, -5.48);
     expect(msg).toContain("⚠️");
     expect(msg).toContain("STOP-LOSS");
     expect(msg).toContain("URA");
     expect(msg).toContain("46.00");
+    expect(msg).toContain("Loss:");
     expect(msg).toContain("-15.96");
     // lossPct uses toFixed(1), so -5.48 rounds to -5.5
     expect(msg).toContain("-5.5");
+  });
+
+  it("formats a stop-loss alert with profit (trailing stop)", () => {
+    const msg = formatStopLossAlert("Growth", "URA", 6, 55.00, 12.00, 4.5);
+    expect(msg).toContain("P&amp;L:");
+    expect(msg).toContain("+$12.00");
+    expect(msg).toContain("+4.5%");
   });
 
   it("includes fund name in bold", () => {

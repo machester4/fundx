@@ -22,6 +22,7 @@ import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
 import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
+import { isInQuietHoursEnv } from "../mcp/broker-local-notify.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -40,23 +41,12 @@ let isProcessing = false;
 
 // ── Notification Helpers ─────────────────────────────────────
 
-function isInQuietHoursForFund(start: string, end: string): boolean {
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const [startH, startM] = start.split(":").map(Number);
-  const [endH, endM] = end.split(":").map(Number);
-  const startMin = startH! * 60 + startM!;
-  const endMin = endH! * 60 + endM!;
-  if (startMin <= endMin) return currentMinutes >= startMin && currentMinutes < endMin;
-  return currentMinutes >= startMin || currentMinutes < endMin;
-}
-
 export async function sendDailyDigest(fundName: string): Promise<void> {
   const config = await loadFundConfig(fundName);
   if (!config.notifications.telegram.enabled || !config.notifications.telegram.daily_digest) return;
 
   const qh = config.notifications.quiet_hours;
-  if (qh.enabled && isInQuietHoursForFund(qh.start, qh.end)) return;
+  if (qh.enabled && isInQuietHoursEnv(qh.start, qh.end)) return;
 
   const portfolio = await readPortfolio(fundName);
   const tracker = await readTracker(fundName).catch(() => null);
@@ -106,7 +96,7 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
   if (!config.notifications.telegram.enabled || !config.notifications.telegram.weekly_digest) return;
 
   const qh = config.notifications.quiet_hours;
-  if (qh.enabled && isInQuietHoursForFund(qh.start, qh.end)) return;
+  if (qh.enabled && isInQuietHoursEnv(qh.start, qh.end)) return;
 
   const portfolio = await readPortfolio(fundName);
   const tracker = await readTracker(fundName).catch(() => null);
@@ -124,10 +114,15 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
   const losses = trades.filter((t) => (t.pnl ?? 0) < 0).length;
   const bestPnl = trades.reduce((max, t) => Math.max(max, t.pnl ?? 0), 0);
   const worstPnl = trades.reduce((min, t) => Math.min(min, t.pnl ?? 0), 0);
+  const weeklyPnl = trades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
   const today = new Date();
   const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
   const weekRange = `${weekAgo.toISOString().split("T")[0]} – ${today.toISOString().split("T")[0]}`;
+
+  const pnlLine = weeklyPnl !== 0
+    ? `\nRealized P&amp;L: ${weeklyPnl >= 0 ? "+" : ""}$${weeklyPnl.toFixed(2)}`
+    : "";
 
   const objectiveLine = tracker
     ? `\nObjective: ${tracker.progress_pct.toFixed(1)}% toward goal`
@@ -139,7 +134,7 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
     `Portfolio: $${portfolio.total_value.toFixed(2)}`,
     `Trades: ${trades.length} (${wins} wins, ${losses} losses)`,
     `Best: $${bestPnl.toFixed(2)} | Worst: $${worstPnl.toFixed(2)}`,
-  ].join("\n") + objectiveLine;
+  ].join("\n") + pnlLine + objectiveLine;
 
   const { sendTelegramNotification } = await import("./gateway.service.js");
   await sendTelegramNotification(message);
@@ -168,7 +163,7 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
   // Milestone check
   if (tracker && config.notifications.telegram.milestone_alerts) {
     const qh = config.notifications.quiet_hours;
-    const suppressed = qh.enabled && isInQuietHoursForFund(qh.start, qh.end);
+    const suppressed = qh.enabled && isInQuietHoursEnv(qh.start, qh.end);
 
     if (!suppressed) {
       for (const threshold of MILESTONE_THRESHOLDS) {
@@ -181,7 +176,7 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
           const sign = gain >= 0 ? "+" : "";
           await sendTelegramNotification(
             `🎯 <b>${displayName}</b> — Milestone: ${threshold}% of objective reached\n` +
-            `$${tracker.initial_capital.toLocaleString()} → $${portfolio.total_value.toLocaleString()} (${sign}$${gain.toFixed(2)})`,
+            `$${tracker.initial_capital.toLocaleString("en-US")} → $${portfolio.total_value.toLocaleString("en-US")} (${sign}$${gain.toFixed(2)})`,
           );
         }
       }
@@ -195,7 +190,7 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
     const budgetUsed = maxDrawdown > 0 ? (drawdownPct / maxDrawdown) * 100 : 0;
 
     const qh = config.notifications.quiet_hours;
-    const inQuiet = qh.enabled && isInQuietHoursForFund(qh.start, qh.end);
+    const inQuiet = qh.enabled && isInQuietHoursEnv(qh.start, qh.end);
     const allowCrit = qh.allow_critical;
     const suppressed = inQuiet && !allowCrit;
 
@@ -211,7 +206,7 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
             : "Half sizing on new positions";
           await sendTelegramNotification(
             `📉 <b>${displayName}</b> — Drawdown Warning\n` +
-            `-$${(milestones.peak_value - portfolio.total_value).toFixed(2)} (-${drawdownPct.toFixed(1)}%) from peak $${milestones.peak_value.toLocaleString()}\n` +
+            `-$${(milestones.peak_value - portfolio.total_value).toFixed(2)} (-${drawdownPct.toFixed(1)}%) from peak $${milestones.peak_value.toLocaleString("en-US")}\n` +
             `Drawdown budget: ${budgetUsed.toFixed(0)}% used (max -${maxDrawdown}%)\n` +
             `Action: ${action}`,
           );

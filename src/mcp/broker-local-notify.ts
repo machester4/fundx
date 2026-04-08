@@ -61,6 +61,8 @@ export function shouldSendNotification(
  * @param qty     - Number of shares
  * @param price   - Execution price per share
  * @param reason  - Optional trade thesis / entry reason
+ * @param pnl     - Optional realized P&L in dollars (for sells)
+ * @param pnlPct  - Optional realized P&L as percentage (for sells)
  */
 export function formatTradeAlert(
   fund: string,
@@ -69,6 +71,8 @@ export function formatTradeAlert(
   qty: number,
   price: number,
   reason?: string,
+  pnl?: number,
+  pnlPct?: number,
 ): string {
   const emoji = side === "buy" ? "🟢" : "🔴";
   const action = side === "buy" ? "BUY" : "SELL";
@@ -77,6 +81,10 @@ export function formatTradeAlert(
     `${emoji} <b>${fund}</b> — ${action} ${qty} ${symbol} @ $${price.toFixed(2)}`,
     `Total: $${total}`,
   ];
+  if (pnl !== undefined && pnlPct !== undefined) {
+    const sign = pnl >= 0 ? "+" : "";
+    lines.push(`P&amp;L: ${sign}$${pnl.toFixed(2)} (${sign}${pnlPct.toFixed(1)}%)`);
+  }
   if (reason) lines.push(`Reason: ${reason}`);
   return lines.join("\n");
 }
@@ -88,8 +96,8 @@ export function formatTradeAlert(
  * @param symbol  - Ticker symbol (uppercased)
  * @param shares  - Number of shares sold
  * @param price   - Execution price per share
- * @param loss    - Dollar loss (negative means a loss)
- * @param lossPct - Percentage loss (negative means a loss)
+ * @param loss    - Dollar P&L (negative means a loss, positive means trailing stop at profit)
+ * @param lossPct - Percentage P&L (negative means a loss)
  */
 export function formatStopLossAlert(
   fund: string,
@@ -99,10 +107,12 @@ export function formatStopLossAlert(
   loss: number,
   lossPct: number,
 ): string {
+  const label = loss < 0 ? "Loss" : "P&amp;L";
+  const sign = loss >= 0 ? "+" : "";
   return [
     `⚠️ <b>${fund}</b> — STOP-LOSS ${symbol}`,
     `${shares} shares sold @ $${price.toFixed(2)} (stop triggered)`,
-    `Loss: $${loss.toFixed(2)} (${lossPct.toFixed(1)}%)`,
+    `${label}: ${sign}$${loss.toFixed(2)} (${sign}${lossPct.toFixed(1)}%)`,
   ].join("\n");
 }
 
