@@ -47,6 +47,13 @@ describe("fundPaths", () => {
     expect(paths.state.sessionLog).toBe(join(fundRoot, "state", "session_log.json"));
   });
 
+  it("includes sessionHandoff in state paths", () => {
+    const paths = fundPaths("test-fund");
+    expect(paths.state.sessionHandoff).toBe(
+      join(FUNDS_DIR, "test-fund", "state", "session-handoff.md"),
+    );
+  });
+
   it("returns correct auxiliary paths", () => {
     const paths = fundPaths("alpha");
     const fundRoot = join(home, ".fundx", "funds", "alpha");
