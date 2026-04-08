@@ -269,7 +269,9 @@ export async function readSessionHandoff(fundName: string): Promise<string | nul
 export async function writeSessionHandoff(fundName: string, content: string): Promise<void> {
   const paths = fundPaths(fundName);
   await mkdir(dirname(paths.state.sessionHandoff), { recursive: true });
-  await writeFile(paths.state.sessionHandoff, content, "utf-8");
+  const tmp = paths.state.sessionHandoff + ".tmp";
+  await writeFile(tmp, content, "utf-8");
+  await rename(tmp, paths.state.sessionHandoff);
 }
 
 // ── Initialize state for a new fund ────────────────────────────
