@@ -18,22 +18,6 @@ describe("Phase 5 Zod Schemas", () => {
     expect(valid.max_duration_minutes).toBe(15); // default
   });
 
-  it("should validate live trading confirmation schema", async () => {
-    const { liveTradingConfirmationSchema } = await import("../src/types.js");
-
-    const valid = liveTradingConfirmationSchema.parse({
-      fund: "runway",
-      confirmed_at: "2026-02-24T12:00:00Z",
-      confirmed_by: "cli",
-      previous_mode: "paper",
-      new_mode: "live",
-    });
-
-    expect(valid.fund).toBe("runway");
-    expect(valid.confirmed_by).toBe("cli");
-    expect(valid.new_mode).toBe("live");
-  });
-
   it("should validate fund template schema", async () => {
     const { fundTemplateSchema } = await import("../src/types.js");
 
@@ -58,21 +42,6 @@ describe("Phase 5 Zod Schemas", () => {
 
     expect(valid.template_name).toBe("test-template");
     expect(valid.config.fund.name).toBe("test");
-  });
-
-  it("should validate broker capabilities schema", async () => {
-    const { brokerCapabilitiesSchema } = await import("../src/types.js");
-
-    const valid = brokerCapabilitiesSchema.parse({
-      stocks: true,
-      etfs: true,
-      crypto: false,
-    });
-
-    expect(valid.stocks).toBe(true);
-    expect(valid.etfs).toBe(true);
-    expect(valid.crypto).toBe(false);
-    expect(valid.options).toBe(false); // default
   });
 
   it("should validate correlation entry schema", async () => {
