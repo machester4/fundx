@@ -410,6 +410,7 @@ export async function runChatTurn(
         `You are an interactive assistant for the FundX investment fund "${fundName}".`,
         `You have access to MCP tools for market data and broker operations.`,
         `Be concise and helpful. Use specific numbers when available.`,
+        `On your first interaction, follow the session-init rule to orient yourself before responding.`,
         readonlyNote,
         "",
         "## Current Fund State",
