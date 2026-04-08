@@ -16,7 +16,7 @@ FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform
 - **Session**: A Claude Code invocation scoped to a single fund. Sessions run on a schedule (pre-market, mid-session, post-market) or on-demand via CLI/Telegram.
 - **Daemon/Scheduler**: Background process that checks schedules and launches Claude Code sessions for each active fund.
 - **Telegram Gateway**: Always-on bot for notifications (trade alerts, digests) and bidirectional interaction (user questions wake Claude).
-- **MCP Servers**: Broker integrations (Alpaca), market data, news/sentiment, and Telegram notifications. IBKR and Binance adapters are planned.
+- **MCP Servers**: Local paper broker (`broker-local`), market data (FMP/Yahoo Finance), news/sentiment, and Telegram notifications.
 
 ### High-Level Flow
 
@@ -32,7 +32,7 @@ Each Claude Code session:
 3. Creates and executes analysis scripts as needed
 4. Optionally invokes sub-agents via the Task tool (market-analyst, technical-analyst, risk-guardian)
 5. Makes decisions within fund constraints
-6. Executes trades via MCP broker server
+6. Executes trades via `broker-local` MCP server (paper trading, updates portfolio.json locally)
 7. Updates persistent state and generates reports
 8. Sends notifications via Telegram
 
@@ -76,8 +76,8 @@ Each Claude Code session:
 | Telegram     | grammy (Phase 3)                        |
 | AI Engine    | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP Servers  | TypeScript (Phase 2+)                   |
-| Market Data  | FMP (primary) / Alpaca Data API (fallback) |
-| Broker       | Alpaca API (Phase 2)                    |
+| Market Data  | FMP (primary) / Yahoo Finance (fallback) |
+| Broker       | Local paper trading (portfolio.json)    |
 | Build        | tsup (prod) / tsx (dev)                 |
 | Test         | Vitest                                  |
 | Package      | pnpm                                    |
@@ -116,10 +116,8 @@ src/
   subagent.ts           # Agent definitions for the Task tool (market-analyst, technical-analyst, risk-guardian)
   embeddings.ts         # Trade journal FTS5 indexing + similarity search
   journal.ts            # Trade journal SQLite CRUD (open, insert, query, summary)
-  alpaca-helpers.ts     # Shared Alpaca API helpers (credentials, fetch, orders)
-  sync.ts               # Portfolio sync from Alpaca broker
-  stoploss.ts           # Stop-loss monitoring and execution
-  broker-adapter.ts     # Broker adapter interface + Alpaca implementation
+  paper-trading.ts      # Pure buy/sell execution functions for local paper trading
+  stoploss.ts           # Stop-loss monitoring (FMP prices) and local execution
   skills.ts             # Source of truth for skills and per-fund rules — BUILTIN_SKILLS + WORKSPACE_SKILL + FUND_RULES
   services/             # Pure business logic (async functions, no UI)
     index.ts            # Barrel file re-exporting all services
@@ -131,7 +129,6 @@ src/
     gateway.service.ts  # Telegram gateway management
     ask.service.ts      # Question answering + cross-fund analysis
     chat.service.ts     # Chat REPL — context building, streaming, workspace mode (null fund → fund creation flow)
-    live-trading.service.ts  # Live trading safety checks + mode switching
     templates.service.ts     # Fund templates (export/import/builtin/clone)
     special-sessions.service.ts  # Event-triggered sessions (FOMC, OpEx, etc.)
     chart.service.ts    # Performance chart data (allocation, P&L, sparklines)
@@ -142,7 +139,7 @@ src/
     portfolio.service.ts     # Portfolio display data
     trades.service.ts   # Trade history queries
     performance.service.ts   # Performance metrics aggregation
-    market.service.ts   # Market data (FMP primary, Alpaca fallback)
+    market.service.ts   # Market data (FMP primary, Yahoo Finance fallback)
   commands/             # Pastel commands (React/Ink components, file-based routing)
     index.tsx           # Default command (fullscreen TUI dashboard + chat REPL)
     init.tsx            # fundx init
@@ -158,7 +155,6 @@ src/
     fund/               # fundx fund {create,list,info,delete,clone,upgrade}
     session/            # fundx session {run,agents}
     gateway/            # fundx gateway {start,test}
-    live/               # fundx live {enable,disable}
     template/           # fundx template {list,export,import,builtin}
     special/            # fundx special {list,add,remove}
     chart/              # fundx chart {allocation,pnl,sparkline}
@@ -204,8 +200,8 @@ src/
   context/              # React contexts
     AppContext.tsx       # Global config, error handling
   mcp/
-    broker-alpaca.ts    # MCP server: Alpaca broker integration
-    market-data.ts      # MCP server: market data provider
+    broker-local.ts     # MCP server: local paper broker (FMP prices, portfolio.json state)
+    market-data.ts      # MCP server: market data provider (FMP + Yahoo Finance)
     telegram-notify.ts  # MCP server: Telegram notifications for Claude sessions
 ```
 
@@ -220,10 +216,10 @@ src/
 
 ### Configuration
 
-- Global config: `~/.fundx/config.yaml` (broker credentials, Telegram token, market data provider, default model)
+- Global config: `~/.fundx/config.yaml` (Telegram token, market data provider, FMP API key, default model)
 - Per-fund config: `~/.fundx/funds/<name>/fund_config.yaml` (objective, risk, universe, schedule, AI personality)
-- Market data: `market_data.provider` (`fmp` or `alpaca`) + `market_data.fmp_api_key` in global config
-- Credentials must NEVER be stored in per-fund configs or committed to git
+- Market data: `market_data.provider` (`fmp` or `yfinance`) + `market_data.fmp_api_key` in global config
+- Trading is always paper mode — trades execute locally against `portfolio.json`
 - The `.gitignore` already covers `.env` files — maintain this pattern
 
 ## Prompting Conventions
@@ -335,9 +331,9 @@ description: One-line description — Claude uses this to decide when to invoke 
 3. **Declarative funds** — A fund is fully defined by its `fund_config.yaml`; everything else is derived
 4. **State is king** — Everything persists between sessions; Claude always knows where it left off
 5. **Human in the loop, not in the way** — Autonomous operation with CLI/Telegram intervention available
-6. **Paper first, live later** — Every fund starts in paper mode; live trading requires explicit confirmation
+6. **Paper mode** — All trading is simulated locally against `portfolio.json`; the user replicates positions manually in their real broker
 7. **Memory makes it smarter** — Trade journal + vector search enables learning from history
-8. **Open and extensible** — New brokers, MCP servers, and objective types are all pluggable
+8. **Open and extensible** — New MCP servers and objective types are pluggable
 
 ### Fund Objective Types
 
@@ -379,10 +375,10 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] End-to-end test: init → create fund → run session
 
 ### Phase 2 — Broker & Trading — COMPLETE
-- [x] MCP server: broker-alpaca (paper trading)
-- [x] MCP server: market-data (Yahoo Finance / Alpha Vantage wrapper)
-- [x] Portfolio state auto-sync, trade execution, journal logging
-- [x] Stop-loss monitoring
+- [x] MCP server: broker-local (local paper trading with FMP prices)
+- [x] MCP server: market-data (FMP primary, Yahoo Finance fallback)
+- [x] Paper trade execution via `paper-trading.ts`, journal logging
+- [x] Stop-loss monitoring (FMP prices, local execution)
 
 ### Phase 3 — Telegram — COMPLETE
 - [x] Telegram bot with grammy (`gateway.ts`)
@@ -403,8 +399,6 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] Trade context summary generation for prompts
 
 ### Phase 5 — Advanced — COMPLETE
-- [x] Live trading mode with safety checks and double confirmation (`live-trading.ts`)
-- [x] Broker adapter interface + Alpaca implementation (`broker-adapter.ts`); IBKR/Binance planned
 - [x] Fund templates: built-in (runway, growth, accumulation, income), export/import (`templates.ts`)
 - [x] `fundx fund clone` — clone existing fund configuration
 - [x] Special sessions: FOMC, OpEx, CPI, NFP, Earnings Season triggers (`special-sessions.ts`)
@@ -442,7 +436,7 @@ pnpm typecheck            # Type check (tsc --noEmit)
 
 - The README.md is the authoritative design document — refer to it for detailed schemas, CLI flow examples, and architecture diagrams
 - When creating new files, follow the planned directory structure above
-- Never hardcode broker credentials or API keys; always read from global config
+- Never hardcode API keys; always read from global config
 - Fund state files must always be updated atomically (write to temp file, then rename)
 - Every trade must be logged in the SQLite journal with reasoning
 - Per-fund `CLAUDE.md` files are auto-generated from `fund_config.yaml` — they are separate from this root `CLAUDE.md`
