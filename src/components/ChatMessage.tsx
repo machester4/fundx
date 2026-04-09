@@ -24,7 +24,7 @@ export function ChatMessage({ sender, content }: ChatMessageProps) {
   if (sender === "you") {
     return (
       <Box marginBottom={1} flexDirection="column">
-        <Text color="blueBright" dimColor bold>YOU</Text>
+        <Text color="blueBright" bold>YOU</Text>
         <Box borderLeft borderColor="blueBright" paddingLeft={1}>
           <Text color="white" bold>{content}</Text>
         </Box>
@@ -35,8 +35,8 @@ export function ChatMessage({ sender, content }: ChatMessageProps) {
   // Claude response
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="magenta" dimColor bold>CLAUDE</Text>
-      <Box borderLeft borderColor="magenta" paddingLeft={1} flexDirection="column">
+      <Text color="magentaBright" bold>CLAUDE</Text>
+      <Box borderLeft borderColor="magentaBright" paddingLeft={1} flexDirection="column">
         <MarkdownView content={content} />
       </Box>
     </Box>
