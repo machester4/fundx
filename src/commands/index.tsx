@@ -52,13 +52,16 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
     }
   });
 
+  // Use fullscreen mode when terminal is wide enough for sidebar, static scroll mode otherwise
+  const chatMode = width >= 120 ? "standalone" : "static";
+
   return (
     <ChatView
       key={fundName}
       fundName={fundName}
       width={width}
       height={height}
-      mode="static"
+      mode={chatMode}
       onExit={onExit}
       onSwitchFund={handleSwitchFund}
       options={chatOptions}
