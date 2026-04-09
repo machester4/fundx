@@ -416,7 +416,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                 </Box>
               ) : phase !== "error" ? (
                 <Box paddingX={1}>
-                  <Text color="green">{"❯ "}</Text>
+                  <Text color="blueBright">{"❯ "}</Text>
                   <TextInput
                     placeholder="Message... (/help for commands)"
                     onSubmit={handleSubmit}
@@ -514,7 +514,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
             {!isStreaming && (
               <Box paddingX={1}>
-                <Text color="green">{"❯ "}</Text>
+                <Text color="blueBright">{"❯ "}</Text>
                 <TextInput
                   placeholder="Message... (/help for commands)"
                   onSubmit={handleSubmit}

@@ -20,14 +20,14 @@ export function UpcomingPanel({ items, width }: UpcomingPanelProps) {
 
   if (past.length === 0 && upcoming.length === 0) {
     return (
-      <SidebarPanel title="SESSIONS" width={width}>
+      <SidebarPanel title="SESSIONS" color="yellow" width={width}>
         <Text dimColor>No sessions today</Text>
       </SidebarPanel>
     );
   }
 
   return (
-    <SidebarPanel title="SESSIONS" width={width}>
+    <SidebarPanel title="SESSIONS" color="yellow" width={width}>
       {past.length > 0 && (
         <Box flexDirection="column">
           {past.map((item, i) => {
