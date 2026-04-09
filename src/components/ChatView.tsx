@@ -374,7 +374,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
     return <Spinner label={fundName ? `Loading ${fundName}...` : "Loading FundX..."} />;
   }
 
-  if (isStatic && !showSidebar) {
+  if (isStatic) {
     return (
       <Box flexDirection="row" width={width}>
         {/* Chat column */}
