@@ -523,6 +523,11 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
             )}
             <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
           </Box>
+
+          {/* Context bar — inside chat column */}
+          {!isInline && (welcomeData || isWorkspaceMode) && (
+            <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+          )}
         </Box>
 
         {/* Sidebar */}
@@ -537,11 +542,6 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
           </Box>
         )}
       </Box>
-
-      {/* Context bar — below input */}
-      {!isInline && (welcomeData || isWorkspaceMode) && (
-        <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
-      )}
     </Box>
   );
 }
