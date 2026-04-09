@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { readSessionHandoff, readPortfolio, readPendingSessions } from "../state.js";
+import { readSessionHandoff, readPortfolio, readPendingSessions, readSessionHistory } from "../state.js";
 import { loadFundConfig } from "../services/fund.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { useInterval } from "./useInterval.js";
@@ -39,16 +39,25 @@ async function fetchFmpQuotes(
 function buildUpcomingItems(
   pendingSessions: PendingSession[],
   config: FundConfig,
+  sessionHistory: Record<string, string>,
 ): UpcomingItem[] {
   const items: UpcomingItem[] = [];
   const now = new Date();
+  const today = now.toDateString();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Past sessions (ran today) from session_history
+  for (const [sessionType, timestamp] of Object.entries(sessionHistory)) {
+    const ran = new Date(timestamp);
+    if (ran.toDateString() !== today) continue;
+    const timeStr = ran.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    items.push({ time: timeStr, label: sessionType.replace(/_/g, " "), type: "past", status: "success" });
+  }
 
   // Pending sessions (self-scheduled)
   for (const ps of pendingSessions) {
     const scheduledDate = new Date(ps.scheduled_at);
-    const isToday = scheduledDate.toDateString() === now.toDateString();
-    if (!isToday) continue;
+    if (scheduledDate.toDateString() !== today) continue;
     const timeStr = scheduledDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
     items.push({ time: timeStr, label: ps.focus.slice(0, 30), type: "session" });
   }
@@ -64,9 +73,10 @@ function buildUpcomingItems(
     items.push({ time: timeStr, label: name.replace(/_/g, " "), type: "session" });
   }
 
-  // Sort by time
-  items.sort((a, b) => a.time.localeCompare(b.time));
-  return items;
+  // Sort: past first (by time), then upcoming (by time)
+  const past = items.filter((i) => i.type === "past").sort((a, b) => a.time.localeCompare(b.time));
+  const upcoming = items.filter((i) => i.type !== "past").sort((a, b) => a.time.localeCompare(b.time));
+  return [...past, ...upcoming];
 }
 
 function isWithinMarketHours(): boolean {
@@ -92,17 +102,18 @@ export function useSidebarData(fundName: string | null): SidebarData {
 
     (async () => {
       try {
-        const [handoff, portfolio, pending, config, globalConfig] = await Promise.all([
+        const [handoff, portfolio, pending, config, globalConfig, sessionHistory] = await Promise.all([
           readSessionHandoff(fundName).catch(() => null),
           readPortfolio(fundName).catch(() => null),
           readPendingSessions(fundName).catch(() => []),
           loadFundConfig(fundName).catch(() => null),
           loadGlobalConfig().catch(() => null),
+          readSessionHistory(fundName).catch(() => ({})),
         ]);
 
         if (cancelled) return;
 
-        const upcoming = config ? buildUpcomingItems(pending, config) : [];
+        const upcoming = config ? buildUpcomingItems(pending, config, sessionHistory) : [];
         const isMarketOpen = isWithinMarketHours();
 
         // Fetch market data
