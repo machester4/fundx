@@ -23,7 +23,7 @@ export function HandoffPanel({ handoff, width }: HandoffPanelProps) {
 
   if (!handoff) {
     return (
-      <SidebarPanel title="HANDOFF" width={width}>
+      <SidebarPanel title="HANDOFF" color="blueBright" width={width}>
         <Text dimColor>No handoff yet</Text>
       </SidebarPanel>
     );
@@ -41,7 +41,7 @@ export function HandoffPanel({ handoff, width }: HandoffPanelProps) {
   const hasSections = contract.length > 0 || whatIDid.length > 0 || concerns.length > 0 || nextShould.length > 0;
 
   return (
-    <SidebarPanel title="HANDOFF" width={width}>
+    <SidebarPanel title="HANDOFF" color="blueBright" width={width}>
       <Box flexDirection="column" width={innerWidth}>
         {sessionInfo && <Text dimColor wrap="wrap">{sessionInfo}</Text>}
         {hasSections ? (

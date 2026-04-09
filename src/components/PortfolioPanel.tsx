@@ -11,7 +11,7 @@ interface PortfolioPanelProps {
 export function PortfolioPanel({ portfolio, width }: PortfolioPanelProps) {
   if (!portfolio) {
     return (
-      <SidebarPanel title="PORTFOLIO" width={width}>
+      <SidebarPanel title="PORTFOLIO" color="magenta" width={width}>
         <Text dimColor>No portfolio data</Text>
       </SidebarPanel>
     );
@@ -23,7 +23,7 @@ export function PortfolioPanel({ portfolio, width }: PortfolioPanelProps) {
     : "100";
 
   return (
-    <SidebarPanel title="PORTFOLIO" value={totalStr} width={width}>
+    <SidebarPanel title="PORTFOLIO" value={totalStr} color="magenta" width={width}>
       {portfolio.positions.map((p) => {
         const arrow = p.unrealized_pnl_pct >= 0 ? "▲" : "▼";
         const color = p.unrealized_pnl_pct >= 0 ? "green" : "red";

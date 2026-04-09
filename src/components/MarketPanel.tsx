@@ -17,14 +17,14 @@ interface MarketPanelProps {
 export function MarketPanel({ tickers, isMarketOpen, width }: MarketPanelProps) {
   if (tickers.length === 0) {
     return (
-      <SidebarPanel title="MARKET" width={width}>
+      <SidebarPanel title="MARKET" color="cyanBright" width={width}>
         <Text dimColor>No market data</Text>
       </SidebarPanel>
     );
   }
 
   return (
-    <SidebarPanel title="MARKET" width={width}>
+    <SidebarPanel title="MARKET" color="cyanBright" width={width}>
       {tickers.map((t) => {
         const arrow = t.changePct >= 0 ? "▲" : "▼";
         const color = t.changePct >= 0 ? "green" : "red";
