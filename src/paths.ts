@@ -25,6 +25,9 @@ export const SUPERVISOR_PID = join(WORKSPACE, "supervisor.pid");
 /** Daemon heartbeat file */
 export const DAEMON_HEARTBEAT = join(WORKSPACE, "daemon.heartbeat");
 
+/** Daemon restart flag — written by session runner on auth failure, read by supervisor */
+export const DAEMON_NEEDS_RESTART = join(WORKSPACE, "daemon.needs-restart");
+
 /** Max daemon log size before rotation (5 MB) */
 export const DAEMON_LOG_MAX_SIZE = 5 * 1024 * 1024;
 

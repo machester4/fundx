@@ -1,7 +1,7 @@
 import { fork, spawn } from "node:child_process";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { SUPERVISOR_PID } from "../paths.js";
+import { SUPERVISOR_PID, DAEMON_NEEDS_RESTART } from "../paths.js";
 
 const MAX_RESTARTS = 5;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -104,6 +104,22 @@ export async function startSupervisor(): Promise<void> {
     }, 60000);
   }
 
+  // Periodically check if the daemon needs a restart (e.g., expired auth token).
+  // The session runner writes daemon.needs-restart on auth failure.
+  const restartCheckInterval = setInterval(async () => {
+    if (stopping || !currentChild) return;
+    if (existsSync(DAEMON_NEEDS_RESTART)) {
+      await unlink(DAEMON_NEEDS_RESTART).catch(() => {});
+      // Don't count auth restarts against the crash budget — reset attempt counter
+      attempt = 0;
+      currentChild.kill("SIGTERM");
+      // The child's "exit" handler will re-launch after backoff
+    }
+  }, 60_000);
+
+  process.on("SIGTERM", () => clearInterval(restartCheckInterval));
+  process.on("SIGINT", () => clearInterval(restartCheckInterval));
+
   launchDaemon();
 }
 
@@ -116,7 +132,17 @@ export async function forkSupervisor(): Promise<void> {
     try {
       const raw = JSON.parse(await readFile(SUPERVISOR_PID, "utf-8"));
       process.kill(raw.pid, 0);
-      return; // Already running
+
+      // If a restart is needed (token expired), kill the old supervisor so a fresh
+      // one inherits the current CLAUDE_CODE_OAUTH_TOKEN from this Claude Code session.
+      if (existsSync(DAEMON_NEEDS_RESTART)) {
+        process.kill(raw.pid, "SIGTERM");
+        await unlink(SUPERVISOR_PID).catch(() => {});
+        await unlink(DAEMON_NEEDS_RESTART).catch(() => {});
+        // Fall through to fork a new supervisor below
+      } else {
+        return; // Already running, no restart needed
+      }
     } catch {
       await unlink(SUPERVISOR_PID).catch(() => {});
     }

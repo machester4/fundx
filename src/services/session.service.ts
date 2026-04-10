@@ -1,7 +1,9 @@
+import { writeFile } from "node:fs/promises";
 import { loadFundConfig } from "./fund.service.js";
 import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory } from "../state.js";
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
+import { DAEMON_NEEDS_RESTART } from "../paths.js";
 import type { SessionLogV2 } from "../types.js";
 
 const DEFAULT_MAX_TURNS = 50;
@@ -159,6 +161,22 @@ export async function runFundSession(
     await writeSessionHistory(fundName, history);
   } catch {
     // Non-critical -- catch-up will still work from session_log.json fallback
+  }
+
+  // Detect probable auth failure: error status with zero tokens/turns means the SDK
+  // couldn't authenticate (expired CLAUDE_CODE_OAUTH_TOKEN). Signal supervisor to restart.
+  if (
+    result.status === "error" &&
+    (log.tokens_in ?? 0) === 0 &&
+    (log.tokens_out ?? 0) === 0 &&
+    (log.num_turns ?? 0) === 0
+  ) {
+    try {
+      await writeFile(DAEMON_NEEDS_RESTART, new Date().toISOString(), "utf-8");
+      await notifySession(
+        `\u26A0\uFE0F <b>[Daemon]</b> Session failed for <b>${displayName}</b> — probable token expiry.\nRestarting daemon to refresh auth...`,
+      );
+    } catch { /* best effort */ }
   }
 
   if (result.session_id && result.status === "success") {
