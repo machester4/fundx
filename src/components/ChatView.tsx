@@ -1,7 +1,26 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Box, Text, useInput, Static } from "ink";
 import { Spinner, TextInput } from "@inkjs/ui";
+import { ScrollView, type ScrollViewRef } from "ink-scroll-view";
 import { basename } from "node:path";
+import { userInfo } from "node:os";
+
+/**
+ * Prettify a Claude model identifier for display in chat headers.
+ * Examples:
+ *   "sonnet"               -> "sonnet"
+ *   "claude-sonnet-4-6"    -> "sonnet 4.6"
+ *   "claude-opus-4-6"      -> "opus 4.6"
+ *   "claude-haiku-4-5-20251001" -> "haiku 4.5"
+ */
+function prettyModelName(model: string): string {
+  let s = model.replace(/^claude-/, "");
+  // Match a name followed by major.minor (e.g., "sonnet-4-6") and reformat.
+  // Trailing date-style suffixes (e.g., "-20251001") are dropped for brevity.
+  const m = s.match(/^([a-z]+)-(\d+)-(\d+)/);
+  if (m) s = `${m[1]} ${m[2]}.${m[3]}`;
+  return s;
+}
 import {
   resolveChatModel,
   buildChatMcpServers,
@@ -67,9 +86,36 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const [model, setModel] = useState("sonnet");
   const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[]; env: Record<string, string> }>>({});
   const streaming = useStreaming();
+  // Personalized labels for chat headers — OS username + prettified model name.
+  // userInfo() is sync and cheap; computed once. aiLabel reacts to /fund switches
+  // since the per-fund model may differ from the workspace default.
+  const userLabel = useMemo(() => {
+    try {
+      return userInfo().username || "you";
+    } catch {
+      return "you";
+    }
+  }, []);
+  const aiLabel = useMemo(() => prettyModelName(model), [model]);
   // Track known fund names to detect when Claude creates a new fund in workspace mode
   const knownFundsRef = useRef<string[]>([]);
   const [workspaceFunds, setWorkspaceFunds] = useState<string[]>([]);
+
+  // Scroll management: ScrollView ref + stick-to-bottom flag.
+  // stickToBottomRef starts true; becomes false when user manually scrolls up,
+  // true again when they scroll back to bottom. Controls whether new messages
+  // auto-scroll into view.
+  const scrollRef = useRef<ScrollViewRef>(null);
+  const stickToBottomRef = useRef(true);
+  // Throttle timer for auto-scroll during streaming — coalesces rapid token
+  // updates into at most one scrollToBottom call per frame.
+  const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Tracks unread messages that arrived while user was scrolled up.
+  // Resets to 0 when user scrolls back to bottom or sends a new message.
+  const [unreadCount, setUnreadCount] = useState(0);
+  // Previous message count for diffing — used to detect new arrivals
+  // without coupling the unread effect to the streaming buffer.
+  const prevMsgLenRef = useRef(0);
 
   const addMessage = useCallback((sender: ChatMsg["sender"], content: string, cost?: number, turns?: number) => {
     setMessages((prev) => [...prev, {
@@ -211,6 +257,12 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       setTurnCount(0);
       setMessages([]);
       nextIdRef.current = 1;
+      // Reset auto-scroll lock — the prior scroll position is irrelevant after
+      // clearing. Without this, a user who scrolled up before /clear would find
+      // the first new post-clear message silently queued below the viewport.
+      stickToBottomRef.current = true;
+      setUnreadCount(0);
+      prevMsgLenRef.current = 0;
       streaming.reset();
       if (fundName) {
         try {
@@ -358,7 +410,15 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   }, [messages, sessionId, fundName]);
 
   const isStreaming = phase === "streaming";
+  const [inputKey, setInputKey] = useState(0);
 
+  // Wrap handleSubmit to reset TextInput value via key change.
+  // The key increment is batched with handleSubmit's state updates,
+  // so the TextInput remounts fresh while hidden during streaming.
+  const wrappedHandleSubmit = useCallback(async (value: string) => {
+    setInputKey((k) => k + 1);
+    await handleSubmit(value);
+  }, [handleSubmit]);
 
   useInput((input, key) => {
     if (!isInline && !isStatic && key.escape && phase !== "streaming") {
@@ -368,7 +428,75 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       streaming.cancel();
       setPhase("ready");
     }
+
+    // Scroll controls — active only in standalone mode (ScrollView exists there).
+    // Only non-printable keys bound: printable chars (g, G, etc.) would hijack
+    // text typed into the input field since Ink's useInput fires for every
+    // registered handler regardless of focus.
+    if (isInline || isStatic) return;
+    const sv = scrollRef.current;
+    if (!sv) return;
+    const viewportH = sv.getViewportHeight();
+    const pageStep = Math.max(1, viewportH - 2);
+    if (key.upArrow) sv.scrollBy(-1);
+    else if (key.downArrow) sv.scrollBy(1);
+    else if (key.pageUp) sv.scrollBy(-pageStep);
+    else if (key.pageDown) sv.scrollBy(pageStep);
   });
+
+  // Remeasure ScrollView on terminal resize — Ink doesn't propagate resizes
+  // into the ScrollView automatically, so the viewport height goes stale.
+  // Only relevant in standalone mode; inline/static modes have no ScrollView.
+  useEffect(() => {
+    if (isInline || isStatic) return;
+    const onResize = () => scrollRef.current?.remeasure();
+    process.stdout.on("resize", onResize);
+    return () => {
+      process.stdout.off("resize", onResize);
+    };
+  }, [isInline, isStatic]);
+
+  // Auto-scroll to bottom when new content arrives (new message, streaming token).
+  // Skipped if the user has scrolled up manually (stickToBottomRef === false),
+  // so we don't yank them back to the bottom mid-read.
+  //
+  // Coalesce pattern: a scroll is scheduled ~16ms (one frame) after the first
+  // change. Subsequent changes during that window do NOT reschedule — the
+  // pending callback reads the freshest bottom offset when it fires, so it
+  // always lands at the latest content. This avoids both (a) the cancel-stack
+  // bug where rapid setTimeout(0) calls cleared each other before firing and
+  // (b) the perceptible lag of a longer debounce. Result: scroll follows
+  // streaming at ~60Hz without thrashing.
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    if (autoScrollTimerRef.current) return; // already pending
+    autoScrollTimerRef.current = setTimeout(() => {
+      autoScrollTimerRef.current = null;
+      scrollRef.current?.scrollToBottom();
+    }, 16);
+  }, [messages.length, streaming.buffer, streaming.isStreaming]);
+
+  // Cancel any pending auto-scroll timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (autoScrollTimerRef.current) {
+        clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Track unread messages — when messages.length grows AND user is scrolled up,
+  // increment the unread badge. Reading the ref synchronously here is safe:
+  // onScroll has already run by the time React commits the new messages.
+  useEffect(() => {
+    const grew = messages.length > prevMsgLenRef.current;
+    const delta = messages.length - prevMsgLenRef.current;
+    prevMsgLenRef.current = messages.length;
+    if (grew && delta > 0 && !stickToBottomRef.current) {
+      setUnreadCount((c) => c + delta);
+    }
+  }, [messages.length]);
 
   if (phase === "loading") {
     return <Spinner label={fundName ? `Loading ${fundName}...` : "Loading FundX..."} />;
@@ -389,6 +517,8 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
                   timestamp={msg.timestamp}
                   cost={msg.cost}
                   turns={msg.turns}
+                  userLabel={userLabel}
+                  aiLabel={aiLabel}
                 />
               </Box>
             )}
@@ -410,25 +540,26 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
 
             <Box flexDirection="column" marginTop={1}>
               <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
-              {isStreaming ? (
+              {isStreaming && (
                 <Box paddingX={1}>
                   <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
                 </Box>
-              ) : phase !== "error" ? (
-                <Box paddingX={1}>
-                  <Text color="blueBright">{"❯ "}</Text>
-                  <TextInput
-                    placeholder="Message... (/help for commands)"
-                    onSubmit={handleSubmit}
-                  />
-                </Box>
-              ) : null}
+              )}
+              <Box paddingX={1} display={isStreaming || phase === "error" ? "none" : "flex"}>
+                <Text color="blueBright">{"❯ "}</Text>
+                <TextInput
+                  key={inputKey}
+                  isDisabled={isStreaming || phase === "error"}
+                  placeholder="Message... (/help for commands)"
+                  onSubmit={wrappedHandleSubmit}
+                />
+              </Box>
               <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
             </Box>
 
             {/* Context bar — below input */}
             {(welcomeData || isWorkspaceMode) && (
-              <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+              <FundContextBar welcome={welcomeData} workspaceFunds={workspaceFunds} />
             )}
           </Box>
         </Box>
@@ -462,71 +593,102 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       <Box flexDirection="row" flexGrow={1}>
         {/* Chat area */}
         <Box flexDirection="column" width={chatWidth}>
-          {/* Messages area — fills available space */}
-          <Box flexDirection="column" flexGrow={1} overflowY="hidden">
-            {messages.length === 0 && !isStreaming && (
+          {/* Messages area — ScrollView provides independent keyboard-driven scrolling.
+               Children render in natural order (oldest top, newest bottom). Auto-scroll
+               sticks to bottom unless user manually scrolls up. Arrow keys / PgUp /
+               PgDn / Home / End drive scroll via scrollRef (see useInput below).
+               flexBasis=0 + minHeight=0 prevent Yoga from expanding based on content
+               size, leaving room for the fixed input bar below. */}
+          <Box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0}>
+            {messages.length === 0 && !isStreaming ? (
               <Box marginY={1} paddingX={1} flexDirection="column" gap={1}>
                 {isWorkspaceMode ? (
                   !isInline && <Text dimColor>Type a message or /help for commands.</Text>
                 ) : (
-                  <>
-                    {!isInline && (
-                      <Text dimColor>
-                        Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
-                      </Text>
-                    )}
-                  </>
+                  !isInline && (
+                    <Text dimColor>
+                      Chat with {welcomeData?.fundConfig.fund.display_name ?? fundName}. Type a message or /help for commands.
+                    </Text>
+                  )
                 )}
               </Box>
-            )}
-            {messages.map((msg) => (
-              <Box key={msg.id} paddingX={1}>
-                <ChatMessage
-                  sender={msg.sender}
-                  content={msg.content}
-                  timestamp={msg.timestamp}
-                  cost={msg.cost}
-                  turns={msg.turns}
-                />
-              </Box>
-            ))}
-            {isStreaming && (
-              <Box paddingX={1} flexDirection="column">
-                {streaming.buffer ? (
-                  <Box flexDirection="column">
-                    <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
-                    <MarkdownView content={streaming.buffer} />
+            ) : (
+              <ScrollView
+                ref={scrollRef}
+                flexDirection="column"
+                flexGrow={1}
+                onScroll={(offset) => {
+                  const bottom = scrollRef.current?.getBottomOffset() ?? 0;
+                  // Within 1 row of bottom counts as "at bottom" to handle rounding.
+                  const atBottom = offset >= bottom - 1;
+                  stickToBottomRef.current = atBottom;
+                  // Returning to bottom clears the unread badge.
+                  if (atBottom && unreadCount > 0) setUnreadCount(0);
+                }}
+              >
+                {messages.map((msg) => (
+                  <Box key={`msg-${msg.id}`} paddingX={1}>
+                    <ChatMessage
+                      sender={msg.sender}
+                      content={msg.content}
+                      timestamp={msg.timestamp}
+                      cost={msg.cost}
+                      turns={msg.turns}
+                      userLabel={userLabel}
+                      aiLabel={aiLabel}
+                    />
                   </Box>
-                ) : (
-                  <StreamingIndicator charCount={0} activity={streaming.activity} />
+                ))}
+                {isStreaming && (
+                  <Box key="streaming" paddingX={1} flexDirection="column">
+                    {streaming.buffer ? (
+                      <>
+                        <StreamingIndicator charCount={streaming.charCount} activity={streaming.activity} buffer={streaming.buffer} />
+                        <MarkdownView content={streaming.buffer} />
+                      </>
+                    ) : (
+                      <StreamingIndicator charCount={0} activity={streaming.activity} />
+                    )}
+                  </Box>
                 )}
-              </Box>
-            )}
-            {!streaming.isStreaming && streaming.lastTurnMetrics && (
-              <Box paddingX={1}>
-                <TurnSummary metrics={streaming.lastTurnMetrics} />
-              </Box>
+                {!streaming.isStreaming && streaming.lastTurnMetrics && (
+                  <Box key="turn-summary" paddingX={1}>
+                    <TurnSummary metrics={streaming.lastTurnMetrics} />
+                  </Box>
+                )}
+              </ScrollView>
             )}
           </Box>
 
-          {/* Input */}
-          <Box flexDirection="column" marginTop={1}>
+          {/* Unread indicator — visible only when user is scrolled up and new
+              messages arrived. PgDn scrolls toward the unread content; reaching
+              the bottom clears this badge automatically. */}
+          {unreadCount > 0 && (
+            <Box flexShrink={0} paddingX={1}>
+              <Text color="yellowBright">
+                {`↓ ${unreadCount} new ${unreadCount === 1 ? "message" : "messages"} — press PgDn to view`}
+              </Text>
+            </Box>
+          )}
+
+          {/* Input — flexShrink=0 prevents Yoga from squeezing this when messages overflow */}
+          <Box flexDirection="column" marginTop={1} flexShrink={0}>
             <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
-            {!isStreaming && (
-              <Box paddingX={1}>
-                <Text color="blueBright">{"❯ "}</Text>
-                <TextInput
-                  placeholder="Message... (/help for commands)"
-                  onSubmit={handleSubmit}
-                />
-              </Box>
-            )}
+            <Box paddingX={1} display={isStreaming ? "none" : "flex"}>
+              <Text color="blueBright">{"❯ "}</Text>
+              <TextInput
+                key={inputKey}
+                isDisabled={isStreaming}
+                placeholder="Message... (/help for commands)"
+                onSubmit={wrappedHandleSubmit}
+              />
+            </Box>
             <Text dimColor>{"\u2500".repeat(chatWidth)}</Text>
           </Box>
 
           {/* Context bar — inside chat column */}
           {!isInline && (welcomeData || isWorkspaceMode) && (
-            <FundContextBar welcome={welcomeData} model={model} workspaceFunds={workspaceFunds} />
+            <FundContextBar welcome={welcomeData} workspaceFunds={workspaceFunds} />
           )}
         </Box>
 

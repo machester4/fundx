@@ -52,8 +52,9 @@ function FundDashboardScreen({ fundName, width, height, onBack, onExit, chatOpti
     }
   });
 
-  // Use fullscreen mode when terminal is wide enough for sidebar, static scroll mode otherwise
-  const chatMode = width >= 120 ? "standalone" : "static";
+  // Always use standalone (fullscreen) mode — static mode has rendering issues
+  // with Ink's <Static> component pushing the input area off-screen.
+  const chatMode = "standalone" as const;
 
   return (
     <ChatView

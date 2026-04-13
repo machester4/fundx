@@ -58,6 +58,7 @@
     "fastembed": "^2.1.0",
     "grammy": "^1.40.0",
     "ink": "^6.8.0",
+    "ink-scroll-view": "^0.3.6",
     "js-yaml": "^4.1.0",
     "node-cron": "^3.0.3",
     "pastel": "3.0.0",

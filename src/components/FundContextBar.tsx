@@ -6,7 +6,6 @@ import type { ChatWelcomeData } from "../services/chat.service.js";
 
 interface FundContextBarProps {
   welcome: ChatWelcomeData | null;
-  model: string;
   workspaceFunds?: string[];
 }
 
@@ -22,18 +21,14 @@ function ProgressBar({ pct, width = 10 }: { pct: number; width?: number }) {
   );
 }
 
-export function FundContextBar({ welcome: w, model, workspaceFunds = [] }: FundContextBarProps) {
+export function FundContextBar({ welcome: w, workspaceFunds = [] }: FundContextBarProps) {
   if (!w) {
-    // Workspace mode — no fund selected
+    // Workspace mode — no fund selected. Show available funds so the user knows
+    // what they can /fund switch to. Model is intentionally omitted here (it's
+    // already shown in the chat reply header, e.g., "> sonnet 4.6").
     return (
-      <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
-        <Box justifyContent="space-between">
-          <Box gap={1}>
-            <Text bold>FundX</Text>
-            <Text dimColor>·</Text>
-            <Text dimColor>{model}</Text>
-          </Box>
-        </Box>
+      <Box justifyContent="space-between" borderStyle="round" borderDimColor paddingX={1}>
+        <Text bold>FundX</Text>
         <Box gap={2}>
           {workspaceFunds.length > 0 ? (
             workspaceFunds.map((f) => (
@@ -57,45 +52,21 @@ export function FundContextBar({ welcome: w, model, workspaceFunds = [] }: FundC
     ? ((w.portfolio?.total_value ?? 0) - w.tracker.initial_capital) / w.tracker.initial_capital * 100
     : undefined;
 
-  const topHoldings = w.portfolio?.positions
-    .sort((a, b) => b.weight_pct - a.weight_pct)
-    .slice(0, 4) ?? [];
-
-  const cashPct = w.portfolio && w.portfolio.total_value > 0
-    ? (w.portfolio.cash / w.portfolio.total_value) * 100
-    : 100;
-
+  // Slim single-line layout: identity (status + name + mode) on the left,
+  // unique aggregate metrics (total P&L + objective progress) on the right.
+  // Total value, holdings, cash %, and model are intentionally omitted —
+  // they're already shown in PortfolioPanel and the chat reply header.
   return (
-    <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
-      {/* Line 1: fund info + value + progress */}
-      <Box justifyContent="space-between">
-        <Box gap={1}>
-          <StatusBadge status={w.fundConfig.fund.status} />
-          <Text bold>{w.fundConfig.fund.display_name}</Text>
-          <Text dimColor>·</Text>
-          <Text color={modeColor} bold>[{modeLabel}]</Text>
-          <Text dimColor>·</Text>
-          <Text dimColor>{model}</Text>
-        </Box>
-        <Box gap={2}>
-          {w.portfolio && (
-            <Box gap={1}>
-              <Text bold>${w.portfolio.total_value.toLocaleString()}</Text>
-              <PnlText value={pnl} percentage={pnlPct} />
-            </Box>
-          )}
-          {w.tracker && <ProgressBar pct={w.tracker.progress_pct} />}
-        </Box>
+    <Box justifyContent="space-between" borderStyle="round" borderDimColor paddingX={1}>
+      <Box gap={1}>
+        <StatusBadge status={w.fundConfig.fund.status} />
+        <Text bold>{w.fundConfig.fund.display_name}</Text>
+        <Text dimColor>·</Text>
+        <Text color={modeColor} bold>[{modeLabel}]</Text>
       </Box>
-
-      {/* Line 2: top holdings */}
       <Box gap={2}>
-        {topHoldings.map((h) => (
-          <Text key={h.symbol} dimColor>
-            {h.symbol} {h.weight_pct.toFixed(0)}%
-          </Text>
-        ))}
-        <Text dimColor>Cash {cashPct.toFixed(0)}%</Text>
+        {w.portfolio && w.tracker && <PnlText value={pnl} percentage={pnlPct} />}
+        {w.tracker && <ProgressBar pct={w.tracker.progress_pct} />}
       </Box>
     </Box>
   );
