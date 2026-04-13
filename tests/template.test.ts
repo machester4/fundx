@@ -292,14 +292,15 @@ describe("generateFundClaudeMd", () => {
     expect(content).toContain("Never cite a price");
   });
 
-  // --- Spanish communication rule ---
+  // --- Communication rule ---
 
-  it("contains Spanish communication rule", async () => {
+  it("contains communication rule (mirror user language in chat, English elsewhere)", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
-    expect(content).toContain("Communicate with the user in Spanish via Telegram and chat");
+    expect(content).toContain("Mirror the user's language in chat replies");
+    expect(content).toContain("English");
   });
 
   // --- default_to_action block ---
