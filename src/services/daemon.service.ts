@@ -17,6 +17,7 @@ import { runFundSession } from "./session.service.js";
 import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
 import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
+import { startNewsIpcServer, stopNewsIpcServer } from "./news-ipc.service.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.service.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
@@ -591,11 +592,24 @@ export async function startDaemon(): Promise<void> {
   // Clean up stale PID/heartbeat files before writing new ones
   await cleanStalePidFiles();
 
+  // Mark this process as the daemon so news.service's router short-circuits
+  // to the direct zvec path (rather than trying to call itself over IPC).
+  process.env.FUNDX_IS_DAEMON = "1";
+
   // Write JSON PID file
   const pidInfo = { pid: process.pid, startedAt: new Date().toISOString(), version: "0.1.0" };
   await writeFile(DAEMON_PID, JSON.stringify(pidInfo), "utf-8");
   await updateHeartbeat(0);
   await log(`Daemon started (PID ${process.pid})`);
+
+  // Expose news queries to other processes via Unix socket so CLI/chat can
+  // read the zvec cache while this daemon holds the single-writer lock.
+  try {
+    await startNewsIpcServer();
+    await log("[news-ipc] server listening");
+  } catch (err) {
+    await log(`[news-ipc] failed to start: ${err instanceof Error ? err.message : err}`);
+  }
 
   // Defensively stop gateway before starting
   await stopGateway().catch(() => {});
@@ -917,6 +931,7 @@ export async function startDaemon(): Promise<void> {
 
 async function cleanup() {
   await stopGateway();
+  await stopNewsIpcServer().catch(() => {});
   await unlink(DAEMON_PID).catch(() => {});
   await unlink(DAEMON_HEARTBEAT).catch(() => {});
   await log("Daemon stopped.");

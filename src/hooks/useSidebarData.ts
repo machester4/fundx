@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from "react";
 import { readSessionHandoff, readPortfolio, readPendingSessions, readSessionHistory } from "../state.js";
 import { loadFundConfig } from "../services/fund.service.js";
 import { loadGlobalConfig } from "../config.js";
+import { queryArticles } from "../services/news.service.js";
 import { useInterval } from "./useInterval.js";
 import type { Portfolio, FundConfig, PendingSession } from "../types.js";
 import type { UpcomingItem } from "../components/UpcomingPanel.js";
 import type { MarketTicker } from "../components/MarketPanel.js";
+import type { NewsSidebarArticle, NewsSidebarStatus } from "../components/NewsSidebarPanel.js";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
@@ -16,7 +18,52 @@ export interface SidebarData {
   upcoming: UpcomingItem[];
   market: MarketTicker[];
   isMarketOpen: boolean;
+  newsArticles: NewsSidebarArticle[];
+  newsStatus: NewsSidebarStatus;
+  newsReason?: string;
+  newsNewestAgeMinutes?: number;
   isLoading: boolean;
+}
+
+interface NewsSnapshot {
+  articles: NewsSidebarArticle[];
+  status: NewsSidebarStatus;
+  reason?: string;
+  newestAgeMinutes?: number;
+}
+
+/** Fetch a compact news snapshot for the sidebar. Always resolves — never throws. */
+async function fetchNewsSnapshot(limit = 3): Promise<NewsSnapshot> {
+  try {
+    const result = await queryArticles({ hours: 24, limit });
+    if (result.status === "unavailable") {
+      const isLock = /lock|read-write/i.test(result.reason);
+      return {
+        articles: [],
+        status: isLock ? "locked" : "unavailable",
+        reason: result.reason,
+      };
+    }
+    if (result.status === "empty") {
+      return { articles: [], status: "empty" };
+    }
+    const articles: NewsSidebarArticle[] = result.articles.map((a) => ({
+      title: a.title,
+      source: a.source,
+      published_at: a.published_at,
+    }));
+    const newest = articles[0]?.published_at;
+    const newestAgeMinutes = newest
+      ? Math.round((Date.now() - new Date(newest).getTime()) / 60_000)
+      : undefined;
+    return { articles, status: "ok", newestAgeMinutes };
+  } catch (err) {
+    return {
+      articles: [],
+      status: "unavailable",
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 async function fetchFmpQuotes(
@@ -92,6 +139,8 @@ export function useSidebarData(fundName: string | null): SidebarData {
     upcoming: [],
     market: [],
     isMarketOpen: false,
+    newsArticles: [],
+    newsStatus: "empty",
     isLoading: true,
   });
 
@@ -102,13 +151,14 @@ export function useSidebarData(fundName: string | null): SidebarData {
 
     (async () => {
       try {
-        const [handoff, portfolio, pending, config, globalConfig, sessionHistory] = await Promise.all([
+        const [handoff, portfolio, pending, config, globalConfig, sessionHistory, news] = await Promise.all([
           readSessionHandoff(fundName).catch(() => null),
           readPortfolio(fundName).catch(() => null),
           readPendingSessions(fundName).catch(() => []),
           loadFundConfig(fundName).catch(() => null),
           loadGlobalConfig().catch(() => null),
           readSessionHistory(fundName).catch(() => ({})),
+          fetchNewsSnapshot(3),
         ]);
 
         if (cancelled) return;
@@ -152,7 +202,18 @@ export function useSidebarData(fundName: string | null): SidebarData {
         }
 
         if (!cancelled) {
-          setData({ handoff, portfolio, upcoming, market, isMarketOpen, isLoading: false });
+          setData({
+            handoff,
+            portfolio,
+            upcoming,
+            market,
+            isMarketOpen,
+            newsArticles: news.articles,
+            newsStatus: news.status,
+            newsReason: news.reason,
+            newsNewestAgeMinutes: news.newestAgeMinutes,
+            isLoading: false,
+          });
         }
       } catch {
         if (!cancelled) {
@@ -168,10 +229,20 @@ export function useSidebarData(fundName: string | null): SidebarData {
   const refreshPrices = useCallback(async () => {
     if (!fundName) return;
     try {
-      const [portfolio, globalConfig] = await Promise.all([
+      const [portfolio, globalConfig, news] = await Promise.all([
         readPortfolio(fundName).catch(() => null),
         loadGlobalConfig().catch(() => null),
+        fetchNewsSnapshot(3),
       ]);
+
+      // Apply news update regardless of whether market data is available
+      setData((prev) => ({
+        ...prev,
+        newsArticles: news.articles,
+        newsStatus: news.status,
+        newsReason: news.reason,
+        newsNewestAgeMinutes: news.newestAgeMinutes,
+      }));
 
       const fmpKey = globalConfig?.market_data?.fmp_api_key;
       if (!fmpKey || !portfolio) return;

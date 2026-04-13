@@ -16,6 +16,7 @@ import { readPortfolio, readTracker, readSessionLog, readActiveSession, writeAct
 import { openJournal, getTradeSummary } from "../journal.js";
 import { getTradeContextSummary } from "../embeddings.js";
 import { buildMcpServers } from "../agent.js";
+import { createMarketDataMcpServer } from "../mcp/market-data.js";
 import { generateFundClaudeMd } from "../template.js";
 import { ensureFundSkillFiles, ensureFundRules } from "../skills.js";
 import { buildAnalystAgents } from "../subagent.js";
@@ -382,7 +383,7 @@ export async function runChatTurn(
     model: string;
     maxBudgetUsd?: number;
     readonly: boolean;
-    mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
+    mcpServers: ChatMcpServers;
     images?: ImageAttachment[];
   },
   callbacks?: {
@@ -651,23 +652,22 @@ export async function loadActiveSessionId(fundName: string | null): Promise<stri
   return active?.session_id;
 }
 
+/** Shape of the MCP servers record used throughout chat. Re-exported so hooks/components
+ * can reference it without duplicating the union (stdio + in-process SDK). */
+export type ChatMcpServers = Awaited<ReturnType<typeof buildMcpServers>>;
+
 /** Build MCP servers config for chat.
  * In workspace mode (null fundName) only market-data is included — no broker, no telegram. */
 export async function buildChatMcpServers(
   fundName: string | null,
-): Promise<Record<string, { command: string; args: string[]; env: Record<string, string> }>> {
+): Promise<ChatMcpServers> {
   if (fundName) return buildMcpServers(fundName);
 
   const globalConfig = await loadGlobalConfig();
-  const marketDataEnv: Record<string, string> = {};
-  if (globalConfig.market_data?.fmp_api_key) marketDataEnv.FMP_API_KEY = globalConfig.market_data.fmp_api_key;
-
-  const servers: Record<string, { command: string; args: string[]; env: Record<string, string> }> = {
-    "market-data": {
-      command: MCP_COMMAND,
-      args: [MCP_SERVERS.marketData],
-      env: marketDataEnv,
-    },
+  const servers: Awaited<ReturnType<typeof buildMcpServers>> = {
+    "market-data": createMarketDataMcpServer({
+      fmpApiKey: globalConfig.market_data?.fmp_api_key,
+    }),
   };
 
   if (globalConfig.sws?.auth_token) {

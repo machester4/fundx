@@ -118,6 +118,11 @@ vi.mock("../src/services/news.service.js", () => ({
   cleanOldArticles: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/services/news-ipc.service.js", () => ({
+  startNewsIpcServer: vi.fn().mockResolvedValue(undefined),
+  stopNewsIpcServer: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Import after mocks
 import cron from "node-cron";
 import { listFundNames, loadFundConfig } from "../src/services/fund.service.js";

@@ -45,7 +45,7 @@ import { MarkdownView } from "./MarkdownView.js";
 import { TurnSummary } from "./TurnSummary.js";
 import { ChatSidebar } from "./ChatSidebar.js";
 import { useSidebarData } from "../hooks/useSidebarData.js";
-import type { ChatWelcomeData, CostTracker } from "../services/chat.service.js";
+import type { ChatWelcomeData, ChatMcpServers, CostTracker } from "../services/chat.service.js";
 
 interface ChatViewProps {
   fundName: string | null;
@@ -84,7 +84,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const [turnCount, setTurnCount] = useState(0);
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
   const [model, setModel] = useState("sonnet");
-  const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[]; env: Record<string, string> }>>({});
+  const [mcpServers, setMcpServers] = useState<ChatMcpServers>({});
   const streaming = useStreaming();
   // Personalized labels for chat headers — OS username + prettified model name.
   // userInfo() is sync and cheap; computed once. aiLabel reacts to /fund switches

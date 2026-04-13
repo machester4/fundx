@@ -4,6 +4,7 @@ import { HandoffPanel } from "./HandoffPanel.js";
 import { PortfolioPanel } from "./PortfolioPanel.js";
 import { UpcomingPanel } from "./UpcomingPanel.js";
 import { MarketPanel } from "./MarketPanel.js";
+import { NewsSidebarPanel } from "./NewsSidebarPanel.js";
 import type { SidebarData } from "../hooks/useSidebarData.js";
 
 interface ChatSidebarProps {
@@ -21,10 +22,10 @@ export function ChatSidebar({ data, width, height }: ChatSidebarProps) {
     );
   }
 
-  // Handoff gets ~50% of height, remaining panels split the rest equally
-  const handoffHeight = Math.floor(height * 0.5);
+  // Handoff gets ~40% of height; remaining 4 panels split the rest equally.
+  const handoffHeight = Math.floor(height * 0.4);
   const remainingHeight = height - handoffHeight;
-  const panelHeight = Math.floor(remainingHeight / 3);
+  const panelHeight = Math.floor(remainingHeight / 4);
 
   return (
     <Box flexDirection="column" width={width} height={height}>
@@ -37,8 +38,17 @@ export function ChatSidebar({ data, width, height }: ChatSidebarProps) {
       <Box flexDirection="column" height={panelHeight} overflowY="hidden">
         <UpcomingPanel items={data.upcoming} width={width} />
       </Box>
-      <Box flexDirection="column" flexGrow={1} overflowY="hidden">
+      <Box flexDirection="column" height={panelHeight} overflowY="hidden">
         <MarketPanel tickers={data.market} isMarketOpen={data.isMarketOpen} width={width} />
+      </Box>
+      <Box flexDirection="column" flexGrow={1} overflowY="hidden">
+        <NewsSidebarPanel
+          articles={data.newsArticles}
+          status={data.newsStatus}
+          reason={data.newsReason}
+          newestAgeMinutes={data.newsNewestAgeMinutes}
+          width={width}
+        />
       </Box>
     </Box>
   );

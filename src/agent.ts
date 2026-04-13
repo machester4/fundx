@@ -4,10 +4,12 @@ import type {
   SDKResultMessage,
   ModelUsage,
   AgentDefinition,
+  McpSdkServerConfigWithInstance,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
 import { fundPaths, MCP_SERVERS, MCP_COMMAND } from "./paths.js";
+import { createMarketDataMcpServer } from "./mcp/market-data.js";
 
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
@@ -65,14 +67,19 @@ interface McpStdioConfig {
   env: Record<string, string>;
 }
 
+/** Mixed config: in-process (SDK) servers can coexist with stdio subprocesses in the same record */
+type McpServerEntry = McpStdioConfig | McpSdkServerConfigWithInstance;
+
 /**
  * Build MCP server configuration for a fund.
  *
- * Returns MCP server config programmatically for the Agent SDK query.
+ * `market-data` runs in-process so tools that touch the daemon's zvec news
+ * cache (`get_rss_news`) share the same process handle — zvec 0.2.3 is
+ * single-writer and rejects concurrent opens. Other servers stay stdio.
  */
 export async function buildMcpServers(
   fundName: string,
-): Promise<Record<string, McpStdioConfig>> {
+): Promise<Record<string, McpServerEntry>> {
   const globalConfig = await loadGlobalConfig();
   const fundConfig = await loadFundConfig(fundName);
   const paths = fundPaths(fundName);
@@ -102,21 +109,15 @@ export async function buildMcpServers(
     }
   }
 
-  const servers: Record<string, McpStdioConfig> = {
+  const servers: Record<string, McpServerEntry> = {
     "broker-local": {
       command: MCP_COMMAND,
       args: [MCP_SERVERS.brokerLocal],
       env: brokerLocalEnv,
     },
-    "market-data": {
-      command: MCP_COMMAND,
-      args: [MCP_SERVERS.marketData],
-      env: {
-        ...(globalConfig.market_data?.fmp_api_key
-          ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
-          : {}),
-      },
-    },
+    "market-data": createMarketDataMcpServer({
+      fmpApiKey: globalConfig.market_data?.fmp_api_key,
+    }),
   };
 
   // Conditionally add telegram-notify

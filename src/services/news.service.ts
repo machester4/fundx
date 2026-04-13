@@ -129,6 +129,15 @@ let embedModel: FlagEmbeddingType | null = null;
 const COLLECTION_NAME = "news_articles";
 const EMBEDDING_DIM = 384; // AllMiniLML6V2
 
+/**
+ * Open (or create) the zvec collection.
+ *
+ * zvec 0.2.3 uses an exclusive lock: only one process can hold a collection
+ * at a time, even for readOnly access. That means CLI/MCP subprocesses cannot
+ * query while the daemon is running. Callers must handle this — `queryArticles`
+ * returns `status: "unavailable"` with the lock error so callers can tell the
+ * user/agent that the cache is owned by another process.
+ */
 async function getCollection(): Promise<ZVecCollection> {
   if (zvecCollection) return zvecCollection;
   await mkdir(NEWS_DIR, { recursive: true });
@@ -136,12 +145,20 @@ async function getCollection(): Promise<ZVecCollection> {
 
   const collectionPath = join(NEWS_DIR, COLLECTION_NAME);
 
-  // Try opening existing collection first; create if it doesn't exist
+  // Try opening existing collection first; create if it doesn't exist.
+  // If another process has the lock, zvec throws "Can't lock read-write collection"
+  // and this function propagates it — queryArticles maps it to `unavailable`.
   try {
     zvecCollection = zvec.ZVecOpen(collectionPath);
     return zvecCollection;
-  } catch {
-    // Collection doesn't exist yet — create with schema
+  } catch (err) {
+    // "Can't lock read-write collection" → another process holds the lock.
+    // Rethrow so the caller can report it; don't try to create a new collection.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Can't lock") || msg.includes("read-write")) {
+      throw err;
+    }
+    // Otherwise assume the collection doesn't exist yet — fall through to create.
   }
 
   const schema = new zvec.ZVecCollectionSchema({
@@ -298,22 +315,40 @@ function mapZvecDoc(doc: { id: string; fields: Record<string, unknown>; score?: 
   };
 }
 
-/** Search articles with optional semantic query and filters */
-export async function queryArticles(opts: {
+/** Tagged result so callers can distinguish "no matches" from "cache inaccessible". */
+export type NewsQueryResult =
+  | { status: "ok"; articles: (NewsArticle & { score?: number })[] }
+  | { status: "empty"; articles: [] }
+  | { status: "unavailable"; articles: []; reason: string };
+
+/** Options accepted by queryArticles / queryArticlesDirect. Extracted so
+ * the IPC client/server can share the shape without circular imports. */
+export interface QueryArticlesOpts {
   query?: string;
   symbols?: string;
   category?: string;
   source?: string;
   hours?: number;
   limit?: number;
-}): Promise<(NewsArticle & { score?: number })[]> {
+}
+
+/**
+ * Direct (zvec-touching) implementation of article search.
+ *
+ * This is the low-level function; external callers should use `queryArticles`
+ * (the router) instead, which transparently delegates to the daemon via IPC
+ * when needed so multiple processes can coexist with zvec's single-writer lock.
+ */
+export async function queryArticlesDirect(opts: QueryArticlesOpts): Promise<NewsQueryResult> {
   let collection: ZVecCollection;
   try {
     collection = await getCollection();
   } catch (err) {
-    // Graceful degradation if zvec multi-process locking fails (Issue 5)
-    console.warn(`[news] Failed to open zvec collection: ${err instanceof Error ? err.message : err}`);
-    return [];
+    // Zvec couldn't be opened (e.g. multi-process locking, missing binary, corrupt index).
+    // Surface explicitly so callers can tell the agent "cache down" instead of "no news".
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`[news] Failed to open zvec collection: ${reason}`);
+    return { status: "unavailable", articles: [], reason };
   }
   const maxResults = opts.limit ?? 20;
 
@@ -350,9 +385,9 @@ export async function queryArticles(opts: {
       results = docs.map(mapZvecDoc);
     }
   } catch (err) {
-    // Graceful degradation if zvec query fails (e.g., multi-process locking)
-    console.warn(`[news] zvec query failed: ${err instanceof Error ? err.message : err}`);
-    return [];
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`[news] zvec query failed: ${reason}`);
+    return { status: "unavailable", articles: [], reason };
   }
 
   // Post-filter by symbols (Issue 1): symbols are stored as JSON arrays in zvec,
@@ -365,7 +400,111 @@ export async function queryArticles(opts: {
     });
   }
 
-  return results;
+  if (results.length === 0) return { status: "empty", articles: [] };
+  return { status: "ok", articles: results };
+}
+
+/** Cache health summary for diagnostics (CLI, status, agent messaging) */
+export interface NewsCacheStats {
+  status: "ok" | "unavailable";
+  reason?: string;
+  total: number;
+  newest_published_at?: string;
+  oldest_published_at?: string;
+}
+
+/**
+ * Direct (zvec-touching) implementation of the cache health probe.
+ * External callers should use `getNewsStats` (the router).
+ */
+export async function getNewsStatsDirect(): Promise<NewsCacheStats> {
+  let collection: ZVecCollection;
+  try {
+    collection = await getCollection();
+  } catch (err) {
+    return { status: "unavailable", reason: err instanceof Error ? err.message : String(err), total: 0 };
+  }
+  try {
+    // Accurate count from the collection's stats; avoids the truncation bug
+    // of counting only `topk` query results when the index exceeds that cap.
+    const total = collection.stats.docCount;
+    if (total === 0) return { status: "ok", total: 0 };
+
+    // ISO-8601 strings sort lexicographically, so we can estimate newest/oldest
+    // from a bounded recent-sample without scanning the whole index. This is
+    // best-effort freshness info for diagnostics (sidebar, status); it is not
+    // a sort-by-date (zvec returns arbitrary order here).
+    const sampleSize = Math.min(total, 1000);
+    const docs = collection.querySync({ topk: sampleSize });
+    const times = docs
+      .map((d) => (d.fields?.published_at as string) ?? "")
+      .filter((s) => s.length > 0)
+      .sort();
+    return {
+      status: "ok",
+      total,
+      newest_published_at: times[times.length - 1],
+      oldest_published_at: times[0],
+    };
+  } catch (err) {
+    return { status: "unavailable", reason: err instanceof Error ? err.message : String(err), total: 0 };
+  }
+}
+
+// ── Routing wrappers ──────────────────────────────────────────
+
+// Lazy imports to avoid pulling net/fs at module load when not needed.
+// Also keeps the module graph acyclic: news-ipc-client.ts can `import type`
+// from this file without triggering a load-time dependency on node:net.
+
+/**
+ * Public read API for news articles.
+ *
+ * Routes transparently:
+ * - In the daemon process (`FUNDX_IS_DAEMON === "1"`) → direct zvec call.
+ * - If the daemon's IPC socket exists → query via the socket.
+ * - Otherwise → direct (daemon not running, CLI owns the lock).
+ *
+ * Callers get the same tagged-union response regardless of route.
+ */
+/** ENOENT means the daemon stopped between our existsSync check and the connect —
+ * fall back to direct zvec rather than reporting a confusing IPC error. */
+function isSocketGoneError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /ENOENT|ECONNREFUSED/.test(msg);
+}
+
+export async function queryArticles(opts: QueryArticlesOpts): Promise<NewsQueryResult> {
+  if (process.env.FUNDX_IS_DAEMON === "1") return queryArticlesDirect(opts);
+  const { isNewsIpcAvailable, queryArticlesViaIpc } = await import("./news-ipc-client.js");
+  if (!isNewsIpcAvailable()) return queryArticlesDirect(opts);
+  try {
+    return await queryArticlesViaIpc(opts);
+  } catch (err) {
+    if (isSocketGoneError(err)) return queryArticlesDirect(opts);
+    return {
+      status: "unavailable",
+      articles: [],
+      reason: `IPC call failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/** Public cache health probe. Routes the same way as `queryArticles`. */
+export async function getNewsStats(): Promise<NewsCacheStats> {
+  if (process.env.FUNDX_IS_DAEMON === "1") return getNewsStatsDirect();
+  const { isNewsIpcAvailable, getNewsStatsViaIpc } = await import("./news-ipc-client.js");
+  if (!isNewsIpcAvailable()) return getNewsStatsDirect();
+  try {
+    return await getNewsStatsViaIpc();
+  } catch (err) {
+    if (isSocketGoneError(err)) return getNewsStatsDirect();
+    return {
+      status: "unavailable",
+      total: 0,
+      reason: `IPC call failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 // Module-level cooldown map so it persists across invocations within the same daemon process
@@ -440,7 +579,7 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
           await sendTelegramNotification(msg);
         } catch { /* best effort */ }
 
-        // Mark article as alerted in zvec
+        // Mark article as alerted in zvec (write — requires the daemon to hold the lock)
         try {
           const collection = await getCollection();
           collection.updateSync({

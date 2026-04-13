@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { runChatTurn } from "../services/chat.service.js";
-import type { ChatTurnResult, ImageAttachment } from "../services/chat.service.js";
+import type { ChatTurnResult, ChatMcpServers, ImageAttachment } from "../services/chat.service.js";
 import { SESSION_EXPIRED_PATTERN } from "../agent.js";
 
 export interface StreamingActivity {
@@ -55,7 +55,7 @@ interface UseStreamingReturn extends StreamingState {
       model: string;
       maxBudgetUsd?: number;
       readonly: boolean;
-      mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
+      mcpServers: ChatMcpServers;
       images?: ImageAttachment[];
     },
   ) => Promise<ChatTurnResult>;
@@ -85,7 +85,7 @@ export function useStreaming(): UseStreamingReturn {
         model: string;
         maxBudgetUsd?: number;
         readonly: boolean;
-        mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
+        mcpServers: ChatMcpServers;
         images?: ImageAttachment[];
       },
     ): Promise<ChatTurnResult> => {

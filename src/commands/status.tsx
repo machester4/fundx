@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
 import { getAllFundStatuses, getServiceStatuses } from "../services/status.service.js";
 import { isDaemonRunning, getDaemonPid } from "../services/daemon.service.js";
+import { getStats as getNewsInspectStats, type ExtendedNewsStats } from "../services/news-inspect.service.js";
 import { SUPERVISOR_PID, DAEMON_HEARTBEAT, NEWS_DIR } from "../paths.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { PnlText } from "../components/PnlText.js";
@@ -22,6 +23,7 @@ interface SystemInfo {
   marketData: boolean;
   marketDataProvider: string;
   newsDir: boolean;
+  news: ExtendedNewsStats | null;
   nextCron: NextCronInfo | null;
 }
 
@@ -51,6 +53,7 @@ async function getSystemInfo(): Promise<SystemInfo> {
 
   const services = await getServiceStatuses();
   const newsDir = existsSync(NEWS_DIR);
+  const news = newsDir ? await getNewsInspectStats().catch(() => null) : null;
 
   // Next scheduled session
   let nextCron: NextCronInfo | null = null;
@@ -85,6 +88,7 @@ async function getSystemInfo(): Promise<SystemInfo> {
     marketData: services.marketData,
     marketDataProvider: services.marketDataProvider,
     newsDir,
+    news,
     nextCron,
   };
 }
@@ -97,6 +101,41 @@ function formatAge(seconds: number): string {
 
 function Dot({ color }: { color: string }) {
   return <Text color={color}>{"\u25CF"} </Text>;
+}
+
+function newsDotColor(sys: SystemInfo): string {
+  if (!sys.newsDir) return "yellow";
+  if (!sys.news) return "yellow";
+  if (sys.news.status === "unavailable") {
+    // Lock-held-by-daemon is expected when daemon is running — yellow, not red
+    const isLockError = sys.news.reason && /lock|read-write/i.test(sys.news.reason);
+    return isLockError ? "yellow" : "red";
+  }
+  if (sys.news.total === 0) return "yellow";
+  // Stale if newest article is >120 minutes old during UTC market hours
+  const hour = new Date().getUTCHours();
+  const isMarketHours = hour >= 8 && hour < 19;
+  if (isMarketHours && sys.news.newest_age_minutes !== undefined && sys.news.newest_age_minutes > 120) {
+    return "yellow";
+  }
+  return "green";
+}
+
+function describeNews(sys: SystemInfo): string {
+  if (!sys.newsDir) return "not initialized";
+  if (!sys.news) return "cache probe failed";
+  if (sys.news.status === "unavailable") {
+    const isLockError = sys.news.reason && /lock|read-write/i.test(sys.news.reason);
+    if (isLockError) return "locked by daemon (single-writer)";
+    return `unavailable (${sys.news.reason ?? "unknown"})`;
+  }
+  if (sys.news.total === 0) return "active — cache empty";
+  const age = sys.news.newest_age_minutes;
+  const ageStr = age === undefined ? "" :
+    age < 60 ? ` | newest ${age}m ago` :
+    age < 1440 ? ` | newest ${Math.round(age / 60)}h ago` :
+    ` | newest ${Math.round(age / 1440)}d ago`;
+  return `${sys.news.total} article${sys.news.total === 1 ? "" : "s"}${ageStr}`;
 }
 
 export default function Status() {
@@ -141,9 +180,9 @@ export default function Status() {
               <Text dimColor>{sys.marketData ? sys.marketDataProvider : "not configured"}</Text>
             </Box>
             <Box gap={1}>
-              <Dot color={sys.newsDir ? "green" : "yellow"} />
+              <Dot color={newsDotColor(sys)} />
               <Text>News Feeds</Text>
-              <Text dimColor>{sys.newsDir ? "active (RSS cache)" : "not initialized"}</Text>
+              <Text dimColor>{describeNews(sys)}</Text>
             </Box>
           </Box>
         </Box>
