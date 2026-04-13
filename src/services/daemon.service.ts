@@ -446,11 +446,11 @@ async function checkSwsTokenExpiry(): Promise<void> {
 
   if (hoursLeft <= 0) {
     await sendTelegramNotification(
-      "⚠️ <b>SWS token expired.</b> Data de Simply Wall St deshabilitada. Ejecuta <code>fundx sws login</code> para renovar.",
+      "⚠️ <b>SWS token expired.</b> Simply Wall St data is disabled. Run <code>fundx sws login</code> to renew.",
     );
   } else if (hoursLeft <= 48) {
     await sendTelegramNotification(
-      `⚠️ SWS token expira en ${Math.round(hoursLeft)} horas. Ejecuta <code>fundx sws login</code> para renovar.`,
+      `⚠️ SWS token expires in ${Math.round(hoursLeft)} hours. Run <code>fundx sws login</code> to renew.`,
     );
   }
 }

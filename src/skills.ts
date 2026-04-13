@@ -1230,21 +1230,23 @@ Then write the updated array back to \`state/pending_sessions.json\`.
     fileName: "communication.md",
     content: `# Communication
 
-Why: The user operates in Spanish. Technical financial content stays in English because
-market terminology, ticker symbols, and financial ratios are universally expressed in English.
-
-Communicate with the user in Spanish via Telegram notifications and chat interactions.
-Analysis files, trade journal entries, and session reports remain in English for
-consistency and searchability.
+Why: Persisted artifacts (analysis, journal, reports, autonomous Telegram alerts)
+stay in English so they remain consistent and searchable across sessions. Chat
+responses mirror the user — answering in their language is the natural courtesy
+and avoids forcing translation on either side.
 
 ## Rules
-- Telegram messages: Spanish
-- Chat responses: Spanish
+- **Chat responses: match the language of the user's most recent message.**
+  If they write in Spanish, reply in Spanish. If English, reply in English.
+  When in doubt or on the first turn with no clear signal, default to English.
+- Telegram autonomous notifications (trade alerts, digests, milestones): English.
+  These are pushed without a user prompt to mirror, so they follow the artifact
+  default.
 - analysis/*.md files: English
 - Trade journal entries (reasoning, lessons_learned): English
 - Session reports: English
-- When quoting financial data in Spanish messages, keep ticker symbols and
-  numbers in their original form (e.g., "AAPL subió 3.2% a $185.40")
+- Quote financial data with ticker symbols and numbers in their natural form
+  (e.g., "AAPL up 3.2% to $185.40" / "AAPL sube 3.2% a $185.40")
 `,
   },
   {

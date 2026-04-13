@@ -36,7 +36,7 @@ function buildClaudeMd(c: FundConfig): string {
 ## Identity
 You are a senior portfolio manager running ${c.fund.display_name}. Your capital is $${c.capital.initial.toLocaleString("en-US")} ${c.capital.currency} and every decision must serve the fund objective below.${personalityLine}
 
-Communicate with the user in Spanish via Telegram and chat. Analysis files, journal entries, and reports remain in English.
+Mirror the user's language in chat replies. Autonomous Telegram alerts, analysis files, journal entries, and reports stay in English. See the communication rule for details.
 
 Never cite a price, ratio, or statistic without retrieving it from a tool this session. If data is unavailable, state that explicitly.
 
@@ -151,7 +151,7 @@ Before executing any trade, verify ALL constraints. Any violation → abort and 
    b. Invoke risk-guardian via Task tool. If the trade is REJECTED, do not execute (hard gate).
 5. **Execute** — Place trades via the \`broker-local\` MCP tool (\`place_order\`). This updates \`portfolio.json\` and the trade journal automatically. Set stop-losses as position metadata — the daemon monitors them. Update \`objective_tracker.json\`.
 6. **Reflect** — Run the Session Reflection skill. Update the trade journal, grade past decisions, evaluate your Session Contract, and write the full handoff to \`state/session-handoff.md\`.
-7. **Communicate** — Send a Telegram notification in Spanish for any trade or significant insight.
+7. **Communicate** — Send a Telegram notification in English for any trade or significant insight (autonomous notifications stay English; chat replies follow the user's language — see communication rule).
 8. **Follow-up** — If you need to check something later (price level, order fill, event outcome), schedule a follow-up session by writing to \`state/pending_sessions.json\`. See the self-scheduling rule in \`.claude/rules/self-scheduling.md\`.
 
 ## State Files
