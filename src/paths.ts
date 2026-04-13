@@ -34,8 +34,12 @@ export const DAEMON_LOG_MAX_SIZE = 5 * 1024 * 1024;
 /** Max number of rotated log files to keep */
 export const DAEMON_LOG_MAX_FILES = 3;
 
-/** News cache directory (zvec database) */
-export const NEWS_DIR = join(WORKSPACE, "news");
+/** News cache directory (zvec database). Respects FUNDX_NEWS_DIR for test overrides. */
+export const NEWS_DIR = process.env.FUNDX_NEWS_DIR ?? join(WORKSPACE, "news");
+
+/** Unix socket the daemon uses to serve news queries to other processes.
+ * Respects FUNDX_NEWS_SOCKET for test overrides. */
+export const NEWS_IPC_SOCKET = process.env.FUNDX_NEWS_SOCKET ?? join(WORKSPACE, "news.sock");
 
 /** Shared directory */
 export const SHARED_DIR = join(WORKSPACE, "shared");
@@ -58,10 +62,15 @@ export const WORKSPACE_RULES_DIR = join(WORKSPACE, ".claude", "rules");
  */
 export const IS_DEV = __dirname.endsWith("/src") || __dirname.endsWith("\\src");
 
-/** MCP server executables (resolved relative to __dirname) */
+/**
+ * MCP server executables (resolved relative to __dirname).
+ *
+ * Note: `market-data` is registered in-process via `createMarketDataMcpServer`
+ * (see `src/mcp/market-data.ts`) — it has no stdio entry point. This lets it
+ * share the daemon's zvec handle for `get_rss_news`.
+ */
 export const MCP_SERVERS = {
   brokerLocal: join(__dirname, "mcp", IS_DEV ? "broker-local.ts" : "broker-local.js"),
-  marketData: join(__dirname, "mcp", IS_DEV ? "market-data.ts" : "market-data.js"),
   telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
   sws: join(__dirname, "mcp", IS_DEV ? "sws.ts" : "sws.js"),
 };

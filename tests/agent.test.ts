@@ -86,10 +86,21 @@ vi.mock("../src/services/fund.service.js", () => ({
   loadFundConfig: vi.fn(),
 }));
 
+// Mock the in-process market-data factory so we can assert the opts it receives
+// without constructing a real McpServer instance.
+vi.mock("../src/mcp/market-data.js", () => ({
+  createMarketDataMcpServer: vi.fn((opts: { fmpApiKey?: string } = {}) => ({
+    type: "sdk" as const,
+    name: "market-data",
+    instance: { __mockOpts: opts },
+  })),
+}));
+
 // Import after mocks
 import { buildMcpServers, runAgentQuery } from "../src/agent.js";
 import { loadGlobalConfig } from "../src/config.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
+import { createMarketDataMcpServer } from "../src/mcp/market-data.js";
 import { MCP_SERVERS, MCP_COMMAND } from "../src/paths.js";
 
 const mockedGlobalConfig = vi.mocked(loadGlobalConfig);
@@ -106,14 +117,20 @@ beforeEach(() => {
 // ── buildMcpServers ───────────────────────────────────────────
 
 describe("buildMcpServers", () => {
-  it("returns broker-local and market-data by default", async () => {
+  it("returns broker-local (stdio) and market-data (in-process) by default", async () => {
     const servers = await buildMcpServers("test-fund");
 
     expect(Object.keys(servers)).toEqual(["broker-local", "market-data"]);
-    expect(servers["broker-local"].command).toBe(MCP_COMMAND);
-    expect(servers["broker-local"].args).toEqual([MCP_SERVERS.brokerLocal]);
-    expect(servers["market-data"].command).toBe(MCP_COMMAND);
-    expect(servers["market-data"].args).toEqual([MCP_SERVERS.marketData]);
+    // broker-local is stdio
+    expect(servers["broker-local"]).toMatchObject({
+      command: MCP_COMMAND,
+      args: [MCP_SERVERS.brokerLocal],
+    });
+    // market-data is in-process SDK server
+    expect(servers["market-data"]).toMatchObject({
+      type: "sdk",
+      name: "market-data",
+    });
   });
 
   it("passes FUND_DIR to broker-local env", async () => {
@@ -280,23 +297,23 @@ describe("buildMcpServers", () => {
     expect(servers["broker-local"].env.FUND_DIR).toBe(join(WORKSPACE, "funds", "test-fund"));
   });
 
-  it("passes FMP_API_KEY to market-data when configured", async () => {
+  it("passes fmpApiKey to market-data factory when configured", async () => {
     mockedGlobalConfig.mockResolvedValue(
       makeGlobalConfig({
         market_data: { provider: "fmp", fmp_api_key: "fmp-test-key" },
       }) as never,
     );
 
-    const servers = await buildMcpServers("test-fund");
+    await buildMcpServers("test-fund");
 
-    expect(servers["market-data"].env.FMP_API_KEY).toBe("fmp-test-key");
+    expect(createMarketDataMcpServer).toHaveBeenCalledWith({ fmpApiKey: "fmp-test-key" });
   });
 
-  it("omits FMP_API_KEY from market-data when not configured", async () => {
+  it("calls market-data factory with undefined fmpApiKey when not configured", async () => {
     // default makeGlobalConfig has no market_data.fmp_api_key
-    const servers = await buildMcpServers("test-fund");
+    await buildMcpServers("test-fund");
 
-    expect(servers["market-data"].env.FMP_API_KEY).toBeUndefined();
+    expect(createMarketDataMcpServer).toHaveBeenCalledWith({ fmpApiKey: undefined });
   });
 
   it("includes sws server when sws token is configured", async () => {

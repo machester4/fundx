@@ -1,5 +1,6 @@
 import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
+import { queryArticles } from "./news.service.js";
 import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData } from "../types.js";
 
 const yf = new YahooFinance();
@@ -324,7 +325,7 @@ export async function fetchSectorSnapshots(): Promise<SectorSnapshot[]> {
   return [];
 }
 
-/** Fetch latest news headlines */
+/** Fetch latest news headlines from FMP/YFinance (live) */
 export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
   const info = await detectProvider();
   if (info.provider === "fmp") {
@@ -334,6 +335,26 @@ export async function fetchNewsHeadlines(limit = 8): Promise<NewsHeadline[]> {
     return fetchYFinanceNews(limit).catch(() => []);
   }
   return [];
+}
+
+/**
+ * Dashboard headline source. Prefers the RSS cache (same data the agent sees),
+ * falls back to live FMP/YFinance fetch when the cache is empty or unavailable.
+ */
+export async function fetchDashboardHeadlines(limit = 8): Promise<NewsHeadline[]> {
+  const result = await queryArticles({ hours: 24, limit });
+  if (result.status === "ok") {
+    return result.articles.map((a) => ({
+      id: a.id,
+      headline: a.title,
+      source: a.source,
+      timestamp: a.published_at,
+      symbols: a.symbols,
+      url: a.url || undefined,
+    }));
+  }
+  // empty or unavailable → try live fetch so the panel isn't blank
+  return fetchNewsHeadlines(limit);
 }
 
 /** Check if market is currently open */
@@ -358,7 +379,7 @@ export async function getMarketDataProvider(): Promise<"fmp" | "yfinance" | "non
 export async function getDashboardMarketData(): Promise<DashboardMarketData> {
   const [indices, news, sectors, clock] = await Promise.all([
     fetchMarketIndices().catch(() => [] as MarketIndexSnapshot[]),
-    fetchNewsHeadlines().catch(() => [] as NewsHeadline[]),
+    fetchDashboardHeadlines().catch(() => [] as NewsHeadline[]),
     fetchSectorSnapshots().catch(() => [] as SectorSnapshot[]),
     fetchMarketClock().catch(() => ({ isOpen: false })),
   ]);
