@@ -1,7 +1,7 @@
 import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
 import { queryArticles } from "./news.service.js";
-import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData } from "../types.js";
+import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData, DailyBar } from "../types.js";
 
 const yf = new YahooFinance();
 
@@ -391,4 +391,65 @@ export async function getDashboardMarketData(): Promise<DashboardMarketData> {
     marketOpen: clock.isOpen,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+// ── Screening helpers ────────────────────────────────────────
+
+/**
+ * Fetch daily OHLCV bars for a single ticker from FMP.
+ * Returns bars in chronological order (oldest first).
+ */
+export async function getHistoricalDaily(
+  ticker: string,
+  days: number,
+  apiKey: string,
+): Promise<DailyBar[]> {
+  const url =
+    `${FMP_BASE}/historical-price-full/${encodeURIComponent(ticker)}` +
+    `?timeseries=${days}&apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!resp.ok) {
+    throw new Error(
+      `FMP /historical-price-full failed for ${ticker}: ${resp.status}`,
+    );
+  }
+  const body = (await resp.json()) as {
+    historical?: Array<{ date: string; adjClose?: number; close: number; volume: number }>;
+  };
+  const historical = body.historical ?? [];
+  // FMP returns newest first; reverse for chronological order.
+  return historical
+    .slice()
+    .reverse()
+    .map((r) => ({
+      date: r.date,
+      close: r.adjClose ?? r.close,
+      volume: r.volume,
+    }));
+}
+
+/**
+ * Fetch the current S&P 500 constituent list from FMP.
+ * Falls back to the static SP500_FALLBACK list when the API call fails
+ * or returns an empty/unexpected response.
+ */
+export async function getSp500Constituents(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/sp500_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) {
+    console.warn(
+      `[market] FMP /sp500_constituent returned ${resp.status}; using 50-ticker fallback list`,
+    );
+    const { SP500_FALLBACK } = await import("../constants/sp500.js");
+    return [...SP500_FALLBACK];
+  }
+  const body = (await resp.json()) as Array<{ symbol: string }>;
+  if (!Array.isArray(body) || body.length === 0) {
+    console.warn(
+      "[market] FMP /sp500_constituent returned empty/invalid body; using fallback list",
+    );
+    const { SP500_FALLBACK } = await import("../constants/sp500.js");
+    return [...SP500_FALLBACK];
+  }
+  return body.map((r) => r.symbol);
 }

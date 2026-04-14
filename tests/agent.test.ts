@@ -120,7 +120,7 @@ describe("buildMcpServers", () => {
   it("returns broker-local (stdio) and market-data (in-process) by default", async () => {
     const servers = await buildMcpServers("test-fund");
 
-    expect(Object.keys(servers)).toEqual(["broker-local", "market-data"]);
+    expect(Object.keys(servers)).toEqual(["broker-local", "market-data", "screener"]);
     // broker-local is stdio
     expect(servers["broker-local"]).toMatchObject({
       command: MCP_COMMAND,

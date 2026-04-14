@@ -49,6 +49,7 @@ export async function initWorkspace(params: InitWorkspaceParams): Promise<void> 
 
   await mkdir(WORKSPACE, { recursive: true });
   await mkdir(FUNDS_DIR, { recursive: true });
+  await mkdir(join(WORKSPACE, "state"), { recursive: true });
   await mkdir(join(SHARED_DIR, "templates"), { recursive: true });
   await mkdir(WORKSPACE_RULES_DIR, { recursive: true });
   await saveGlobalConfig(config);

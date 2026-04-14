@@ -41,6 +41,12 @@ export const NEWS_DIR = process.env.FUNDX_NEWS_DIR ?? join(WORKSPACE, "news");
  * Respects FUNDX_NEWS_SOCKET for test overrides. */
 export const NEWS_IPC_SOCKET = process.env.FUNDX_NEWS_SOCKET ?? join(WORKSPACE, "news.sock");
 
+/** Screening watchlist SQLite database */
+export const WATCHLIST_DB = join(WORKSPACE, "state", "watchlist.sqlite");
+
+/** Price cache SQLite database */
+export const PRICE_CACHE_DB = join(WORKSPACE, "state", "price_cache.sqlite");
+
 /** Shared directory */
 export const SHARED_DIR = join(WORKSPACE, "shared");
 
@@ -73,6 +79,7 @@ export const MCP_SERVERS = {
   brokerLocal: join(__dirname, "mcp", IS_DEV ? "broker-local.ts" : "broker-local.js"),
   telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
   sws: join(__dirname, "mcp", IS_DEV ? "sws.ts" : "sws.js"),
+  screener: join(__dirname, "mcp", IS_DEV ? "screener.ts" : "screener.js"),
 };
 
 /** Command to run MCP server files (tsx for .ts in dev, node for .js in prod) */
