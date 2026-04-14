@@ -27,14 +27,18 @@ export default function Tag({ args, options: opts }: Props) {
   const [ticker, status] = args;
   const { data, isLoading, error } = useAsyncAction(async () => {
     const db = openWatchlistDb();
-    tagManually(
-      db,
-      ticker.toUpperCase(),
-      status,
-      `manual:cli:${opts.reason}`,
-      Date.now(),
-    );
-    return { ticker, status };
+    try {
+      tagManually(
+        db,
+        ticker.toUpperCase(),
+        status,
+        `manual:cli:${opts.reason}`,
+        Date.now(),
+      );
+      return { ticker, status };
+    } finally {
+      db.close();
+    }
   });
   if (isLoading) return <Text>Tagging {ticker}…</Text>;
   if (error) return <ErrorMessage>{error.message}</ErrorMessage>;
