@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { scoreMomentum121, metadataFromScore } from "../src/services/screening.service.js";
+import { scoreMomentum121, metadataFromScore, runScreen } from "../src/services/screening.service.js";
 import type { DailyBar } from "../src/types.js";
+import {
+  openWatchlistDb,
+  queryWatchlist,
+} from "../src/services/watchlist.service.js";
+import {
+  openPriceCache,
+  writeBars,
+} from "../src/services/price-cache.service.js";
 
 function bars(closes: number[]): DailyBar[] {
   return closes.map((c, i) => {
@@ -65,5 +73,46 @@ describe("metadataFromScore", () => {
       last_price: s!.last_price,
       missing_days: s!.missing_days,
     });
+  });
+});
+
+function makeFixtureBars(startClose: number, endClose: number): DailyBar[] {
+  const arr: DailyBar[] = [];
+  for (let i = 0; i < 273; i++) {
+    const c = startClose + ((endClose - startClose) * i) / 272;
+    arr.push({
+      date: new Date(2025, 0, 1 + i).toISOString().slice(0, 10),
+      close: c,
+      volume: 500_000,
+    });
+  }
+  return arr;
+}
+
+describe("runScreen (integration)", () => {
+  it("runs momentum-12-1 end-to-end against a 3-ticker universe", async () => {
+    const wdb = openWatchlistDb(":memory:");
+    const pcdb = openPriceCache(":memory:");
+    writeBars(pcdb, "AAA", makeFixtureBars(100, 200), Date.now());
+    writeBars(pcdb, "BBB", makeFixtureBars(100, 101), Date.now());
+    writeBars(pcdb, "CCC", makeFixtureBars(100, 80), Date.now());
+
+    const summary = await runScreen({
+      watchlistDb: wdb,
+      priceCacheDb: pcdb,
+      universe: ["AAA", "BBB", "CCC"],
+      universeLabel: "test",
+      fetchBars: async () => {
+        throw new Error("should not fetch — cache is primed");
+      },
+      fundConfigs: [],
+      now: Date.now(),
+    });
+
+    expect(summary.tickers_scored).toBe(3);
+    expect(summary.tickers_passed).toBeGreaterThan(0);
+
+    const wl = queryWatchlist(wdb, { status: ["candidate", "watching"] });
+    expect(wl.map((e) => e.ticker)).toContain("AAA");
   });
 });
