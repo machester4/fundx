@@ -112,7 +112,59 @@ describe("runScreen (integration)", () => {
     expect(summary.tickers_scored).toBe(3);
     expect(summary.tickers_passed).toBeGreaterThan(0);
 
+    // screen_runs row exists with correct universe label
+    const runRow = wdb
+      .prepare("SELECT * FROM screen_runs WHERE id = ?")
+      .get(summary.run_id) as { universe: string; tickers_scored: number } | undefined;
+    expect(runRow?.universe).toBe("test");
+    expect(runRow?.tickers_scored).toBe(3);
+
+    // scores rows — one per scored ticker (AAA, BBB, CCC)
+    const scoreRows = wdb
+      .prepare("SELECT ticker, passed FROM scores WHERE run_id = ? ORDER BY ticker")
+      .all(summary.run_id) as Array<{ ticker: string; passed: number }>;
+    expect(scoreRows.map((r) => r.ticker)).toEqual(["AAA", "BBB", "CCC"]);
+    const aaaRow = scoreRows.find((r) => r.ticker === "AAA");
+    expect(aaaRow?.passed).toBe(1);
+
+    // watchlist contains AAA with candidate status
     const wl = queryWatchlist(wdb, { status: ["candidate", "watching"] });
     expect(wl.map((e) => e.ticker)).toContain("AAA");
+
+    // status_transitions for AAA: ø → candidate
+    const transitions = wdb
+      .prepare("SELECT from_status, to_status FROM status_transitions WHERE ticker = ?")
+      .all("AAA") as Array<{ from_status: string | null; to_status: string }>;
+    expect(transitions.length).toBeGreaterThanOrEqual(1);
+    expect(transitions[0].from_status).toBeNull();
+    expect(transitions[0].to_status).toBe("candidate");
+
+    // no fund tags (empty fundConfigs)
+    const tagRows = wdb.prepare("SELECT * FROM watchlist_fund_tags").all();
+    expect(tagRows).toHaveLength(0);
+
+    // top_ten sorted by score descending, AAA first
+    expect(summary.top_ten[0]?.ticker).toBe("AAA");
+  });
+
+  it("swallows fetchBars errors and continues with remaining tickers", async () => {
+    const wdb = openWatchlistDb(":memory:");
+    const pcdb = openPriceCache(":memory:");
+    // No cache primed — all tickers will go to fetchBars, which throws.
+    const summary = await runScreen({
+      watchlistDb: wdb,
+      priceCacheDb: pcdb,
+      universe: ["XXX", "YYY"],
+      universeLabel: "test-errors",
+      fetchBars: async () => {
+        throw new Error("simulated FMP failure");
+      },
+      fundConfigs: [],
+      now: Date.now(),
+    });
+
+    expect(summary.tickers_scored).toBe(0);
+    expect(summary.tickers_passed).toBe(0);
+    expect(summary.run_id).toBeGreaterThan(0); // screen_runs row still inserted
   });
 });

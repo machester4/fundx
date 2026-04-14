@@ -1,4 +1,16 @@
-import type { DailyBar, ScoreMetadata } from "../types.js";
+import type Database from "better-sqlite3";
+import type { DailyBar, ScoreMetadata, FundConfig, ScreenName } from "../types.js";
+import {
+  insertScreenRun,
+  insertScore,
+  applyTransitionsForRun,
+  tagFundCompatibilityForTickers,
+} from "./watchlist.service.js";
+import {
+  readBars,
+  isFresh,
+  writeBars,
+} from "./price-cache.service.js";
 
 const LOOKBACK_TOTAL_DAYS = 273;
 const SKIP_RECENT_DAYS = 21;
@@ -42,20 +54,6 @@ export function metadataFromScore(ms: MomentumScore): ScoreMetadata {
     missing_days: ms.missing_days,
   };
 }
-
-import type Database from "better-sqlite3";
-import {
-  insertScreenRun,
-  insertScore,
-  applyTransitionsForRun,
-  tagFundCompatibilityForTickers,
-} from "./watchlist.service.js";
-import {
-  readBars,
-  isFresh,
-  writeBars,
-} from "./price-cache.service.js";
-import type { FundConfig, ScreenName } from "../types.js";
 
 const MIN_PRICE = 5;
 const MIN_ADV_USD = 10_000_000;
@@ -104,7 +102,10 @@ export async function runScreen(
       try {
         bars = await opts.fetchBars(ticker);
         writeBars(opts.priceCacheDb, ticker, bars, opts.now);
-      } catch {
+      } catch (err) {
+        console.warn(
+          `[screen:${screenName}] fetchBars failed for ${ticker}: ${(err as Error).message}`,
+        );
         continue;
       }
     }
