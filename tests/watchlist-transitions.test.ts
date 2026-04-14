@@ -63,4 +63,23 @@ describe("watchlist.service — CRUD", () => {
   it("returns empty list from queryWatchlist on empty db", () => {
     expect(queryWatchlist(db, {})).toEqual([]);
   });
+
+  it("enforces scores.run_id foreign key", () => {
+    expect(() =>
+      insertScore(db, {
+        run_id: 9999, // no such screen run
+        ticker: "AAPL",
+        screen_name: "momentum-12-1",
+        score: 0.1,
+        passed: true,
+        metadata: {
+          return_12_1: 0.1,
+          adv_usd_30d: 20_000_000,
+          last_price: 100,
+          missing_days: 0,
+        },
+        scored_at: 1_700_000_000_000,
+      }),
+    ).toThrow();
+  });
 });
