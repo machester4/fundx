@@ -160,7 +160,7 @@ export function queryWatchlist(
   }
   if (q.screen) {
     where.push("w.current_screens_json LIKE @screen_pat");
-    params.screen_pat = `%${q.screen}%`;
+    params.screen_pat = `%"${q.screen}"%`;
   }
   if (q.ticker) {
     where.push("w.ticker = @ticker");
