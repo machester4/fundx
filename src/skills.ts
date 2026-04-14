@@ -735,6 +735,49 @@ survival assessment, barbell classification, and prioritized rebalancing actions
 with reasoning.
 `,
   },
+  {
+    name: "Opportunity Screening",
+    dirName: "opportunity-screening",
+    description:
+      "Use the screener MCP to find and prioritise new trade candidates from the watchlist. Triggered at Orient and on user request.",
+    content: `# Opportunity Screening
+
+## When to Use
+- Immediately after the Orient phase of a session, to see which tickers have been surfaced by screens for this fund.
+- When the user asks in chat for opportunities, ideas, or "what's interesting right now".
+- Mid-session, when considering new positions and the portfolio has open capacity.
+
+## When NOT to Use
+- Portfolio is already at its max-positions limit (per fund config).
+- Market regime is clearly risk-off and this fund's objective is capital preservation — defer to runway-style defensive holds.
+- Fund is in an active drawdown and the session is focused on damage control.
+- The user is asking a question unrelated to new ideas — don't pre-empt.
+
+## Technique
+1. Query the screener MCP filtered by this fund for \`candidate\` and \`watching\` statuses first; then query \`fading\` separately to spot potential re-entries.
+2. For any ticker that looks interesting, call \`screener.watchlist_trajectory({ ticker })\` and inspect:
+   - How long it has been on the list (\`first_surfaced_at\`).
+   - Whether scores trended up cleanly, plateaued, or whipsawed.
+   - Whether it has previously transitioned to \`fading\` and recovered — re-entries after a pause are often stronger signals than first-time candidates.
+3. Cross-reference each candidate against the current portfolio: does it introduce new sector exposure, or concentrate existing risk (per the fund's risk config)?
+4. Select 3–5 candidates to prioritise. Hand them to the \`trade-evaluator\` sub-agent for thesis construction and risk review.
+
+## Caveats
+- **V1 scope:** only the 12-1 momentum screen populates the watchlist. Names without any screen tag should be treated as informational, not a recommendation.
+- **Fund tagging:** funds whose \`universe\` is declared by sector/strategy/protocol (not explicit ETF/ticker lists) receive no automatic fund tags. The watchlist will still surface workspace-wide candidates; apply the fund's universe filter mentally.
+- **Empty watchlist is normal** on a fresh install until the first daily run completes.
+
+## Output Format
+Produce a section titled **Opportunity shortlist** with one block per candidate:
+
+\`\`\`
+- **<TICKER>** — <status>, <days on list>
+  - Current score: <x.x%> (trajectory: <rising | stable | recovered | fading-slightly>)
+  - Why it fits this fund: <1 line mapping to objective>
+  - Open question for analysis: <specific risk or catalyst to probe>
+\`\`\`
+`,
+  },
 ];
 
 // ── Workspace skill ────────────────────────────────────────────
@@ -1281,7 +1324,23 @@ Before ANY analysis or action, complete these steps IN ORDER:
    This serves two purposes: confirms you completed Orient, and ensures the next session
    has context even if this session is interrupted.
 
-Only after completing all 6 steps, proceed with analysis.
+7. **Review watchlist** — Before moving to analysis, consult the workspace watchlist for any candidates
+   surfaced by screens.
+
+   Call the \`screener.watchlist_query\` tool twice:
+
+   1. \`{ fund: "<this fund's name>", status: ["candidate", "watching"], limit: 20 }\` — fresh and established candidates eligible for this fund.
+   2. \`{ fund: "<this fund's name>", status: ["fading"], limit: 20 }\` — names that were previously active but are cooling off.
+
+   For each entry whose status changed since the timestamp of the prior
+   \`session-handoff.md\`, note the transition in the Session Contract under a
+   **Watchlist updates** heading (ticker, old → new status, reason). Fresh
+   candidates and any \`fading → watching\` re-entries become primary inputs to the
+   Analyze phase. If the watchlist is empty (common in a freshly initialised
+   workspace until the first screen run completes), record that and proceed
+   without it — the screen will populate on its next daily cycle.
+
+Only after completing all 7 steps, proceed with analysis.
 
 ## Session-Type Priorities
 

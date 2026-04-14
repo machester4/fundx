@@ -30,7 +30,7 @@ beforeEach(() => {
 
 describe("BUILTIN_SKILLS", () => {
   it("has 7 fund trading skills", () => {
-    expect(BUILTIN_SKILLS).toHaveLength(7);
+    expect(BUILTIN_SKILLS).toHaveLength(8);
   });
 
   it("each skill has required fields", () => {
@@ -197,7 +197,7 @@ describe("WORKSPACE_SKILL", () => {
 describe("getAllSkillNames", () => {
   it("returns names of all 7 fund skills", () => {
     const names = getAllSkillNames();
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(8);
     expect(names).toContain("Investment Thesis");
     expect(names).toContain("Risk Assessment");
     expect(names).toContain("Trade Memory");
@@ -205,6 +205,7 @@ describe("getAllSkillNames", () => {
     expect(names).toContain("Position Sizing");
     expect(names).toContain("Session Reflection");
     expect(names).toContain("Portfolio Review");
+    expect(names).toContain("Opportunity Screening");
   });
 });
 
@@ -225,7 +226,7 @@ describe("ensureSkillFiles", () => {
   it("creates a subdirectory per skill", async () => {
     await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
     // Each skill should create its own subdirectory
-    expect(mockedMkdir).toHaveBeenCalledTimes(7);
+    expect(mockedMkdir).toHaveBeenCalledTimes(8);
     for (const skill of BUILTIN_SKILLS) {
       expect(mockedMkdir).toHaveBeenCalledWith(
         expect.stringContaining(skill.dirName),
@@ -236,7 +237,7 @@ describe("ensureSkillFiles", () => {
 
   it("writes SKILL.md inside each skill directory", async () => {
     await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
-    expect(mockedWriteFile).toHaveBeenCalledTimes(7);
+    expect(mockedWriteFile).toHaveBeenCalledTimes(8);
     const writtenPaths = mockedWriteFile.mock.calls.map((c) => c[0] as string);
     for (const skill of BUILTIN_SKILLS) {
       expect(writtenPaths.some((p) => p.endsWith(`${skill.dirName}/SKILL.md`))).toBe(true);
@@ -256,7 +257,7 @@ describe("ensureSkillFiles", () => {
 describe("ensureFundSkillFiles", () => {
   it("writes all 7 fund skills", async () => {
     await ensureFundSkillFiles("/test/fund/.claude");
-    expect(mockedWriteFile).toHaveBeenCalledTimes(7);
+    expect(mockedWriteFile).toHaveBeenCalledTimes(8);
   });
 });
 

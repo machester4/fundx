@@ -657,3 +657,86 @@ export const sessionCountsSchema = z.object({
 });
 
 export type SessionCounts = z.infer<typeof sessionCountsSchema>;
+
+// ─────────── Screening / watchlist ───────────
+
+export const screenNameSchema = z.enum(["momentum-12-1"]);
+export type ScreenName = z.infer<typeof screenNameSchema>;
+
+export const watchlistStatusSchema = z.enum([
+  "candidate",
+  "watching",
+  "fading",
+  "stale",
+  "rejected",
+]);
+export type WatchlistStatus = z.infer<typeof watchlistStatusSchema>;
+
+export const dailyBarSchema = z.object({
+  date: z.string(),
+  close: z.number(),
+  volume: z.number(),
+});
+export type DailyBar = z.infer<typeof dailyBarSchema>;
+
+export const scoreMetadataSchema = z.object({
+  return_12_1: z.number(),
+  adv_usd_30d: z.number(),
+  last_price: z.number(),
+  missing_days: z.number(),
+});
+export type ScoreMetadata = z.infer<typeof scoreMetadataSchema>;
+
+export const screenRunSchema = z.object({
+  id: z.number().int().positive(),
+  screen_name: screenNameSchema,
+  universe: z.string(),
+  ran_at: z.number().int().positive(),
+  tickers_scored: z.number().int().nonnegative(),
+  tickers_passed: z.number().int().nonnegative(),
+  duration_ms: z.number().int().nonnegative(),
+  parameters_json: z.string(),
+});
+export type ScreenRun = z.infer<typeof screenRunSchema>;
+
+export const scoreRowSchema = z.object({
+  id: z.number().int().positive(),
+  run_id: z.number().int().positive(),
+  ticker: z.string(),
+  screen_name: screenNameSchema,
+  score: z.number(),
+  passed: z.boolean(),
+  metadata: scoreMetadataSchema,
+  scored_at: z.number().int().positive(),
+});
+export type ScoreRow = z.infer<typeof scoreRowSchema>;
+
+export const watchlistEntrySchema = z.object({
+  ticker: z.string(),
+  status: watchlistStatusSchema,
+  first_surfaced_at: z.number().int().positive(),
+  last_evaluated_at: z.number().int().positive(),
+  current_screens: z.array(screenNameSchema),
+  peak_score: z.number().nullable(),
+  peak_score_at: z.number().int().nullable(),
+  notes: z.string().nullable(),
+});
+export type WatchlistEntry = z.infer<typeof watchlistEntrySchema>;
+
+export const statusTransitionSchema = z.object({
+  id: z.number().int().positive(),
+  ticker: z.string(),
+  from_status: watchlistStatusSchema.nullable(),
+  to_status: watchlistStatusSchema,
+  reason: z.string(),
+  transitioned_at: z.number().int().positive(),
+});
+export type StatusTransition = z.infer<typeof statusTransitionSchema>;
+
+export const watchlistFundTagSchema = z.object({
+  ticker: z.string(),
+  fund_name: z.string(),
+  compatible: z.boolean(),
+  tagged_at: z.number().int().positive(),
+});
+export type WatchlistFundTag = z.infer<typeof watchlistFundTagSchema>;

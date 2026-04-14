@@ -16,6 +16,7 @@ export default defineConfig([
       "src/mcp/broker-local.ts",
       "src/mcp/telegram-notify.ts",
       "src/mcp/sws.ts",
+      "src/mcp/screener.ts",
     ],
     format: ["esm"],
     target: "node20",
