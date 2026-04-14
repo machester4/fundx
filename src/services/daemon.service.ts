@@ -12,7 +12,7 @@ import {
   DAEMON_LOG_MAX_FILES,
   fundPaths,
 } from "../paths.js";
-import { listFundNames, loadFundConfig } from "./fund.service.js";
+import { listFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
 import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
@@ -24,6 +24,10 @@ import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
 import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
 import { isInQuietHoursEnv } from "../mcp/broker-local-notify.js";
+import { openWatchlistDb } from "./watchlist.service.js";
+import { openPriceCache } from "./price-cache.service.js";
+import { runScreen } from "./screening.service.js";
+import { getHistoricalDaily, getSp500Constituents } from "./market.service.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -922,6 +926,43 @@ export async function startDaemon(): Promise<void> {
       await log("[analysis] Old analysis files cleaned up");
     } catch (err) {
       await log(`[analysis] Cleanup error: ${err}`);
+    }
+  });
+
+  // Daily screening — 22:00 Mon–Fri (post US market close)
+  cron.schedule("0 22 * * 1-5", async () => {
+    try {
+      const config = await loadGlobalConfig();
+      const apiKey = config.market_data?.fmp_api_key ?? "";
+      if (!apiKey) {
+        await log("[screening] no FMP API key configured — skipping daily run");
+        return;
+      }
+      const wdb = openWatchlistDb();
+      const pcdb = openPriceCache();
+      try {
+        const universe = await getSp500Constituents(apiKey);
+        const fundConfigs = await loadAllFundConfigs();
+        const summary = await runScreen({
+          watchlistDb: wdb,
+          priceCacheDb: pcdb,
+          universe,
+          universeLabel: "sp500",
+          fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
+          fundConfigs,
+          now: Date.now(),
+          screenName: "momentum-12-1",
+        });
+        await log(
+          `[screening] run ${summary.run_id} ok: scored=${summary.tickers_scored} ` +
+            `passed=${summary.tickers_passed} ms=${summary.duration_ms}`,
+        );
+      } finally {
+        wdb.close();
+        pcdb.close();
+      }
+    } catch (err) {
+      trackError("_screening", "daily-run", err);
     }
   });
 
