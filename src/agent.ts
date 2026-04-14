@@ -118,6 +118,11 @@ export async function buildMcpServers(
     "market-data": createMarketDataMcpServer({
       fmpApiKey: globalConfig.market_data?.fmp_api_key,
     }),
+    screener: {
+      command: MCP_COMMAND,
+      args: [MCP_SERVERS.screener],
+      env: { ...process.env } as Record<string, string>,
+    },
   };
 
   // Conditionally add telegram-notify
