@@ -9,7 +9,9 @@ import {
   applyTransitionsForRun,
   getTrajectory,
   tagManually,
+  tagFundCompatibilityForTickers,
 } from "../src/services/watchlist.service.js";
+import type { FundConfig } from "../src/types.js";
 
 describe("watchlist.service — CRUD", () => {
   let db: Database.Database;
@@ -195,5 +197,97 @@ describe("watchlist.service — transitions", () => {
     expect(traj.scores).toHaveLength(2);
     expect(traj.scores[0].scored_at).toBeLessThan(traj.scores[1].scored_at);
     expect(traj.transitions.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("tagFundCompatibilityForTickers", () => {
+  let db: Database.Database;
+  beforeEach(() => (db = openWatchlistDb(":memory:")));
+
+  function fundWithEtf(name: string, tickers: string[]): FundConfig {
+    return {
+      fund: {
+        name,
+        display_name: name,
+        description: "",
+        created: "2026-01-01",
+        status: "active",
+      },
+      capital: { initial: 10000, currency: "USD" },
+      objective: { type: "growth", target_multiple: 2, timeframe_months: 12 },
+      risk: {
+        profile: "moderate",
+        max_drawdown_pct: 30,
+        max_position_pct: 20,
+        max_leverage: 1,
+        stop_loss_pct: 10,
+        max_daily_loss_pct: 5,
+        correlation_limit: 0.8,
+        custom_rules: [],
+      },
+      universe: {
+        allowed: [{ type: "etf", tickers }],
+        forbidden: [],
+      },
+      schedule: {
+        timezone: "UTC",
+        trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
+        sessions: {},
+        special_sessions: [],
+      },
+      broker: { mode: "paper" },
+      notifications: {
+        telegram: {
+          enabled: false,
+          trade_alerts: true,
+          stop_loss_alerts: true,
+          daily_digest: true,
+          weekly_digest: true,
+          milestone_alerts: true,
+          drawdown_alerts: true,
+        },
+        quiet_hours: {
+          enabled: false,
+          start: "23:00",
+          end: "07:00",
+          allow_critical: true,
+        },
+      },
+      claude: {
+        model: "sonnet",
+        personality: "neutral",
+        decision_framework: "",
+      },
+    };
+  }
+
+  it("tags compatible when ticker in fund etf universe", () => {
+    const f = fundWithEtf("my-growth", ["AAPL", "MSFT"]);
+    tagFundCompatibilityForTickers(db, [f], ["AAPL", "GOOG"], 1000);
+    const aapl = db
+      .prepare(
+        "SELECT * FROM watchlist_fund_tags WHERE ticker='AAPL' AND fund_name='my-growth'",
+      )
+      .get() as { compatible: number } | undefined;
+    expect(aapl?.compatible).toBe(1);
+    const goog = db
+      .prepare(
+        "SELECT * FROM watchlist_fund_tags WHERE ticker='GOOG' AND fund_name='my-growth'",
+      )
+      .get() as { compatible: number } | undefined;
+    expect(goog?.compatible).toBe(0);
+  });
+
+  it("skips tagging for funds whose universe is sector/strategy/protocol (not etf)", () => {
+    const f = {
+      ...fundWithEtf("sector-fund", []),
+      universe: {
+        allowed: [{ type: "sector", sectors: ["technology"] }],
+        forbidden: [],
+      },
+    } as unknown as FundConfig;
+    tagFundCompatibilityForTickers(db, [f], ["AAPL"], 1000);
+    const rows = db.prepare("SELECT * FROM watchlist_fund_tags").all();
+    expect(rows).toHaveLength(0);
   });
 });
