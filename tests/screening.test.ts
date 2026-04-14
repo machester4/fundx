@@ -167,4 +167,33 @@ describe("runScreen (integration)", () => {
     expect(summary.tickers_passed).toBe(0);
     expect(summary.run_id).toBeGreaterThan(0); // screen_runs row still inserted
   });
+
+  it("refuses to start a second run while another is in progress", async () => {
+    // We fake an in-progress lock by touching the lockfile with a fresh mtime.
+    // The fs path comes from the same directory as WATCHLIST_DB.
+    const { WATCHLIST_DB } = await import("../src/paths.js");
+    const { mkdirSync, writeFileSync, unlinkSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const lockPath = join(dirname(WATCHLIST_DB), "screening.lock");
+    mkdirSync(dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, "");
+
+    try {
+      const wdb = openWatchlistDb(":memory:");
+      const pcdb = openPriceCache(":memory:");
+      await expect(
+        runScreen({
+          watchlistDb: wdb,
+          priceCacheDb: pcdb,
+          universe: ["XXX"],
+          universeLabel: "test",
+          fetchBars: async () => [],
+          fundConfigs: [],
+          now: Date.now(),
+        }),
+      ).rejects.toThrow(/already.*progress|in progress/i);
+    } finally {
+      try { unlinkSync(lockPath); } catch { /* ignore */ }
+    }
+  });
 });
