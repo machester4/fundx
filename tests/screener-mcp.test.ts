@@ -3,8 +3,10 @@ import {
   handleWatchlistQuery,
   handleWatchlistTrajectory,
   handleWatchlistTag,
+  handleScreenRun,
 } from "../src/mcp/screener.js";
 import { openWatchlistDb } from "../src/services/watchlist.service.js";
+import { openPriceCache } from "../src/services/price-cache.service.js";
 
 describe("screener MCP handlers", () => {
   let wdb: ReturnType<typeof openWatchlistDb>;
@@ -32,5 +34,20 @@ describe("screener MCP handlers", () => {
     const res = await handleWatchlistTrajectory(wdb, { ticker: "UNKNOWN" });
     expect(res.scores).toEqual([]);
     expect(res.transitions).toEqual([]);
+  });
+
+  it("handleScreenRun uses default screen and universe label when args are empty", async () => {
+    const pcdb = openPriceCache(":memory:");
+    const res = await handleScreenRun(wdb, pcdb, {}, {
+      fetchBars: async () => [],
+      universeTickers: async () => [],
+      loadFundConfigs: async () => [],
+      now: () => 1_700_000_000_000,
+    });
+    expect(res.summary.screen_name).toBe("momentum-12-1");
+    expect(res.summary.universe).toBe("sp500");
+    expect(res.summary.tickers_scored).toBe(0);
+    expect(res.summary.tickers_passed).toBe(0);
+    expect(res.summary.run_id).toBeGreaterThan(0);
   });
 });

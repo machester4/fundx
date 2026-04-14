@@ -11,6 +11,9 @@ import {
   isFresh,
   writeBars,
 } from "./price-cache.service.js";
+import { openSync, closeSync, unlinkSync, existsSync, statSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { WATCHLIST_DB } from "../paths.js";
 
 const LOOKBACK_TOTAL_DAYS = 273;
 const SKIP_RECENT_DAYS = 21;
@@ -59,6 +62,52 @@ const MIN_PRICE = 5;
 const MIN_ADV_USD = 10_000_000;
 const TOP_DECILE_FRACTION = 0.10;
 
+const STALE_LOCK_MS = 30 * 60 * 1000; // 30 min: if a lock is older than this, assume crashed and reclaim
+
+function lockPath(): string {
+  return join(dirname(WATCHLIST_DB), "screening.lock");
+}
+
+/**
+ * Acquire an exclusive file lock for the screening run.
+ * Throws a user-readable error if another run is in progress.
+ * Stale locks (>30 min old) are auto-reclaimed — previous run likely crashed.
+ */
+function acquireLock(now: number): number {
+  const path = lockPath();
+  mkdirSync(dirname(path), { recursive: true });
+  if (existsSync(path)) {
+    const age = now - statSync(path).mtimeMs;
+    if (age < STALE_LOCK_MS) {
+      throw new Error(
+        `Another screening run is in progress (lock age ${Math.round(age / 1000)}s). ` +
+          `If you believe this is stale, delete ${path} and retry.`,
+      );
+    }
+    // Stale — reclaim
+    try {
+      unlinkSync(path);
+    } catch {
+      // ignore; openSync below will fail if truly locked
+    }
+  }
+  const fd = openSync(path, "wx");
+  return fd;
+}
+
+function releaseLock(fd: number): void {
+  try {
+    closeSync(fd);
+  } catch {
+    // best effort
+  }
+  try {
+    unlinkSync(lockPath());
+  } catch {
+    // best effort — if already gone, fine
+  }
+}
+
 export interface RunScreenOptions {
   watchlistDb: Database.Database;
   priceCacheDb: Database.Database;
@@ -83,6 +132,8 @@ export interface RunScreenSummary {
 export async function runScreen(
   opts: RunScreenOptions,
 ): Promise<RunScreenSummary> {
+  const fd = acquireLock(opts.now);
+  try {
   const started = Date.now();
   const screenName: ScreenName = opts.screenName ?? "momentum-12-1";
   const parameters = {
@@ -180,4 +231,7 @@ export async function runScreen(
     duration_ms: Date.now() - started,
     top_ten: topTen,
   };
+  } finally {
+    releaseLock(fd);
+  }
 }
