@@ -35,10 +35,14 @@ describe("price-cache.service", () => {
     expect(isFresh(db, "MSFT", Date.now())).toBe(true);
   });
 
-  it("reports stale after 24h+1ms", () => {
-    const wrote = Date.now() - (24 * 3600 * 1000 + 1);
-    writeBars(db, "GOOG", makeBars(3), wrote);
-    expect(isFresh(db, "GOOG", Date.now())).toBe(false);
+  it("reports fresh at exactly the 24h boundary (inclusive)", () => {
+    writeBars(db, "GOOG", makeBars(3), 1_000_000);
+    expect(isFresh(db, "GOOG", 1_000_000 + 24 * 3600 * 1000)).toBe(true);
+  });
+
+  it("reports stale at 24h + 1ms past the write", () => {
+    writeBars(db, "GOOG", makeBars(3), 1_000_000);
+    expect(isFresh(db, "GOOG", 1_000_000 + 24 * 3600 * 1000 + 1)).toBe(false);
   });
 
   it("returns empty array for unknown ticker", () => {
