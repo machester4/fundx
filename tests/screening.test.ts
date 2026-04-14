@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreMomentum121 } from "../src/services/screening.service.js";
+import { scoreMomentum121, metadataFromScore } from "../src/services/screening.service.js";
 import type { DailyBar } from "../src/types.js";
 
 function bars(closes: number[]): DailyBar[] {
@@ -44,5 +44,26 @@ describe("scoreMomentum121", () => {
     }));
     const s = scoreMomentum121(barArr);
     expect(s!.adv_usd_30d).toBeCloseTo(50_000_000, -3);
+  });
+
+  it("indexes numerator at t-21 and denominator at t-252 exactly", () => {
+    // bars[i].close = i + 1, so bars[n-22].close = 252, bars[n-253].close = 21
+    const closes = Array.from({ length: 273 }, (_, i) => i + 1);
+    const s = scoreMomentum121(bars(closes));
+    expect(s!.return_12_1).toBeCloseTo(252 / 21 - 1, 9);
+  });
+});
+
+describe("metadataFromScore", () => {
+  it("projects MomentumScore to ScoreMetadata exactly", () => {
+    const closes = Array.from({ length: 273 }, (_, i) => i + 1);
+    const s = scoreMomentum121(bars(closes));
+    expect(s).not.toBeNull();
+    expect(metadataFromScore(s!)).toEqual({
+      return_12_1: s!.return_12_1,
+      adv_usd_30d: s!.adv_usd_30d,
+      last_price: s!.last_price,
+      missing_days: s!.missing_days,
+    });
   });
 });
