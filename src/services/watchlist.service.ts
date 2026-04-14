@@ -9,6 +9,7 @@ import {
   type WatchlistStatus,
   type ScreenName,
   type StatusTransition,
+  type FundConfig,
   watchlistStatusSchema,
   screenNameSchema,
   statusTransitionSchema,
@@ -536,4 +537,30 @@ export function getTrajectory(
       }),
     ),
   };
+}
+
+export function tagFundCompatibilityForTickers(
+  db: Database.Database,
+  fundConfigs: FundConfig[],
+  tickers: string[],
+  now: number,
+): void {
+  const stmt = db.prepare(
+    "INSERT INTO watchlist_fund_tags (ticker, fund_name, compatible, tagged_at) " +
+      "VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(ticker, fund_name) DO UPDATE SET compatible = excluded.compatible, tagged_at = excluded.tagged_at",
+  );
+  const tx = db.transaction(() => {
+    for (const fund of fundConfigs) {
+      const etfEntries = fund.universe.allowed.filter(
+        (e) => e.type === "etf",
+      ) as Array<{ type: "etf"; tickers: string[] }>;
+      if (etfEntries.length === 0) continue;
+      const allowed = new Set(etfEntries.flatMap((e) => e.tickers ?? []));
+      for (const t of tickers) {
+        stmt.run(t, fund.fund.name, allowed.has(t) ? 1 : 0, now);
+      }
+    }
+  });
+  tx();
 }
