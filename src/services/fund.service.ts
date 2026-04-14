@@ -185,6 +185,21 @@ export async function getFundInfo(fundName: string): Promise<FundInfoData> {
   return { config };
 }
 
+// ── Load All Fund Configs ─────────────────────────────────────
+
+export async function loadAllFundConfigs(): Promise<FundConfig[]> {
+  const names = await listFundNames();
+  const out: FundConfig[] = [];
+  for (const name of names) {
+    try {
+      out.push(await loadFundConfig(name));
+    } catch {
+      // skip malformed
+    }
+  }
+  return out;
+}
+
 // ── Fund Upgrade ──────────────────────────────────────────────
 
 export interface UpgradeResult {
