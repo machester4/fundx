@@ -22,7 +22,11 @@ type Props = { options: z.infer<typeof options> };
 export default function Watchlist({ options: opts }: Props) {
   const { data, isLoading, error } = useAsyncAction(async () => {
     const db = openWatchlistDb();
-    return queryWatchlist(db, opts);
+    try {
+      return queryWatchlist(db, opts);
+    } finally {
+      db.close();
+    }
   });
   if (isLoading) return <Text>Loading watchlist…</Text>;
   if (error) return <ErrorMessage>{error.message}</ErrorMessage>;

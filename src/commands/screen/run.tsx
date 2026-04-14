@@ -13,10 +13,11 @@ import { loadAllFundConfigs } from "../../services/fund.service.js";
 import { useAsyncAction } from "../../hooks/useAsyncAction.js";
 import { ErrorMessage } from "../../components/ErrorMessage.js";
 import { SuccessMessage } from "../../components/SuccessMessage.js";
+import { screenNameSchema } from "../../types.js";
 
 export const description = "Run a screen across the configured universe.";
 export const options = z.object({
-  screen: z.string().default("momentum-12-1").describe("Screen name"),
+  screen: screenNameSchema.default("momentum-12-1").describe("Screen name"),
   universe: z.string().default("sp500").describe("Universe label"),
 });
 type Props = { options: z.infer<typeof options> };
@@ -27,18 +28,23 @@ export default function ScreenRun({ options: opts }: Props) {
     const apiKey = config.market_data?.fmp_api_key ?? "";
     const wdb = openWatchlistDb();
     const pcdb = openPriceCache();
-    const universe = await getSp500Constituents(apiKey);
-    const fundConfigs = await loadAllFundConfigs();
-    return runScreen({
-      watchlistDb: wdb,
-      priceCacheDb: pcdb,
-      universe,
-      universeLabel: opts.universe,
-      fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
-      fundConfigs,
-      now: Date.now(),
-      screenName: "momentum-12-1",
-    });
+    try {
+      const universe = await getSp500Constituents(apiKey);
+      const fundConfigs = await loadAllFundConfigs();
+      return await runScreen({
+        watchlistDb: wdb,
+        priceCacheDb: pcdb,
+        universe,
+        universeLabel: opts.universe,
+        fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
+        fundConfigs,
+        now: Date.now(),
+        screenName: opts.screen,
+      });
+    } finally {
+      wdb.close();
+      pcdb.close();
+    }
   });
 
   if (isLoading) return <Text>Running screen {opts.screen}…</Text>;

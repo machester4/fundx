@@ -18,7 +18,11 @@ export default function Trajectory({ args }: Props) {
   const [ticker] = args;
   const { data, isLoading, error } = useAsyncAction(async () => {
     const db = openWatchlistDb();
-    return getTrajectory(db, ticker.toUpperCase());
+    try {
+      return getTrajectory(db, ticker.toUpperCase());
+    } finally {
+      db.close();
+    }
   });
   if (isLoading) return <Text>Loading {ticker}…</Text>;
   if (error) return <ErrorMessage>{error.message}</ErrorMessage>;
