@@ -144,6 +144,18 @@ describe("watchlist.service — transitions", () => {
     expect(getWatchlistEntry(db, "AAPL")?.status).toBe("fading");
   });
 
+  it("fading → rejected after 30 days without a pass", () => {
+    run(t0, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 1.0, pass: true }]); // watching, peak=1.0
+    run(t0 + 2 * day, [{ t: "AAPL", s: 0.7, pass: true }]); // fading
+    // Jump 31 days forward, scoring a different ticker so AAPL isn't touched
+    // and isn't yet 90d stale.
+    run(t0 + 33 * day, [{ t: "MSFT", s: 0.5, pass: true }]);
+    // AAPL last passed at t0 + 2d. 31d later, a failing AAPL score should reject.
+    run(t0 + 33 * day + 1, [{ t: "AAPL", s: 0.3, pass: false }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("rejected");
+  });
+
   it("fading → rejected after 3 consecutive failing runs", () => {
     run(t0, [{ t: "AAPL", s: 1.0, pass: true }]);
     run(t0 + day, [{ t: "AAPL", s: 1.0, pass: true }]);

@@ -248,7 +248,7 @@ export function applyTransitionsForRun(
         scored_at: s.scored_at,
         screen_name: screenNameSchema.parse(s.screen_name),
       };
-      upsertFromScore(db, rec, now);
+      upsertFromScore(db, rec);
     }
     // Stale sweep: runs LAST, only for tickers not touched in this run
     const stale = db
@@ -267,7 +267,6 @@ export function applyTransitionsForRun(
 function upsertFromScore(
   db: Database.Database,
   rec: ScoreRecord,
-  _now: number,
 ): void {
   const existing = getWatchlistEntry(db, rec.ticker);
 
@@ -458,22 +457,25 @@ export function tagManually(
   reason: string,
   at: number,
 ): void {
-  const existing = getWatchlistEntry(db, ticker);
-  if (!existing) {
-    db.prepare(
-      "INSERT INTO watchlist (ticker, status, first_surfaced_at, last_evaluated_at, current_screens_json, peak_score, peak_score_at, notes) " +
-        "VALUES (?, ?, ?, ?, '[]', NULL, NULL, NULL)",
-    ).run(ticker, status, at, at);
-    insertStatusTransition(db, {
-      ticker,
-      from_status: null,
-      to_status: status,
-      reason,
-      transitioned_at: at,
-    });
-    return;
-  }
-  transitionTo(db, ticker, status, reason, at);
+  const tx = db.transaction(() => {
+    const existing = getWatchlistEntry(db, ticker);
+    if (!existing) {
+      db.prepare(
+        "INSERT INTO watchlist (ticker, status, first_surfaced_at, last_evaluated_at, current_screens_json, peak_score, peak_score_at, notes) " +
+          "VALUES (?, ?, ?, ?, '[]', NULL, NULL, NULL)",
+      ).run(ticker, status, at, at);
+      insertStatusTransition(db, {
+        ticker,
+        from_status: null,
+        to_status: status,
+        reason,
+        transitioned_at: at,
+      });
+      return;
+    }
+    transitionTo(db, ticker, status, reason, at);
+  });
+  tx();
 }
 
 export interface Trajectory {
