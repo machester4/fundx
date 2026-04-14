@@ -6,6 +6,9 @@ import {
   insertScore,
   getWatchlistEntry,
   queryWatchlist,
+  applyTransitionsForRun,
+  getTrajectory,
+  tagManually,
 } from "../src/services/watchlist.service.js";
 
 describe("watchlist.service — CRUD", () => {
@@ -81,5 +84,104 @@ describe("watchlist.service — CRUD", () => {
         scored_at: 1_700_000_000_000,
       }),
     ).toThrow();
+  });
+});
+
+describe("watchlist.service — transitions", () => {
+  let db: Database.Database;
+  beforeEach(() => {
+    db = openWatchlistDb(":memory:");
+  });
+
+  function run(ranAt: number, scores: Array<{ t: string; s: number; pass: boolean }>) {
+    const runId = insertScreenRun(db, {
+      screen_name: "momentum-12-1",
+      universe: "sp500",
+      ran_at: ranAt,
+      tickers_scored: scores.length,
+      tickers_passed: scores.filter((x) => x.pass).length,
+      duration_ms: 0,
+      parameters_json: "{}",
+    });
+    for (const { t, s, pass } of scores) {
+      insertScore(db, {
+        run_id: runId,
+        ticker: t,
+        screen_name: "momentum-12-1",
+        score: s,
+        passed: pass,
+        metadata: {
+          return_12_1: s,
+          adv_usd_30d: 20_000_000,
+          last_price: 100,
+          missing_days: 0,
+        },
+        scored_at: ranAt,
+      });
+    }
+    applyTransitionsForRun(db, runId, ranAt);
+    return runId;
+  }
+
+  const day = 24 * 3600 * 1000;
+  const t0 = 1_700_000_000_000;
+
+  it("ø → candidate on first pass", () => {
+    run(t0, [{ t: "AAPL", s: 0.3, pass: true }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("candidate");
+  });
+
+  it("candidate → watching on 2 consecutive passes", () => {
+    run(t0, [{ t: "AAPL", s: 0.3, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 0.31, pass: true }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("watching");
+  });
+
+  it("watching → fading when score drops ≥20% from peak (within 60d)", () => {
+    run(t0, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + 2 * day, [{ t: "AAPL", s: 0.7, pass: true }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("fading");
+  });
+
+  it("fading → rejected after 3 consecutive failing runs", () => {
+    run(t0, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + 2 * day, [{ t: "AAPL", s: 0.7, pass: true }]);
+    run(t0 + 3 * day, [{ t: "AAPL", s: 0.4, pass: false }]);
+    run(t0 + 4 * day, [{ t: "AAPL", s: 0.3, pass: false }]);
+    run(t0 + 5 * day, [{ t: "AAPL", s: 0.2, pass: false }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("rejected");
+  });
+
+  it("fading → watching on re-entry (passes again within 10% of peak)", () => {
+    run(t0, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 1.0, pass: true }]);
+    run(t0 + 2 * day, [{ t: "AAPL", s: 0.7, pass: true }]);
+    run(t0 + 3 * day, [{ t: "AAPL", s: 0.95, pass: true }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("watching");
+  });
+
+  it("* → stale after 90 days without score", () => {
+    run(t0, [{ t: "AAPL", s: 0.3, pass: true }]);
+    run(t0 + 91 * day, [{ t: "MSFT", s: 0.5, pass: true }]);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("stale");
+  });
+
+  it("manual tag records transition and updates status", () => {
+    run(t0, [{ t: "AAPL", s: 0.3, pass: true }]);
+    tagManually(db, "AAPL", "rejected", "manual:test:not fit", t0 + day);
+    expect(getWatchlistEntry(db, "AAPL")?.status).toBe("rejected");
+    const traj = getTrajectory(db, "AAPL");
+    expect(traj.transitions.at(-1)?.reason).toBe("manual:test:not fit");
+  });
+
+  it("getTrajectory returns scores and transitions in ascending time order", () => {
+    run(t0, [{ t: "AAPL", s: 0.3, pass: true }]);
+    run(t0 + day, [{ t: "AAPL", s: 0.4, pass: true }]);
+    const traj = getTrajectory(db, "AAPL");
+    expect(traj.scores).toHaveLength(2);
+    expect(traj.scores[0].scored_at).toBeLessThan(traj.scores[1].scored_at);
+    expect(traj.transitions.length).toBeGreaterThanOrEqual(1);
   });
 });
