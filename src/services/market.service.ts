@@ -437,11 +437,17 @@ export async function getSp500Constituents(apiKey: string): Promise<string[]> {
   const url = `${FMP_BASE}/sp500_constituent?apikey=${apiKey}`;
   const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!resp.ok) {
+    console.warn(
+      `[market] FMP /sp500_constituent returned ${resp.status}; using 50-ticker fallback list`,
+    );
     const { SP500_FALLBACK } = await import("../constants/sp500.js");
     return [...SP500_FALLBACK];
   }
   const body = (await resp.json()) as Array<{ symbol: string }>;
   if (!Array.isArray(body) || body.length === 0) {
+    console.warn(
+      "[market] FMP /sp500_constituent returned empty/invalid body; using fallback list",
+    );
     const { SP500_FALLBACK } = await import("../constants/sp500.js");
     return [...SP500_FALLBACK];
   }

@@ -3,9 +3,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import type Database from "better-sqlite3";
-import { readFile } from "node:fs/promises";
-import { readdirSync } from "node:fs";
-import yaml from "js-yaml";
 import {
   openWatchlistDb,
   queryWatchlist,
@@ -19,13 +16,12 @@ import {
 } from "../services/market.service.js";
 import { runScreen } from "../services/screening.service.js";
 import {
-  fundConfigSchema,
   screenNameSchema,
   watchlistStatusSchema,
   type FundConfig,
 } from "../types.js";
-import { FUNDS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
+import { loadAllFundConfigs } from "../services/fund.service.js";
 
 const watchlistQueryArgs = z.object({
   fund: z.string().optional(),
@@ -92,29 +88,6 @@ export async function handleWatchlistTag(
   const status = watchlistStatusSchema.parse(args.status);
   tagManually(wdb, args.ticker, status, `manual:mcp:${args.reason}`, Date.now());
   return { ok: true };
-}
-
-async function loadAllFundConfigs(): Promise<FundConfig[]> {
-  try {
-    const dirs = readdirSync(FUNDS_DIR, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
-    const out: FundConfig[] = [];
-    for (const name of dirs) {
-      try {
-        const raw = await readFile(
-          `${FUNDS_DIR}/${name}/fund_config.yaml`,
-          "utf-8",
-        );
-        out.push(fundConfigSchema.parse(yaml.load(raw)));
-      } catch {
-        // skip malformed
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  }
 }
 
 async function main() {
