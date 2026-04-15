@@ -20,7 +20,7 @@ function makeConfig(
     capital: { initial: 10000, currency: "USD" },
     objective: { type: "growth" },
     risk: { profile: "moderate", max_drawdown_pct: 15, max_position_pct: 25, max_leverage: 1, stop_loss_pct: 8, max_daily_loss_pct: 5, correlation_limit: 0.8, custom_rules: [] },
-    universe: { allowed: [], forbidden: [] },
+    universe: { preset: "sp500" },
     schedule: {
       timezone: "UTC",
       trading_days: ["MON", "TUE", "WED", "THU", "FRI"],

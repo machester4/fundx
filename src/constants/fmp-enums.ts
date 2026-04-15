@@ -15,8 +15,6 @@ export const FMP_EXCHANGES_ALL = [
   ...FMP_EXCHANGES_PREMIUM_EXTRA,
 ] as const;
 
-export type FmpExchange = (typeof FMP_EXCHANGES_ALL)[number];
-
 export const FMP_SECTORS = [
   "Basic Materials",
   "Communication Services",
@@ -31,7 +29,4 @@ export const FMP_SECTORS = [
   "Utilities",
 ] as const;
 
-export type FmpSector = (typeof FMP_SECTORS)[number];
-
 export const UNIVERSE_PRESETS = ["sp500", "nasdaq100", "dow30"] as const;
-export type UniversePreset = (typeof UNIVERSE_PRESETS)[number];

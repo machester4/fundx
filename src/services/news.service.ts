@@ -284,10 +284,9 @@ async function gatherKnownTickers(): Promise<string[]> {
     try {
       const config = await loadFundConfig(name);
       if (config.fund.status !== "active") continue;
-      // Tickers from universe
-      for (const entry of config.universe.allowed) {
-        if (entry.tickers) entry.tickers.forEach((t) => tickers.add(t));
-      }
+      // Tickers from universe (include_tickers only — full resolved universe not yet available)
+      // TODO(per-fund-universe): use resolved universe once resolver is integrated
+      for (const t of config.universe.include_tickers) tickers.add(t);
       // Tickers from portfolio
       const portfolio = await readPortfolio(name).catch(() => null);
       if (portfolio) {
@@ -519,10 +518,9 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
     try {
       const config = await loadFundConfig(name);
       if (config.fund.status !== "active") continue;
-      const tickers: string[] = [];
-      for (const entry of config.universe.allowed) {
-        if (entry.tickers) tickers.push(...entry.tickers);
-      }
+      // include_tickers only — full resolved universe not yet available
+      // TODO(per-fund-universe): use resolved universe once resolver is integrated
+      const tickers: string[] = [...config.universe.include_tickers];
       const portfolio = await readPortfolio(name).catch(() => null);
       if (portfolio) portfolio.positions.forEach((p) => tickers.push(p.symbol));
       fundTickers.set(name, [...new Set(tickers)]);
