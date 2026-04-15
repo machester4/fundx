@@ -75,6 +75,8 @@ function logTrade(trade: {
   total_value: number;
   reason: string;
   sessionType: string;
+  outOfUniverse?: boolean;
+  outOfUniverseReason?: string | null;
 }): void {
   const db = new Database(getJournalPath());
   db.pragma("journal_mode = WAL");
@@ -98,16 +100,23 @@ function logTrade(trade: {
       pnl REAL,
       pnl_pct REAL,
       lessons_learned TEXT,
-      market_context TEXT
+      market_context TEXT,
+      out_of_universe INTEGER NOT NULL DEFAULT 0,
+      out_of_universe_reason TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_trades_fund ON trades(fund);
     CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
     CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
   `);
+  // Idempotent column additions for databases created before these columns existed.
+  // SQLite ALTER TABLE ADD COLUMN throws if the column already exists, so we catch
+  // and ignore the duplicate-column error to make upgrades safe.
+  try { db.exec(`ALTER TABLE trades ADD COLUMN out_of_universe INTEGER NOT NULL DEFAULT 0`); } catch { /* already exists */ }
+  try { db.exec(`ALTER TABLE trades ADD COLUMN out_of_universe_reason TEXT`); } catch { /* already exists */ }
   const fundName = FUND_DIR.split("/").pop() ?? "unknown";
   db.prepare(`
-    INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, total_value, order_type, session_type, reasoning)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, total_value, order_type, session_type, reasoning, out_of_universe, out_of_universe_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     new Date().toISOString(),
     fundName,
@@ -119,6 +128,8 @@ function logTrade(trade: {
     "market",
     trade.sessionType,
     trade.reason,
+    trade.outOfUniverse ? 1 : 0,
+    trade.outOfUniverseReason ?? null,
   );
   db.close();
 }
@@ -248,6 +259,79 @@ export async function handleListUniverse(
   };
 }
 
+// ── Buy-gate handler (pure, testable) ──────────────────────────
+export interface BuyGateInput {
+  symbol: string;
+  out_of_universe_reason?: string;
+}
+export interface BuyGateDeps {
+  resolve: () => Promise<UniverseResolution>;
+  checkSector: (ticker: string) => Promise<{ excluded: boolean; sector?: string }>;
+}
+export type BuyGateResult =
+  | { ok: true; out_of_universe: boolean; out_of_universe_reason: string | null }
+  | { ok: false; code: "UNIVERSE_EXCLUDED" | "UNIVERSE_SOFT_GATE" | "UNIVERSE_REASON_TOO_SHORT"; message: string; exclude_reason?: "ticker" | "sector" };
+
+const MIN_OOU_REASON_LENGTH = 20;
+
+export async function handleBuyGate(
+  input: BuyGateInput,
+  deps: BuyGateDeps,
+): Promise<BuyGateResult> {
+  const t = input.symbol.toUpperCase();
+  const resolution = await deps.resolve();
+  const status = isInUniverse(resolution, t);
+
+  // Hard block by ticker config (exclude_tickers takes precedence)
+  if (status.exclude_hard_block) {
+    return {
+      ok: false,
+      code: "UNIVERSE_EXCLUDED",
+      message: `${t} is in this fund's exclude_tickers list.`,
+      exclude_reason: "ticker",
+    };
+  }
+
+  // Explicit include_tickers bypasses sector check (matches check_universe precedence)
+  if (status.include_override) {
+    return { ok: true, out_of_universe: false, out_of_universe_reason: null };
+  }
+
+  // Preset mode: check sector exclusion via profile
+  const sectorCheck = await deps.checkSector(t);
+  if (sectorCheck.excluded) {
+    return {
+      ok: false,
+      code: "UNIVERSE_EXCLUDED",
+      message: `${t} is in sector '${sectorCheck.sector}' which is excluded by this fund.`,
+      exclude_reason: "sector",
+    };
+  }
+
+  if (status.in_universe) {
+    return { ok: true, out_of_universe: false, out_of_universe_reason: null };
+  }
+
+  // Out-of-universe: require justification
+  const raw = input.out_of_universe_reason ?? "";
+  if (!raw) {
+    return {
+      ok: false,
+      code: "UNIVERSE_SOFT_GATE",
+      message: `${t} is outside this fund's universe. Pass out_of_universe_reason (>=${MIN_OOU_REASON_LENGTH} chars) describing a time-sensitive thesis to proceed.`,
+    };
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length < MIN_OOU_REASON_LENGTH) {
+    return {
+      ok: false,
+      code: "UNIVERSE_REASON_TOO_SHORT",
+      message: `out_of_universe_reason must be at least ${MIN_OOU_REASON_LENGTH} characters (got ${trimmed.length}).`,
+    };
+  }
+  return { ok: true, out_of_universe: true, out_of_universe_reason: trimmed };
+}
+
 async function fetchFmpPrice(symbol: string): Promise<number> {
   if (!FMP_API_KEY) throw new Error("FMP_API_KEY not configured");
   const resp = await fetch(`${FMP_BASE}/quote/${encodeURIComponent(symbol)}?apikey=${FMP_API_KEY}`, {
@@ -347,15 +431,39 @@ server.tool(
 
 server.tool(
   "place_order",
-  "Place a paper buy or sell order. Fetches current market price from FMP and executes immediately. Returns the updated position and trade details.",
+  "Place a paper buy or sell order. Fetches current market price from FMP and executes immediately. For buys, the ticker is checked against this fund's universe (see check_universe). Hard-excluded tickers/sectors cannot be traded. Out-of-universe tickers require out_of_universe_reason (>=20 chars) describing a material, time-sensitive thesis. Sells are always allowed. Returns the updated position and trade details.",
   {
     symbol: z.string().describe("Ticker symbol"),
     qty: z.number().positive().describe("Number of shares"),
     side: z.enum(["buy", "sell"]).describe("Order side"),
     stop_loss: z.number().positive().optional().describe("Stop-loss price (set on buy, optional)"),
     entry_reason: z.string().optional().describe("Thesis or reason for the trade"),
+    out_of_universe_reason: z.string().optional().describe("Required when buying a ticker outside the fund universe (>=20 chars)"),
   },
-  async ({ symbol, qty, side, stop_loss, entry_reason }) => {
+  async ({ symbol, qty, side, stop_loss, entry_reason, out_of_universe_reason }) => {
+    // Universe gate: buys only — sells are always allowed
+    let outOfUniverse = false;
+    let outOfUniverseReason: string | null = null;
+    if (side === "buy") {
+      if (!FMP_API_KEY) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not configured for universe check" }) }] };
+      }
+      const cfg = await loadFundConfigForMcp();
+      const fundName = fundNameFromEnv();
+      const apiKey = FMP_API_KEY;
+      const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+      const checkSector = async (t: string) => {
+        const res = await resolve();
+        return checkSectorExclusion(res, t, apiKey);
+      };
+      const gate = await handleBuyGate({ symbol, out_of_universe_reason }, { resolve, checkSector });
+      if (!gate.ok) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: gate.code, message: gate.message }) }] };
+      }
+      outOfUniverse = gate.out_of_universe;
+      outOfUniverseReason = gate.out_of_universe_reason;
+    }
+
     const price = await fetchFmpPrice(symbol.toUpperCase());
     const portfolio = await readPortfolio();
 
@@ -378,6 +486,8 @@ server.tool(
       total_value: result.trade.total_value,
       reason: result.trade.reason,
       sessionType: "agent",
+      outOfUniverse,
+      outOfUniverseReason,
     });
 
     // ── Notify via Telegram (best-effort) ──────────────────────
