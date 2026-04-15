@@ -1,13 +1,14 @@
 import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
 import { queryArticles } from "./news.service.js";
-import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData, DailyBar } from "../types.js";
+import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData, DailyBar, FmpScreenerFilters } from "../types.js";
 
 const yf = new YahooFinance();
 
 // ── Constants ────────────────────────────────────────────────
 
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
+const FMP_STABLE_BASE = "https://financialmodelingprep.com/stable";
 
 const FMP_INDICES: Record<string, string> = {
   "^GSPC": "S&P 500",
@@ -452,4 +453,185 @@ export async function getSp500Constituents(apiKey: string): Promise<string[]> {
     return [...SP500_FALLBACK];
   }
   return body.map((r) => r.symbol);
+}
+
+// ── Universe endpoints ───────────────────────────────────────
+
+/**
+ * Fetch the current Nasdaq 100 constituent list from FMP.
+ * Returns [] on error — caller decides fallback behavior.
+ */
+export async function getNasdaq100Constituents(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/nasdaq_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) {
+    console.warn(`[market] FMP /nasdaq_constituent returned ${resp.status}`);
+    return [];
+  }
+  const body = (await resp.json()) as Array<{ symbol: string }>;
+  if (!Array.isArray(body)) return [];
+  return body.map((r) => r.symbol);
+}
+
+/**
+ * Fetch the current Dow 30 constituent list from FMP.
+ * Returns [] on error — caller decides fallback behavior.
+ */
+export async function getDow30Constituents(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/dowjones_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) {
+    console.warn(`[market] FMP /dowjones_constituent returned ${resp.status}`);
+    return [];
+  }
+  const body = (await resp.json()) as Array<{ symbol: string }>;
+  if (!Array.isArray(body)) return [];
+  return body.map((r) => r.symbol);
+}
+
+// Translate snake_case filter keys to FMP camelCase query params
+const FMP_SCREENER_PARAM_MAP: Record<string, string> = {
+  market_cap_min: "marketCapMoreThan",
+  market_cap_max: "marketCapLowerThan",
+  price_min: "priceMoreThan",
+  price_max: "priceLowerThan",
+  beta_min: "betaMoreThan",
+  beta_max: "betaLowerThan",
+  dividend_min: "dividendMoreThan",
+  dividend_max: "dividendLowerThan",
+  volume_min: "volumeMoreThan",
+  volume_max: "volumeLowerThan",
+  industry: "industry",
+  country: "country",
+  is_etf: "isEtf",
+  is_fund: "isFund",
+  is_actively_trading: "isActivelyTrading",
+  include_all_share_classes: "includeAllShareClasses",
+  limit: "limit",
+};
+
+function buildScreenerQuery(filters: FmpScreenerFilters): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) {
+    if (v === undefined || v === null) continue;
+    // Array keys: sector[] and exchange[] — FMP accepts repeated params
+    if (Array.isArray(v)) {
+      const fmpKey = k === "sector" ? "sector" : k === "exchange" ? "exchange" : k;
+      for (const item of v) params.append(fmpKey, String(item));
+      continue;
+    }
+    const fmpKey = FMP_SCREENER_PARAM_MAP[k];
+    if (!fmpKey) continue;
+    params.append(fmpKey, String(v));
+  }
+  // URLSearchParams encodes spaces as "+", but HTTP convention for path params
+  // is "%20". Replace so URL assertions in tests and real FMP requests are consistent.
+  return params.toString().replace(/\+/g, "%20");
+}
+
+export interface ScreenerResult {
+  symbol: string;
+  companyName?: string;
+  marketCap?: number;
+  sector?: string;
+  industry?: string;
+  exchange?: string;
+  price?: number;
+  beta?: number;
+  volume?: number;
+  country?: string;
+  isEtf?: boolean;
+  isFund?: boolean;
+  isActivelyTrading?: boolean;
+}
+
+/**
+ * Call FMP /stable/company-screener with the given filters.
+ * Returns [] on error — caller decides fallback behavior.
+ */
+export async function getScreenerResults(
+  filters: FmpScreenerFilters,
+  apiKey: string,
+): Promise<ScreenerResult[]> {
+  const query = buildScreenerQuery(filters);
+  const url = `${FMP_STABLE_BASE}/company-screener?${query}&apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!resp.ok) {
+    console.warn(`[market] FMP /company-screener returned ${resp.status}`);
+    return [];
+  }
+  const body = (await resp.json()) as ScreenerResult[];
+  if (!Array.isArray(body)) return [];
+  return body;
+}
+
+// ── Company profile (with LRU cache) ─────────────────────────
+// In-memory LRU, size 500, TTL 24h. Shared across the process.
+// Used by universe resolver, check_universe tool, and broker gate.
+
+export interface CompanyProfile {
+  symbol: string;
+  companyName?: string;
+  sector?: string;
+  industry?: string;
+  exchange?: string;
+  country?: string;
+  marketCap?: number;
+}
+
+interface CacheEntry { at: number; profile: CompanyProfile | null }
+const PROFILE_CACHE_SIZE = 500;
+const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const profileCache = new Map<string, CacheEntry>();
+
+function getCached(key: string, now: number): CompanyProfile | null | undefined {
+  const hit = profileCache.get(key);
+  if (!hit) return undefined;
+  if (now - hit.at > PROFILE_CACHE_TTL_MS) {
+    profileCache.delete(key);
+    return undefined;
+  }
+  // LRU: move to end
+  profileCache.delete(key);
+  profileCache.set(key, hit);
+  return hit.profile;
+}
+
+function setCached(key: string, profile: CompanyProfile | null, now: number): void {
+  profileCache.set(key, { at: now, profile });
+  if (profileCache.size > PROFILE_CACHE_SIZE) {
+    const oldest = profileCache.keys().next().value;
+    if (oldest) profileCache.delete(oldest);
+  }
+}
+
+/** For tests only. */
+export function _resetProfileCacheForTests(): void {
+  profileCache.clear();
+}
+
+/**
+ * Fetch a company's profile (sector, industry, exchange) from FMP.
+ * Cached in-memory for 24h. Returns null when the ticker is unknown.
+ */
+export async function getCompanyProfile(
+  ticker: string,
+  apiKey: string,
+  opts?: { now?: number },
+): Promise<CompanyProfile | null> {
+  const key = ticker.toUpperCase();
+  const now = opts?.now ?? Date.now();
+  const cached = getCached(key, now);
+  if (cached !== undefined) return cached;
+
+  const url = `${FMP_BASE}/profile/${key}?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) {
+    console.warn(`[market] FMP /profile/${key} returned ${resp.status}`);
+    return null;
+  }
+  const body = (await resp.json()) as CompanyProfile[];
+  const profile = Array.isArray(body) && body.length > 0 ? body[0] : null;
+  setCached(key, profile, now);
+  return profile;
 }
