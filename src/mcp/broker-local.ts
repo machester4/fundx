@@ -1,9 +1,10 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import Database from "better-sqlite3";
+import yaml from "js-yaml";
 import { executeBuy, executeSell } from "../paper-trading.js";
 import {
   isInQuietHoursEnv,
@@ -12,6 +13,14 @@ import {
   formatStopLossAlert,
   sendTelegram,
 } from "./broker-local-notify.js";
+import { fundConfigSchema } from "../types.js";
+import type { UniverseResolution, FundConfig } from "../types.js";
+import {
+  resolveUniverse,
+  checkSectorExclusion,
+  isInUniverse,
+} from "../services/universe.service.js";
+import { getCompanyProfile } from "../services/market.service.js";
 
 // ── State helpers ────────────────────────────────────────────
 
@@ -19,8 +28,10 @@ const FUND_DIR = process.env.FUND_DIR!;
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
 
-const portfolioPath = join(FUND_DIR, "state", "portfolio.json");
-const journalPath = join(FUND_DIR, "state", "trade_journal.sqlite");
+// Lazy path getters — evaluated at call time so tests importing pure handlers
+// don't trigger errors when FUND_DIR is undefined.
+function getPortfolioPath(): string { return join(FUND_DIR, "state", "portfolio.json"); }
+function getJournalPath(): string { return join(FUND_DIR, "state", "trade_journal.sqlite"); }
 
 interface Position {
   symbol: string;
@@ -44,11 +55,12 @@ interface Portfolio {
 }
 
 async function readPortfolio(): Promise<Portfolio> {
-  const raw = await readFile(portfolioPath, "utf-8");
+  const raw = await readFile(getPortfolioPath(), "utf-8");
   return JSON.parse(raw) as Portfolio;
 }
 
 async function writePortfolioAtomic(portfolio: Portfolio): Promise<void> {
+  const portfolioPath = getPortfolioPath();
   await mkdir(dirname(portfolioPath), { recursive: true });
   const tmp = portfolioPath + ".tmp";
   await writeFile(tmp, JSON.stringify(portfolio, null, 2), "utf-8");
@@ -64,7 +76,7 @@ function logTrade(trade: {
   reason: string;
   sessionType: string;
 }): void {
-  const db = new Database(journalPath);
+  const db = new Database(getJournalPath());
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
   db.exec(`
@@ -109,6 +121,131 @@ function logTrade(trade: {
     trade.reason,
   );
   db.close();
+}
+
+// ── Fund config (cached) ─────────────────────────────────────
+let cachedFundConfig: FundConfig | null = null;
+
+async function loadFundConfigForMcp(): Promise<FundConfig> {
+  if (cachedFundConfig) return cachedFundConfig;
+  const yamlPath = join(FUND_DIR, "fund_config.yaml");
+  const raw = await readFile(yamlPath, "utf-8");
+  const parsed = yaml.load(raw);
+  cachedFundConfig = fundConfigSchema.parse(parsed);
+  return cachedFundConfig;
+}
+
+function fundNameFromEnv(): string {
+  return basename(FUND_DIR);
+}
+
+// ── Universe tool handlers (pure, testable) ───────────────────
+export interface CheckUniverseInput { ticker: string }
+export interface CheckUniverseDeps {
+  resolve: () => Promise<UniverseResolution>;
+  checkSector: (ticker: string) => Promise<{ excluded: boolean; sector?: string }>;
+}
+export interface CheckUniverseOutput {
+  in_universe: boolean;
+  base_match: boolean;
+  include_override: boolean;
+  exclude_hard_block: boolean;
+  exclude_reason?: "ticker" | "sector";
+  requires_justification: boolean;
+  resolved_at: number;
+  resolved_from: string;
+}
+
+export async function handleCheckUniverse(
+  input: CheckUniverseInput,
+  deps: CheckUniverseDeps,
+): Promise<CheckUniverseOutput> {
+  const resolution = await deps.resolve();
+  const status = isInUniverse(resolution, input.ticker);
+  // Hard block: excluded by ticker config
+  if (status.exclude_hard_block) {
+    return {
+      in_universe: false,
+      base_match: status.base_match,
+      include_override: false,
+      exclude_hard_block: true,
+      exclude_reason: status.exclude_reason,
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  // Explicit include_tickers takes precedence over exclude_sectors
+  if (status.include_override) {
+    return {
+      in_universe: true,
+      base_match: status.base_match,
+      include_override: true,
+      exclude_hard_block: false,
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  // Preset mode: check sector exclusion via profile
+  const sectorCheck = await deps.checkSector(input.ticker);
+  if (sectorCheck.excluded) {
+    return {
+      in_universe: false,
+      base_match: status.base_match,
+      include_override: false,
+      exclude_hard_block: true,
+      exclude_reason: "sector",
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  return {
+    in_universe: status.in_universe,
+    base_match: status.base_match,
+    include_override: false,
+    exclude_hard_block: false,
+    requires_justification: !status.in_universe,
+    resolved_at: resolution.resolved_at,
+    resolved_from: resolution.resolved_from,
+  };
+}
+
+export interface ListUniverseInput { sector?: string; limit?: number }
+export interface ListUniverseDeps {
+  resolve: () => Promise<UniverseResolution>;
+  getProfile: (ticker: string) => Promise<{ sector?: string } | null>;
+}
+export interface ListUniverseOutput {
+  tickers: string[];
+  total: number;
+  resolved_at: number;
+  resolved_from: string;
+}
+
+export async function handleListUniverse(
+  input: ListUniverseInput,
+  deps: ListUniverseDeps,
+): Promise<ListUniverseOutput> {
+  const resolution = await deps.resolve();
+  let tickers = resolution.final_tickers;
+  if (input.sector) {
+    const matching: string[] = [];
+    for (const t of tickers) {
+      const p = await deps.getProfile(t);
+      if (p?.sector === input.sector) matching.push(t);
+    }
+    tickers = matching;
+  }
+  const total = tickers.length;
+  if (input.limit && input.limit > 0) tickers = tickers.slice(0, input.limit);
+  return {
+    tickers,
+    total,
+    resolved_at: resolution.resolved_at,
+    resolved_from: resolution.resolved_from,
+  };
 }
 
 async function fetchFmpPrice(symbol: string): Promise<number> {
@@ -323,6 +460,48 @@ server.tool(
         text: JSON.stringify({ symbol: symbol.toUpperCase(), price, timestamp: new Date().toISOString() }, null, 2),
       }],
     };
+  },
+);
+
+server.tool(
+  "check_universe",
+  "Check whether a ticker is in this fund's universe, and why. Returns base_match, include_override, exclude_hard_block, requires_justification.",
+  { ticker: z.string().describe("The ticker symbol to check (e.g. 'AAPL')") },
+  async (args) => {
+    if (!FMP_API_KEY) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not set" }) }] };
+    }
+    const cfg = await loadFundConfigForMcp();
+    const fundName = fundNameFromEnv();
+    const apiKey = FMP_API_KEY;
+    const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+    const checkSector = async (t: string) => {
+      const res = await resolve();
+      return checkSectorExclusion(res, t, apiKey);
+    };
+    const r = await handleCheckUniverse({ ticker: args.ticker }, { resolve, checkSector });
+    return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+  },
+);
+
+server.tool(
+  "list_universe",
+  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups).",
+  {
+    sector: z.string().optional().describe("Filter to tickers in this sector (e.g. 'Technology')"),
+    limit: z.number().int().positive().optional().describe("Max tickers to return"),
+  },
+  async (args) => {
+    if (!FMP_API_KEY) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not set" }) }] };
+    }
+    const cfg = await loadFundConfigForMcp();
+    const fundName = fundNameFromEnv();
+    const apiKey = FMP_API_KEY;
+    const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+    const getProfile = (t: string) => getCompanyProfile(t, apiKey);
+    const r = await handleListUniverse(args, { resolve, getProfile });
+    return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   },
 );
 
