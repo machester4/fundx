@@ -47,9 +47,15 @@ export default function FundUpgrade({ options: opts }: Props) {
   return (
     <Box flexDirection="column" gap={1}>
       {data.map((r) => (
-        <SuccessMessage key={r.fundName}>
-          {r.fundName}: CLAUDE.md regenerated, {r.skillCount} skills written
-        </SuccessMessage>
+        <Box key={r.fundName} flexDirection="column">
+          <SuccessMessage>
+            {r.fundName}: CLAUDE.md regenerated, {r.skillCount} skills written
+            {r.universeMigrated ? " (universe migrated from legacy schema)" : ""}
+          </SuccessMessage>
+          {r.warnings.map((w, i) => (
+            <Text key={i} color="yellow">  ⚠ {w}</Text>
+          ))}
+        </Box>
       ))}
       <Text dimColor>
         {data.length === 1
