@@ -48,7 +48,7 @@ export function NewsSidebarPanel({ articles, status, reason, newestAgeMinutes, w
 
   if (status === "empty" || articles.length === 0) {
     return (
-      <SidebarPanel title="NEWS" color="magenta" width={width}>
+      <SidebarPanel title="NEWS" color="white" width={width}>
         <Text dimColor>Cache empty</Text>
       </SidebarPanel>
     );
@@ -57,7 +57,7 @@ export function NewsSidebarPanel({ articles, status, reason, newestAgeMinutes, w
   const innerWidth = width - 4; // account for border + padding
 
   return (
-    <SidebarPanel title="NEWS" color="magenta" value={value} width={width}>
+    <SidebarPanel title="NEWS" color="white" value={value} width={width}>
       {articles.map((a, i) => {
         const sourceTag = `[${a.source.slice(0, 10)}] `;
         const availableForTitle = Math.max(10, innerWidth - sourceTag.length - 2);
