@@ -56,7 +56,7 @@ vi.mock("../src/config.js", () => ({
   }),
 }));
 
-import { loadFundConfig, saveFundConfig, listFundNames } from "../src/services/fund.service.js";
+import { loadFundConfig, saveFundConfig, listFundNames, resolveWizardUniverseChoice, normalizeWizardUniverse } from "../src/services/fund.service.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -171,5 +171,59 @@ describe("listFundNames", () => {
 
     const names = await listFundNames();
     expect(names).toEqual(["my-fund"]);
+  });
+});
+
+describe("resolveWizardUniverseChoice", () => {
+  it("sp500 → preset", () => {
+    expect(resolveWizardUniverseChoice("sp500")).toEqual({
+      preset: "sp500",
+      include_tickers: [],
+      exclude_tickers: [],
+      exclude_sectors: [],
+    });
+  });
+  it("nasdaq100 → preset", () => {
+    expect(resolveWizardUniverseChoice("nasdaq100").preset).toBe("nasdaq100");
+  });
+  it("dow30 → preset", () => {
+    expect(resolveWizardUniverseChoice("dow30").preset).toBe("dow30");
+  });
+  it("tmpl-large → filters with market_cap_min 10B", () => {
+    const u = resolveWizardUniverseChoice("tmpl-large");
+    expect(u.filters?.market_cap_min).toBe(10_000_000_000);
+    expect(u.filters?.exchange).toEqual(["NYSE", "NASDAQ"]);
+  });
+  it("tmpl-mid → filters with market_cap_max 10B and market_cap_min 2B", () => {
+    const u = resolveWizardUniverseChoice("tmpl-mid");
+    expect(u.filters?.market_cap_max).toBe(10_000_000_000);
+    expect(u.filters?.market_cap_min).toBe(2_000_000_000);
+  });
+  it("custom → filters with just is_actively_trading", () => {
+    const u = resolveWizardUniverseChoice("custom");
+    expect(u.filters?.is_actively_trading).toBe(true);
+  });
+  it("include_tickers passed through", () => {
+    const u = resolveWizardUniverseChoice("sp500", ["TSM", "ASML"]);
+    expect(u.include_tickers).toEqual(["TSM", "ASML"]);
+  });
+  it("unknown choice defaults to custom filters", () => {
+    const u = resolveWizardUniverseChoice("unknown-preset");
+    expect(u.filters?.is_actively_trading).toBe(true);
+  });
+});
+
+describe("normalizeWizardUniverse", () => {
+  it("parses comma-separated tickers, uppercases and trims", () => {
+    const u = normalizeWizardUniverse({ universeChoice: "sp500", tickers: "tsm, asml , " });
+    expect(u.include_tickers).toEqual(["TSM", "ASML"]);
+  });
+  it("handles empty tickers string", () => {
+    const u = normalizeWizardUniverse({ universeChoice: "sp500", tickers: "" });
+    expect(u.include_tickers).toEqual([]);
+  });
+  it("defaults to sp500 when universeChoice is undefined", () => {
+    const u = normalizeWizardUniverse({ tickers: "" });
+    expect(u.preset).toBe("sp500");
   });
 });

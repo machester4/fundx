@@ -8,7 +8,7 @@ import type { FundConfig } from "../../types.js";
 
 export const description = "Interactive fund creation wizard";
 
-type Step = "name" | "displayName" | "description" | "objective" | "capital" | "risk" | "tickers" | "creating" | "done";
+type Step = "name" | "displayName" | "description" | "objective" | "capital" | "risk" | "universeChoice" | "tickers" | "creating" | "done";
 
 interface CreationData {
   name: string;
@@ -17,6 +17,7 @@ interface CreationData {
   objectiveType: string;
   capital: number;
   riskProfile: string;
+  universeChoice: string;
   tickers: string;
 }
 
@@ -41,6 +42,7 @@ async function doCreateFund(updated: CreationData): Promise<void> {
     objective,
     riskProfile: updated.riskProfile,
     tickers: updated.tickers,
+    universeChoice: updated.universeChoice,
   });
 }
 
@@ -48,7 +50,7 @@ export default function FundCreate() {
   const [step, setStep] = useState<Step>("name");
   const [data, setData] = useState<CreationData>({
     name: "", displayName: "", description: "", objectiveType: "runway",
-    capital: 0, riskProfile: "moderate", tickers: "",
+    capital: 0, riskProfile: "moderate", universeChoice: "sp500", tickers: "",
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +70,7 @@ export default function FundCreate() {
 
   if (step === "name") {
     return (
-      <WizardStep step={1} totalSteps={7} title="Fund name (slug)">
+      <WizardStep step={1} totalSteps={8} title="Fund name (slug)">
         <TextInput placeholder="my-fund" onSubmit={(v) => { setData((d) => ({ ...d, name: v })); setStep("displayName"); }} />
       </WizardStep>
     );
@@ -76,7 +78,7 @@ export default function FundCreate() {
 
   if (step === "displayName") {
     return (
-      <WizardStep step={2} totalSteps={7} title="Display name">
+      <WizardStep step={2} totalSteps={8} title="Display name">
         <TextInput placeholder="My Fund" onSubmit={(v) => { setData((d) => ({ ...d, displayName: v })); setStep("description"); }} />
       </WizardStep>
     );
@@ -84,7 +86,7 @@ export default function FundCreate() {
 
   if (step === "description") {
     return (
-      <WizardStep step={3} totalSteps={7} title="Description">
+      <WizardStep step={3} totalSteps={8} title="Description">
         <TextInput placeholder="Short description..." onSubmit={(v) => { setData((d) => ({ ...d, description: v })); setStep("objective"); }} />
       </WizardStep>
     );
@@ -92,7 +94,7 @@ export default function FundCreate() {
 
   if (step === "objective") {
     return (
-      <WizardStep step={4} totalSteps={7} title="Goal type">
+      <WizardStep step={4} totalSteps={8} title="Goal type">
         <Select
           options={OBJECTIVE_CHOICES.map((c) => ({ label: c.name, value: c.value }))}
           onChange={(v) => { setData((d) => ({ ...d, objectiveType: v })); setStep("capital"); }}
@@ -103,7 +105,7 @@ export default function FundCreate() {
 
   if (step === "capital") {
     return (
-      <WizardStep step={5} totalSteps={7} title="Initial capital (USD)">
+      <WizardStep step={5} totalSteps={8} title="Initial capital (USD)">
         <TextInput placeholder="10000" onSubmit={(v) => { setData((d) => ({ ...d, capital: parseInt(v, 10) || 0 })); setStep("risk"); }} />
       </WizardStep>
     );
@@ -111,10 +113,28 @@ export default function FundCreate() {
 
   if (step === "risk") {
     return (
-      <WizardStep step={6} totalSteps={7} title="Risk tolerance">
+      <WizardStep step={6} totalSteps={8} title="Risk tolerance">
         <Select
           options={RISK_CHOICES.map((c) => ({ label: c.name, value: c.value }))}
-          onChange={(v) => { setData((d) => ({ ...d, riskProfile: v })); setStep("tickers"); }}
+          onChange={(v) => { setData((d) => ({ ...d, riskProfile: v })); setStep("universeChoice"); }}
+        />
+      </WizardStep>
+    );
+  }
+
+  if (step === "universeChoice") {
+    return (
+      <WizardStep step={7} totalSteps={8} title="Universe">
+        <Select
+          options={[
+            { label: "S&P 500 (preset)", value: "sp500" },
+            { label: "Nasdaq 100 (preset)", value: "nasdaq100" },
+            { label: "Dow 30 (preset)", value: "dow30" },
+            { label: "US Large Cap template ($10B+)", value: "tmpl-large" },
+            { label: "US Mid Cap template ($2B-$10B)", value: "tmpl-mid" },
+            { label: "Custom filters (edit fund_config.yaml after)", value: "custom" },
+          ]}
+          onChange={(v) => { setData((d) => ({ ...d, universeChoice: v })); setStep("tickers"); }}
         />
       </WizardStep>
     );
@@ -122,8 +142,8 @@ export default function FundCreate() {
 
   if (step === "tickers") {
     return (
-      <WizardStep step={7} totalSteps={7} title="Allowed tickers (comma separated, empty = any)">
-        <TextInput placeholder="SPY,QQQ,..." onSubmit={(v) => {
+      <WizardStep step={8} totalSteps={8} title="Always-include tickers (comma separated, empty = none)">
+        <TextInput placeholder="TSM,ASML" onSubmit={(v) => {
           const updated = { ...data, tickers: v };
           setData(updated);
           setStep("creating");
