@@ -27,7 +27,8 @@ import { isInQuietHoursEnv } from "../mcp/broker-local-notify.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
-import { getHistoricalDaily, getSp500Constituents } from "./market.service.js";
+import { getHistoricalDaily } from "./market.service.js";
+import { resolveUniverse } from "./universe.service.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -941,22 +942,41 @@ export async function startDaemon(): Promise<void> {
       const wdb = openWatchlistDb();
       const pcdb = openPriceCache();
       try {
-        const universe = await getSp500Constituents(apiKey);
         const fundConfigs = await loadAllFundConfigs();
-        const summary = await runScreen({
-          watchlistDb: wdb,
-          priceCacheDb: pcdb,
-          universe,
-          universeLabel: "sp500",
-          fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
-          fundConfigs,
-          now: Date.now(),
-          screenName: "momentum-12-1",
-        });
-        await log(
-          `[screening] run ${summary.run_id} ok: scored=${summary.tickers_scored} ` +
-            `passed=${summary.tickers_passed} ms=${summary.duration_ms}`,
-        );
+        const activeConfigs = fundConfigs.filter((c) => c.fund.status === "active");
+        if (activeConfigs.length === 0) {
+          await log("[screening] no active funds — skipping");
+          return;
+        }
+        for (const cfg of activeConfigs) {
+          try {
+            const resolution = await resolveUniverse(cfg.fund.name, cfg.universe, apiKey);
+            const universeLabel =
+              resolution.source.kind === "preset"
+                ? `${resolution.source.preset} (${resolution.resolved_from})`
+                : `filters (${resolution.resolved_from})`;
+            const summary = await runScreen({
+              watchlistDb: wdb,
+              priceCacheDb: pcdb,
+              universe: resolution.final_tickers,
+              universeLabel,
+              fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
+              fundConfigs: [cfg],
+              now: Date.now(),
+              screenName: "momentum-12-1",
+            });
+            await log(
+              `[screening] ${cfg.fund.name} run ${summary.run_id} ok: ` +
+                `universe=${universeLabel} scored=${summary.tickers_scored} ` +
+                `passed=${summary.tickers_passed} ms=${summary.duration_ms}`,
+            );
+          } catch (err) {
+            await log(
+              `[screening] ${cfg.fund.name} failed: ${err instanceof Error ? err.message : err}`,
+            );
+            trackError("_screening", `daily-run-${cfg.fund.name}`, err);
+          }
+        }
       } finally {
         wdb.close();
         pcdb.close();

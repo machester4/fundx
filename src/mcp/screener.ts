@@ -9,10 +9,8 @@ import {
   tagManually,
 } from "../services/watchlist.service.js";
 import { openPriceCache } from "../services/price-cache.service.js";
-import {
-  getHistoricalDaily,
-  getSp500Constituents,
-} from "../services/market.service.js";
+import { getHistoricalDaily } from "../services/market.service.js";
+import { resolveUniverse } from "../services/universe.service.js";
 import { runScreen } from "../services/screening.service.js";
 import {
   screenNameSchema,
@@ -33,25 +31,36 @@ const watchlistQueryArgs = z.object({
 export async function handleScreenRun(
   wdb: Database.Database,
   pcdb: Database.Database,
-  args: { screen?: string; universe?: string },
+  args: { screen?: string; fund?: string },
   deps: {
     fetchBars: (ticker: string) => Promise<Awaited<ReturnType<typeof getHistoricalDaily>>>;
-    universeTickers: () => Promise<string[]>;
+    resolveFundUniverse: (fundName: string) => Promise<import("../types.js").UniverseResolution>;
     loadFundConfigs: () => Promise<FundConfig[]>;
     now: () => number;
   },
 ): Promise<{ summary: Awaited<ReturnType<typeof runScreen>> }> {
   const screen = screenNameSchema.parse(args.screen ?? "momentum-12-1");
-  const universeLabel = args.universe ?? "sp500";
-  const universe = await deps.universeTickers();
   const fundConfigs = await deps.loadFundConfigs();
+  if (fundConfigs.length === 0) throw new Error("no funds configured");
+  const activeConfigs = fundConfigs.filter((c) => c.fund.status === "active");
+  if (activeConfigs.length === 0) throw new Error("no active funds configured");
+  const fundName = args.fund ?? activeConfigs[0].fund.name;
+  const target = activeConfigs.find((c) => c.fund.name === fundName);
+  if (!target) throw new Error(`fund not found or not active: ${fundName}`);
+
+  const resolution = await deps.resolveFundUniverse(fundName);
+  const universeLabel =
+    resolution.source.kind === "preset"
+      ? `${resolution.source.preset} (${resolution.resolved_from})`
+      : `filters (${resolution.resolved_from})`;
+
   const summary = await runScreen({
     watchlistDb: wdb,
     priceCacheDb: pcdb,
-    universe,
+    universe: resolution.final_tickers,
     universeLabel,
     fetchBars: deps.fetchBars,
-    fundConfigs,
+    fundConfigs: [target],
     now: deps.now(),
     screenName: screen,
   });
@@ -102,12 +111,17 @@ async function main() {
 
   server.tool(
     "screen_run",
-    "Run a screen across the workspace universe. Updates watchlist with new scores and transitions.",
-    { screen: z.string().optional(), universe: z.string().optional() },
+    "Run a screen for a specific fund using its configured universe. Updates watchlist with scores and transitions. Defaults to the first active fund if not specified.",
+    { screen: z.string().optional(), fund: z.string().optional() },
     async (args) => {
       const res = await handleScreenRun(wdb, pcdb, args, {
         fetchBars: (ticker) => getHistoricalDaily(ticker, 273, apiKey),
-        universeTickers: () => getSp500Constituents(apiKey),
+        resolveFundUniverse: async (fundName) => {
+          const configs = await loadAllFundConfigs();
+          const cfg = configs.find((c) => c.fund.name === fundName);
+          if (!cfg) throw new Error(`fund not found: ${fundName}`);
+          return resolveUniverse(fundName, cfg.universe, apiKey);
+        },
         loadFundConfigs: loadAllFundConfigs,
         now: () => Date.now(),
       });
