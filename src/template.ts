@@ -9,18 +9,41 @@ export async function generateFundClaudeMd(config: FundConfig): Promise<void> {
   await writeFile(paths.claudeMd, content, "utf-8");
 }
 
-function buildClaudeMd(c: FundConfig): string {
+function renderUniverseSection(c: FundConfig): string {
+  const u = c.universe;
+  const sourceLine = u.preset
+    ? `preset **${u.preset}**`
+    : `custom filters (see fund_config.yaml)`;
+  const lines: string[] = [
+    `## Your Universe`,
+    ``,
+    `You focus on tickers defined by ${sourceLine}.`,
+  ];
+  if (u.include_tickers.length > 0) {
+    lines.push(`Always-included: ${u.include_tickers.join(", ")}.`);
+  }
+  if (u.exclude_tickers.length > 0) {
+    lines.push(`Excluded tickers (hard block): ${u.exclude_tickers.join(", ")}.`);
+  }
+  if (u.exclude_sectors.length > 0) {
+    lines.push(`Excluded sectors (hard block): ${u.exclude_sectors.join(", ")}.`);
+  }
+  lines.push(
+    ``,
+    `Before proposing a trade, validate the ticker with the \`check_universe\` tool on the broker-local MCP.`,
+    `To explore what's available, use \`list_universe\` (optionally filtered by sector).`,
+    ``,
+    `Trading a ticker outside your universe is allowed but requires passing`,
+    `\`out_of_universe_reason\` (>=20 chars) to \`place_order\` — a material,`,
+    `time-sensitive thesis. Excluded tickers and sectors are hard blocks and`,
+    `cannot be overridden.`,
+    ``,
+  );
+  return lines.join("\n");
+}
+
+export function buildClaudeMd(c: FundConfig): string {
   const objectiveDesc = describeObjective(c);
-  // TODO(per-fund-universe): Task 7 will replace this with the full "Your Universe" section
-  const includeDesc = c.universe.include_tickers.length
-    ? c.universe.include_tickers.join(", ")
-    : null;
-  const excludeTickersDesc = c.universe.exclude_tickers.length
-    ? c.universe.exclude_tickers.join(", ")
-    : null;
-  const excludeSectorsDesc = c.universe.exclude_sectors.length
-    ? c.universe.exclude_sectors.join(", ")
-    : null;
 
   const customRulesBlock = c.risk.custom_rules.length
     ? `\n${c.risk.custom_rules.map((r) => `- ${r}`).join("\n")}`
@@ -126,14 +149,13 @@ Rule: Use at least TWO sizing methods and take the SMALLER.
 
 </frameworks>
 
+${renderUniverseSection(c)}
 ## Risk Constraints
 
 <hard_constraints>
 - Max drawdown: ${c.risk.max_drawdown_pct}%
 - Max position size: ${c.risk.max_position_pct}%
-- Stop loss: ${c.risk.stop_loss_pct}% per position
-${includeDesc ? `- Allowed tickers (always included): ${includeDesc}\n` : ""}- Excluded tickers (hard block): ${excludeTickersDesc ?? "None"}
-- Excluded sectors (hard block): ${excludeSectorsDesc ?? "None"}${customRulesBlock}
+- Stop loss: ${c.risk.stop_loss_pct}% per position${customRulesBlock}
 
 **Drawdown budget tiers:**
 - 0-50% consumed → normal operations

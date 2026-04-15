@@ -10,7 +10,7 @@ vi.mock("node:fs", () => ({
 }));
 
 import { writeFile } from "node:fs/promises";
-import { generateFundClaudeMd } from "../src/template.js";
+import { generateFundClaudeMd, buildClaudeMd } from "../src/template.js";
 import type { FundConfig } from "../src/types.js";
 import { fundConfigSchema } from "../src/types.js";
 
@@ -363,12 +363,15 @@ describe("generateFundClaudeMd", () => {
     expect(constraintsBlock).toContain("abort and log reason");
   });
 
-  it("includes include_tickers in hard_constraints", async () => {
+  it("includes include_tickers in Your Universe section (not in hard_constraints)", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
-    expect(content).toContain("Allowed tickers (always included): SPY, QQQ");
+    // Tickers now live in the "Your Universe" section
+    expect(content).toContain("Always-included: SPY, QQQ");
+    // They should NOT appear in the old Allowed tickers format inside hard_constraints
+    expect(content).not.toContain("Allowed tickers (always included):");
   });
 
   it("includes custom rules inside hard_constraints", async () => {
@@ -416,7 +419,7 @@ describe("generateFundClaudeMd", () => {
 
   // --- Section ordering ---
 
-  it("sections appear in correct order: Identity → Objective → Philosophy → Frameworks → Constraints → Protocol → State Files → Mental Models", async () => {
+  it("sections appear in correct order: Identity → Objective → Philosophy → Frameworks → Your Universe → Constraints → Protocol → State Files → Mental Models", async () => {
     const config = makeConfig({
       claude: { model: "sonnet", personality: "Sharp.", decision_framework: "Value-driven analysis." },
     });
@@ -428,6 +431,7 @@ describe("generateFundClaudeMd", () => {
     const objectiveIdx = content.indexOf("## Objective");
     const philosophyIdx = content.indexOf("## Investment Philosophy");
     const frameworksIdx = content.indexOf("## Investment Frameworks");
+    const universeIdx = content.indexOf("## Your Universe");
     const constraintsIdx = content.indexOf("## Risk Constraints");
     const protocolIdx = content.indexOf("## Session Protocol");
     const stateIdx = content.indexOf("## State Files");
@@ -437,6 +441,7 @@ describe("generateFundClaudeMd", () => {
     expect(objectiveIdx).toBeGreaterThan(-1);
     expect(philosophyIdx).toBeGreaterThan(-1);
     expect(frameworksIdx).toBeGreaterThan(-1);
+    expect(universeIdx).toBeGreaterThan(-1);
     expect(constraintsIdx).toBeGreaterThan(-1);
     expect(protocolIdx).toBeGreaterThan(-1);
     expect(stateIdx).toBeGreaterThan(-1);
@@ -445,7 +450,8 @@ describe("generateFundClaudeMd", () => {
     expect(identityIdx).toBeLessThan(objectiveIdx);
     expect(objectiveIdx).toBeLessThan(philosophyIdx);
     expect(philosophyIdx).toBeLessThan(frameworksIdx);
-    expect(frameworksIdx).toBeLessThan(constraintsIdx);
+    expect(frameworksIdx).toBeLessThan(universeIdx);
+    expect(universeIdx).toBeLessThan(constraintsIdx);
     expect(constraintsIdx).toBeLessThan(protocolIdx);
     expect(protocolIdx).toBeLessThan(stateIdx);
     expect(stateIdx).toBeLessThan(mentalIdx);
@@ -459,6 +465,7 @@ describe("generateFundClaudeMd", () => {
 
     const objectiveIdx = content.indexOf("## Objective");
     const frameworksIdx = content.indexOf("## Investment Frameworks");
+    const universeIdx = content.indexOf("## Your Universe");
     const constraintsIdx = content.indexOf("## Risk Constraints");
     const protocolIdx = content.indexOf("## Session Protocol");
     const stateIdx = content.indexOf("## State Files");
@@ -468,9 +475,78 @@ describe("generateFundClaudeMd", () => {
     expect(content).not.toContain("## Investment Philosophy");
 
     expect(objectiveIdx).toBeLessThan(frameworksIdx);
-    expect(frameworksIdx).toBeLessThan(constraintsIdx);
+    expect(frameworksIdx).toBeLessThan(universeIdx);
+    expect(universeIdx).toBeLessThan(constraintsIdx);
     expect(constraintsIdx).toBeLessThan(protocolIdx);
     expect(protocolIdx).toBeLessThan(stateIdx);
     expect(stateIdx).toBeLessThan(mentalIdx);
+  });
+});
+
+// ── buildClaudeMd — Your Universe section ────────────────────────
+
+function makeFundConfig(overrides: Partial<FundConfig> = {}): FundConfig {
+  return fundConfigSchema.parse({
+    fund: { name: "test", display_name: "Test Fund", created: "2026-01-01" },
+    capital: { initial: 100_000 },
+    objective: { type: "growth", target_multiple: 2 },
+    risk: { profile: "moderate" },
+    universe: { preset: "sp500", include_tickers: [], exclude_tickers: [], exclude_sectors: [] },
+    schedule: { timezone: "UTC" },
+    broker: {},
+    claude: {},
+    ...overrides,
+  });
+}
+
+describe("buildClaudeMd — Your Universe section", () => {
+  it("renders preset universe section", () => {
+    const cfg = makeFundConfig({
+      universe: { preset: "nasdaq100", include_tickers: [], exclude_tickers: [], exclude_sectors: [] },
+    });
+    const md = buildClaudeMd(cfg);
+    expect(md).toContain("## Your Universe");
+    expect(md).toContain("preset **nasdaq100**");
+    expect(md).toContain("check_universe");
+    expect(md).toContain("list_universe");
+    expect(md).toContain("out_of_universe_reason");
+  });
+
+  it("renders exclusions when present", () => {
+    const cfg = makeFundConfig({
+      universe: {
+        preset: "sp500",
+        include_tickers: ["TSM"],
+        exclude_tickers: ["TSLA"],
+        exclude_sectors: ["Energy"],
+      },
+    });
+    const md = buildClaudeMd(cfg);
+    expect(md).toContain("Always-included: TSM");
+    expect(md).toContain("Excluded tickers (hard block): TSLA");
+    expect(md).toContain("Excluded sectors (hard block): Energy");
+  });
+
+  it("renders filters mode universe section", () => {
+    const cfg = makeFundConfig({
+      universe: {
+        filters: { market_cap_min: 10_000_000_000, limit: 500, is_actively_trading: true },
+        include_tickers: [],
+        exclude_tickers: [],
+        exclude_sectors: [],
+      },
+    });
+    const md = buildClaudeMd(cfg);
+    expect(md).toContain("custom filters");
+  });
+
+  it("omits empty include/exclude lines", () => {
+    const cfg = makeFundConfig({
+      universe: { preset: "sp500", include_tickers: [], exclude_tickers: [], exclude_sectors: [] },
+    });
+    const md = buildClaudeMd(cfg);
+    expect(md).not.toContain("Always-included:");
+    expect(md).not.toContain("Excluded tickers (hard block):");
+    expect(md).not.toContain("Excluded sectors (hard block):");
   });
 });
