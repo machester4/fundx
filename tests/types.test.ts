@@ -7,6 +7,8 @@ import {
   sessionLogSchema,
   dailySnapshotSchema,
   notifiedMilestonesSchema,
+  universeSchema,
+  fmpScreenerFiltersSchema,
 } from "../src/types.js";
 
 describe("fundConfigSchema", () => {
@@ -21,7 +23,7 @@ describe("fundConfigSchema", () => {
     capital: { initial: 10000, currency: "USD" },
     objective: { type: "growth", target_multiple: 2 },
     risk: { profile: "moderate" },
-    universe: { allowed: [{ type: "etf", tickers: ["SPY", "QQQ"] }] },
+    universe: { preset: "sp500" },
     schedule: {
       sessions: {
         pre_market: {
@@ -225,5 +227,67 @@ describe("sessionLogSchema", () => {
     });
     expect(result.trades_executed).toBe(0);
     expect(result.summary).toBe("");
+  });
+});
+
+describe("universeSchema (per-fund universe)", () => {
+  it("accepts a preset block", () => {
+    const u = universeSchema.parse({ preset: "sp500" });
+    expect(u.preset).toBe("sp500");
+    expect(u.include_tickers).toEqual([]);
+  });
+
+  it("accepts a filters block", () => {
+    const u = universeSchema.parse({
+      filters: { market_cap_min: 1e10, exchange: ["NYSE", "NASDAQ"] },
+    });
+    expect(u.filters?.market_cap_min).toBe(1e10);
+  });
+
+  it("rejects both preset and filters", () => {
+    expect(() =>
+      universeSchema.parse({ preset: "sp500", filters: { limit: 100 } }),
+    ).toThrow(/exactly one/);
+  });
+
+  it("rejects neither preset nor filters", () => {
+    expect(() => universeSchema.parse({})).toThrow(/exactly one/);
+  });
+
+  it("rejects unknown exchange", () => {
+    expect(() =>
+      universeSchema.parse({ filters: { exchange: ["NYSE", "FAKE"] } }),
+    ).toThrow();
+  });
+
+  it("rejects unknown sector", () => {
+    expect(() =>
+      universeSchema.parse({ filters: { sector: ["Tech"] } }),
+    ).toThrow();
+  });
+
+  it("rejects market_cap_min >= max", () => {
+    expect(() =>
+      universeSchema.parse({
+        filters: { market_cap_min: 1e10, market_cap_max: 1e9 },
+      }),
+    ).toThrow(/market_cap_min must be/);
+  });
+
+  it("uppercases include/exclude tickers", () => {
+    const u = universeSchema.parse({
+      preset: "sp500",
+      include_tickers: ["tsm", "asml"],
+      exclude_tickers: ["tsla"],
+    });
+    expect(u.include_tickers).toEqual(["TSM", "ASML"]);
+    expect(u.exclude_tickers).toEqual(["TSLA"]);
+  });
+
+  it("validates country as ISO-2", () => {
+    expect(() =>
+      universeSchema.parse({ filters: { country: "USA" } }),
+    ).toThrow();
+    expect(universeSchema.parse({ filters: { country: "US" } }).filters?.country).toBe("US");
   });
 });
