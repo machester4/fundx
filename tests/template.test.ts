@@ -32,7 +32,7 @@ function makeConfig(overrides: Partial<FundConfig> = {}): FundConfig {
     capital: { initial: 10000, currency: "USD" },
     objective: { type: "growth", target_multiple: 3 },
     risk: { profile: "moderate" },
-    universe: { allowed: [{ type: "etf", tickers: ["SPY", "QQQ"] }] },
+    universe: { preset: "sp500", include_tickers: ["SPY", "QQQ"] },
     schedule: { sessions: {} },
     broker: { mode: "paper" },
     claude: { model: "sonnet", personality: "Cautious and analytical." },
@@ -363,12 +363,12 @@ describe("generateFundClaudeMd", () => {
     expect(constraintsBlock).toContain("abort and log reason");
   });
 
-  it("includes allowed tickers", async () => {
+  it("includes include_tickers in hard_constraints", async () => {
     const config = makeConfig();
     await generateFundClaudeMd(config);
 
     const content = mockedWriteFile.mock.calls[0][1] as string;
-    expect(content).toContain("SPY, QQQ");
+    expect(content).toContain("Allowed tickers (always included): SPY, QQQ");
   });
 
   it("includes custom rules inside hard_constraints", async () => {

@@ -11,13 +11,16 @@ export async function generateFundClaudeMd(config: FundConfig): Promise<void> {
 
 function buildClaudeMd(c: FundConfig): string {
   const objectiveDesc = describeObjective(c);
-  const universeDesc =
-    c.universe.allowed.flatMap((a) => a.tickers ?? []).join(", ") ||
-    "Any allowed assets";
-  const forbiddenDesc =
-    c.universe.forbidden
-      .map((f) => f.type ?? f.tickers?.join(", "))
-      .join(", ") || "None";
+  // TODO(per-fund-universe): Task 7 will replace this with the full "Your Universe" section
+  const includeDesc = c.universe.include_tickers.length
+    ? c.universe.include_tickers.join(", ")
+    : null;
+  const excludeTickersDesc = c.universe.exclude_tickers.length
+    ? c.universe.exclude_tickers.join(", ")
+    : null;
+  const excludeSectorsDesc = c.universe.exclude_sectors.length
+    ? c.universe.exclude_sectors.join(", ")
+    : null;
 
   const customRulesBlock = c.risk.custom_rules.length
     ? `\n${c.risk.custom_rules.map((r) => `- ${r}`).join("\n")}`
@@ -129,8 +132,8 @@ Rule: Use at least TWO sizing methods and take the SMALLER.
 - Max drawdown: ${c.risk.max_drawdown_pct}%
 - Max position size: ${c.risk.max_position_pct}%
 - Stop loss: ${c.risk.stop_loss_pct}% per position
-- Allowed assets: ${universeDesc}
-- Forbidden: ${forbiddenDesc}${customRulesBlock}
+${includeDesc ? `- Allowed tickers (always included): ${includeDesc}\n` : ""}- Excluded tickers (hard block): ${excludeTickersDesc ?? "None"}
+- Excluded sectors (hard block): ${excludeSectorsDesc ?? "None"}${customRulesBlock}
 
 **Drawdown budget tiers:**
 - 0-50% consumed → normal operations

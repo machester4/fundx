@@ -62,7 +62,7 @@ const makeFundConfig = (sessionOverrides: Record<string, unknown> = {}) => ({
   capital: { initial: 50000, currency: "USD" },
   objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
   risk: { profile: "conservative" },
-  universe: { allowed: [] },
+  universe: { preset: "sp500" },
   schedule: {
     sessions: {
       pre_market: {

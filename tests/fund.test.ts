@@ -84,8 +84,7 @@ risk:
   max_drawdown_pct: 15
   max_position_pct: 25
 universe:
-  allowed: []
-  forbidden: []
+  preset: sp500
 schedule:
   sessions: {}
 broker:
