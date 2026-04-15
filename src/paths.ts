@@ -89,7 +89,8 @@ export const MCP_COMMAND = IS_DEV
 
 /** Paths relative to a fund directory */
 export function fundPaths(fundName: string) {
-  const root = join(FUNDS_DIR, fundName);
+  const workspace = process.env.FUNDX_HOME ?? join(homedir(), ".fundx");
+  const root = join(workspace, "funds", fundName);
   return {
     root,
     config: join(root, "fund_config.yaml"),
@@ -113,6 +114,7 @@ export function fundPaths(fundName: string) {
       sessionHandoff: join(root, "state", "session-handoff.md"),
       dailySnapshot: join(root, "state", "daily_snapshot.json"),
       notifiedMilestones: join(root, "state", "notified_milestones.json"),
+      universe: join(root, "state", "universe.json"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),

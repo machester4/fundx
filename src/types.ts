@@ -798,3 +798,24 @@ export const watchlistFundTagSchema = z.object({
   tagged_at: z.number().int().positive(),
 });
 export type WatchlistFundTag = z.infer<typeof watchlistFundTagSchema>;
+
+// ── Universe Resolution Schema ────────────────────────────────
+
+export const universeResolutionSchema = z.object({
+  resolved_at: z.number().int().positive(),
+  config_hash: z.string(),
+  resolved_from: z.enum(["fmp", "stale_cache", "static_fallback"]),
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("preset"), preset: universePresetSchema }),
+    z.object({ kind: z.literal("filters") }),
+  ]),
+  base_tickers: z.array(z.string()),
+  final_tickers: z.array(z.string()),
+  include_applied: z.array(z.string()),
+  exclude_tickers_applied: z.array(z.string()),
+  exclude_sectors_applied: z.array(z.string()),
+  exclude_tickers_config: z.array(z.string()),
+  exclude_sectors_config: z.array(z.string()),
+  count: z.number().int().nonnegative(),
+});
+export type UniverseResolution = z.infer<typeof universeResolutionSchema>;
