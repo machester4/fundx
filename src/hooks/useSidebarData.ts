@@ -3,11 +3,13 @@ import { readSessionHandoff, readPortfolio, readPendingSessions, readSessionHist
 import { loadFundConfig } from "../services/fund.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { queryArticles } from "../services/news.service.js";
+import { openWatchlistDb, queryWatchlist } from "../services/watchlist.service.js";
 import { useInterval } from "./useInterval.js";
 import type { Portfolio, FundConfig, PendingSession } from "../types.js";
 import type { UpcomingItem } from "../components/UpcomingPanel.js";
 import type { MarketTicker } from "../components/MarketPanel.js";
 import type { NewsSidebarArticle, NewsSidebarStatus } from "../components/NewsSidebarPanel.js";
+import type { ScreenerItem } from "../components/ScreenersPanel.js";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
@@ -22,7 +24,36 @@ export interface SidebarData {
   newsStatus: NewsSidebarStatus;
   newsReason?: string;
   newsNewestAgeMinutes?: number;
+  screeners: ScreenerItem[];
   isLoading: boolean;
+}
+
+/** Load watchlist entries for the active fund. Always resolves — never throws. */
+async function fetchScreenerItems(fundName: string, limit = 10): Promise<ScreenerItem[]> {
+  let db: ReturnType<typeof openWatchlistDb> | null = null;
+  try {
+    db = openWatchlistDb();
+    const entries = queryWatchlist(db, {
+      fund: fundName,
+      status: ["candidate", "watching"],
+      limit,
+    });
+    // Query filters to candidate/watching; other statuses are unreachable here.
+    return entries.flatMap((e) =>
+      e.status === "candidate" || e.status === "watching"
+        ? [{
+            ticker: e.ticker,
+            status: e.status,
+            peak_score: e.peak_score,
+            screen_count: e.current_screens.length,
+          }]
+        : [],
+    );
+  } catch {
+    return [];
+  } finally {
+    db?.close();
+  }
 }
 
 interface NewsSnapshot {
@@ -141,6 +172,7 @@ export function useSidebarData(fundName: string | null): SidebarData {
     isMarketOpen: false,
     newsArticles: [],
     newsStatus: "empty",
+    screeners: [],
     isLoading: true,
   });
 
@@ -151,7 +183,7 @@ export function useSidebarData(fundName: string | null): SidebarData {
 
     (async () => {
       try {
-        const [handoff, portfolio, pending, config, globalConfig, sessionHistory, news] = await Promise.all([
+        const [handoff, portfolio, pending, config, globalConfig, sessionHistory, news, screeners] = await Promise.all([
           readSessionHandoff(fundName).catch(() => null),
           readPortfolio(fundName).catch(() => null),
           readPendingSessions(fundName).catch(() => []),
@@ -159,6 +191,7 @@ export function useSidebarData(fundName: string | null): SidebarData {
           loadGlobalConfig().catch(() => null),
           readSessionHistory(fundName).catch(() => ({})),
           fetchNewsSnapshot(3),
+          fetchScreenerItems(fundName),
         ]);
 
         if (cancelled) return;
@@ -212,6 +245,7 @@ export function useSidebarData(fundName: string | null): SidebarData {
             newsStatus: news.status,
             newsReason: news.reason,
             newsNewestAgeMinutes: news.newestAgeMinutes,
+            screeners,
             isLoading: false,
           });
         }
@@ -229,19 +263,21 @@ export function useSidebarData(fundName: string | null): SidebarData {
   const refreshPrices = useCallback(async () => {
     if (!fundName) return;
     try {
-      const [portfolio, globalConfig, news] = await Promise.all([
+      const [portfolio, globalConfig, news, screeners] = await Promise.all([
         readPortfolio(fundName).catch(() => null),
         loadGlobalConfig().catch(() => null),
         fetchNewsSnapshot(3),
+        fetchScreenerItems(fundName),
       ]);
 
-      // Apply news update regardless of whether market data is available
+      // Apply news + screeners update regardless of whether market data is available
       setData((prev) => ({
         ...prev,
         newsArticles: news.articles,
         newsStatus: news.status,
         newsReason: news.reason,
         newsNewestAgeMinutes: news.newestAgeMinutes,
+        screeners,
       }));
 
       const fmpKey = globalConfig?.market_data?.fmp_api_key;
@@ -282,9 +318,12 @@ export function useSidebarData(fundName: string | null): SidebarData {
     }
   }, [fundName]);
 
+  // Poll every 5 min while a fund is selected. Screeners and news refresh
+  // regardless of market hours; FMP price fetch inside refreshPrices is a
+  // no-op when markets are closed (stale quotes) but harmless.
   useInterval(
     useCallback(() => { void refreshPrices(); }, [refreshPrices]),
-    fundName && data.isMarketOpen ? POLL_INTERVAL_MS : null,
+    fundName ? POLL_INTERVAL_MS : null,
   );
 
   return data;
