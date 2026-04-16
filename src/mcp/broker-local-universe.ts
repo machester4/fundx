@@ -220,6 +220,7 @@ export interface UpdateUniverseInput {
   include_tickers?: string[];
   exclude_tickers?: string[];
   exclude_sectors?: string[];
+  dry_run?: boolean;
 }
 export interface UpdateUniverseDeps {
   loadCurrentConfig: () => Promise<FundConfig>;
@@ -231,6 +232,7 @@ export interface UpdateUniverseDeps {
 }
 export interface UpdateUniverseOutput {
   ok: true;
+  dry_run: boolean;
   before: { source: string; include_count: number; exclude_tickers_count: number; exclude_sectors_count: number };
   after: { source: string; include_count: number; exclude_tickers_count: number; exclude_sectors_count: number };
   resolved: { count: number; resolved_from: "fmp" | "stale_cache" | "static_fallback" };
@@ -294,40 +296,47 @@ export async function handleUpdateUniverse(
   // Wrap in the full fundConfigSchema for belt-and-suspenders
   const newConfig = fundConfigSchema.parse({ ...current, universe: validated });
 
-  // Persist
-  await deps.writeConfigYaml(newConfig);
-  await deps.invalidateUniverseCache();
-  await deps.regenerateClaudeMd(newConfig);
+  const isDryRun = input.dry_run === true;
 
-  // Post-persist: resolve and validate the new universe, then audit log
+  // Always resolve to compute count/warnings (even on dry run)
   const resolution = await deps.resolveNewUniverse(newConfig);
+
   const warnings: string[] = [];
   if (resolution.count === 0) {
     warnings.push(
-      "Resolved universe is empty (0 tickers). The fund cannot trade anything until the universe is broadened. " +
-      "Review your exclude_sectors/exclude_tickers or switch to a more permissive preset/filter.",
+      "Resolved universe is empty (0 tickers). The fund cannot trade anything until the universe is broadened.",
     );
   }
   if (resolution.resolved_from === "static_fallback") {
     warnings.push(
       "FMP resolution fell through to static fallback. Likely your FMP API key cannot hit the requested " +
-      "preset/filter endpoint. Resolved ticker count reflects the static fallback, not the real universe.",
+      "preset/filter endpoint.",
     );
   }
 
+  if (!isDryRun) {
+    await deps.writeConfigYaml(newConfig);
+    await deps.invalidateUniverseCache();
+    await deps.regenerateClaudeMd(newConfig);
+    await deps.auditLog({
+      before,
+      after: summarizeUniverse(newConfig.universe),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const after = summarizeUniverse(newConfig.universe);
-  await deps.auditLog({
-    before,
-    after,
-    timestamp: new Date().toISOString(),
-  });
+  const note = isDryRun
+    ? "DRY RUN: no changes to fund_config.yaml or CLAUDE.md. The resolver cache may now hold the preview resolution — any check_universe / list_universe call uses it until next update_universe or refresh-universe."
+    : "Universe updated. Next tool call resolves against the new config (cache invalidated). CLAUDE.md regenerated. If this fund has user-authored YAML comments or custom key ordering in fund_config.yaml, they are lost on write.";
 
   return {
     ok: true,
+    dry_run: isDryRun,
     before,
     after,
     resolved: { count: resolution.count, resolved_from: resolution.resolved_from },
     warnings,
-    note: "Universe updated. Next tool call resolves against the new config (cache invalidated). CLAUDE.md regenerated. If this fund has user-authored YAML comments or custom key ordering in fund_config.yaml, they are lost on write.",
+    note,
   };
 }

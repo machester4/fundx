@@ -472,7 +472,7 @@ server.tool(
 
 server.tool(
   "update_universe",
-  "Mutate this fund's universe block in fund_config.yaml. Validates with the schema, writes atomically, invalidates the resolver cache, and regenerates CLAUDE.md. Use this instead of editing fund_config.yaml directly. Semantics: mode.preset|filters switches source (mutually exclusive — passing both is an error); include_tickers/exclude_tickers/exclude_sectors REPLACE their current lists (to add one item, first call list_universe({ verbose: true }) to read the current lists, then pass the full new list including the addition). Omitted fields leave current values unchanged. Tickers are uppercased automatically. Check output.warnings and output.resolved.count to confirm the change is safe.",
+  "Mutate this fund's universe. Validates with Zod, writes fund_config.yaml atomically, invalidates resolver cache, and regenerates CLAUDE.md. Use this instead of editing fund_config.yaml directly. Pass dry_run: true to preview the diff + resolved count + warnings WITHOUT committing.",
   {
     mode: z.object({
       preset: z.enum(["sp500", "nasdaq100", "dow30"]).optional().describe("Switch to a canonical index preset"),
@@ -481,6 +481,7 @@ server.tool(
     include_tickers: z.array(z.string()).optional().describe("REPLACES the current include_tickers list (always-include tickers, bypass universe filters)"),
     exclude_tickers: z.array(z.string()).optional().describe("REPLACES the current exclude_tickers list (hard-block these tickers)"),
     exclude_sectors: z.array(z.string()).optional().describe("REPLACES the current exclude_sectors list (hard-block these sectors, FMP canonical names like 'Technology', 'Energy')"),
+    dry_run: z.boolean().optional().describe("Preview the change without persisting. Returns the same output shape with dry_run=true. Note: the resolver cache may be updated with the preview resolution — run `refresh-universe` to restore if needed."),
   },
   async (args) => {
     try {
