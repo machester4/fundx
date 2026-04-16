@@ -540,13 +540,27 @@ export function getTrajectory(
   };
 }
 
-export function tagFundCompatibilityForTickers(
+export interface TagFundCompatibilityDeps {
+  getSector?: (ticker: string) => Promise<string | null>;
+}
+
+export async function tagFundCompatibilityForTickers(
   db: Database.Database,
   resolutions: Map<string, UniverseResolution>,
   tickers: string[],
   now: number,
-): void {
+  deps: TagFundCompatibilityDeps = {},
+): Promise<void> {
   if (resolutions.size === 0 || tickers.length === 0) return;
+
+  // Pre-fetch sectors if any fund excludes any sector and getSector is provided
+  const needsSectors = [...resolutions.values()].some((r) => r.exclude_sectors_config.length > 0);
+  const sectorCache = new Map<string, string | null>();
+  if (needsSectors && deps.getSector) {
+    for (const t of tickers) {
+      sectorCache.set(t, await deps.getSector(t));
+    }
+  }
 
   const stmt = db.prepare(
     `INSERT INTO watchlist_fund_tags (ticker, fund_name, compatible, tagged_at)
@@ -555,13 +569,19 @@ export function tagFundCompatibilityForTickers(
        compatible = excluded.compatible,
        tagged_at = excluded.tagged_at`,
   );
+
   const tx = db.transaction(() => {
     for (const [fundName, resolution] of resolutions) {
       for (const t of tickers) {
         const status = isInUniverse(resolution, t);
-        // Note: for preset mode, sector exclusion requires a profile lookup
-        // and is enforced at trade-time by broker-local, not here. This tag is advisory.
-        const compatible = status.in_universe ? 1 : 0;
+        let compatible = status.in_universe ? 1 : 0;
+        // If in_universe and there's a sector exclusion config, check sector
+        if (compatible === 1 && resolution.exclude_sectors_config.length > 0 && deps.getSector) {
+          const sector = sectorCache.get(t);
+          if (sector && resolution.exclude_sectors_config.includes(sector)) {
+            compatible = 0;
+          }
+        }
         stmt.run(t, fundName, compatible, now);
       }
     }

@@ -12,6 +12,7 @@ import { openPriceCache } from "../services/price-cache.service.js";
 import { getHistoricalDaily } from "../services/market.service.js";
 import { resolveUniverse } from "../services/universe.service.js";
 import { runScreen } from "../services/screening.service.js";
+import { getCompanyProfile } from "../services/market.service.js";
 import {
   screenNameSchema,
   watchlistStatusSchema,
@@ -37,6 +38,7 @@ export async function handleScreenRun(
     resolveFundUniverse: (fundName: string) => Promise<import("../types.js").UniverseResolution>;
     loadFundConfigs: () => Promise<FundConfig[]>;
     now: () => number;
+    getSector?: (ticker: string) => Promise<string | null>;
   },
 ): Promise<{ summary: Awaited<ReturnType<typeof runScreen>> }> {
   const screen = screenNameSchema.parse(args.screen ?? "momentum-12-1");
@@ -64,6 +66,7 @@ export async function handleScreenRun(
     resolutions: new Map([[fundName, resolution]]),
     now: deps.now(),
     screenName: screen,
+    getSector: deps.getSector,
   });
   return { summary };
 }
@@ -125,6 +128,10 @@ async function main() {
         },
         loadFundConfigs: loadAllFundConfigs,
         now: () => Date.now(),
+        getSector: async (ticker) => {
+          const profile = await getCompanyProfile(ticker, apiKey);
+          return profile?.sector ?? null;
+        },
       });
       return {
         content: [{ type: "text", text: JSON.stringify(res.summary, null, 2) }],
