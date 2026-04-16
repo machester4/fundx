@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { writeJsonAtomic } from "../state.js";
 import { fundPaths } from "../paths.js";
@@ -233,6 +233,19 @@ export async function resolveUniverse(
     exclude_sectors_config: [...universe.exclude_sectors],
     count: final.length,
   };
+}
+
+/** Delete the cached universe resolution file. Safe to call when no cache exists. */
+export async function invalidateUniverseCache(fundName: string): Promise<void> {
+  const p = fundPaths(fundName).state.universe;
+  try {
+    await unlink(p);
+  } catch (err) {
+    // Missing file is OK; anything else is unexpected but non-fatal
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`[universe] failed to invalidate cache for ${fundName}:`, err instanceof Error ? err.message : err);
+    }
+  }
 }
 
 /**
