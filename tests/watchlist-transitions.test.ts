@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import {
   openWatchlistDb,
@@ -11,7 +11,7 @@ import {
   tagManually,
   tagFundCompatibilityForTickers,
 } from "../src/services/watchlist.service.js";
-import type { FundConfig } from "../src/types.js";
+import type { UniverseResolution } from "../src/types.js";
 
 describe("watchlist.service — CRUD", () => {
   let db: Database.Database;
@@ -202,73 +202,101 @@ describe("watchlist.service — transitions", () => {
 
 describe("tagFundCompatibilityForTickers", () => {
   let db: Database.Database;
-  beforeEach(() => (db = openWatchlistDb(":memory:")));
+  beforeEach(() => {
+    db = openWatchlistDb(":memory:");
+  });
+  afterEach(() => {
+    db.close();
+  });
 
-  // TODO(per-fund-universe): these tests covered the old universe.allowed[].type="etf"
-  // schema. tagFundCompatibilityForTickers is now a no-op under the new schema until
-  // resolveUniverse() is integrated (see per-fund-universe feature plan).
-  it.todo("tags compatible when ticker in fund etf universe");
-  it.todo("skips tagging for funds whose universe is sector/strategy/protocol (not etf)");
-
-  it("is a no-op: does not insert any rows for any fund config", () => {
-    const stubFund: FundConfig = {
-      fund: {
-        name: "stub-fund",
-        display_name: "Stub Fund",
-        description: "",
-        created: "2026-01-01",
-        status: "active",
-      },
-      capital: { initial: 10000, currency: "USD" },
-      objective: { type: "growth", target_multiple: 2, timeframe_months: 12 },
-      risk: {
-        profile: "moderate",
-        max_drawdown_pct: 30,
-        max_position_pct: 20,
-        max_leverage: 1,
-        stop_loss_pct: 10,
-        max_daily_loss_pct: 5,
-        correlation_limit: 0.8,
-        custom_rules: [],
-      },
-      universe: {
-        preset: "sp500",
-        filters: undefined,
-        include_tickers: ["AAPL"],
-        exclude_tickers: [],
-        exclude_sectors: [],
-      },
-      schedule: {
-        timezone: "UTC",
-        trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
-        sessions: {},
-        special_sessions: [],
-      },
-      broker: { mode: "paper" },
-      notifications: {
-        telegram: {
-          enabled: false,
-          trade_alerts: true,
-          stop_loss_alerts: true,
-          daily_digest: true,
-          weekly_digest: true,
-          milestone_alerts: true,
-          drawdown_alerts: true,
-        },
-        quiet_hours: {
-          enabled: false,
-          start: "23:00",
-          end: "07:00",
-          allow_critical: true,
-        },
-      },
-      claude: {
-        model: "sonnet",
-        personality: "neutral",
-        decision_framework: "",
-      },
+  function makeResolution(overrides: Partial<UniverseResolution> = {}): UniverseResolution {
+    return {
+      resolved_at: 1,
+      config_hash: "h",
+      resolved_from: "fmp",
+      source: { kind: "preset", preset: "sp500" },
+      base_tickers: ["AAPL", "MSFT"],
+      final_tickers: ["AAPL", "MSFT", "TSM"],
+      include_applied: ["TSM"],
+      exclude_tickers_applied: [],
+      exclude_sectors_applied: [],
+      exclude_tickers_config: ["TSLA"],
+      exclude_sectors_config: [],
+      count: 3,
+      ...overrides,
     };
-    tagFundCompatibilityForTickers(db, [stubFund], ["AAPL", "MSFT"], 1000);
+  }
+
+  it("tags tickers in base universe as compatible=1", () => {
+    const resolutions = new Map([["fund-a", makeResolution()]]);
+    tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
+    const rows = db.prepare(
+      "SELECT ticker, compatible FROM watchlist_fund_tags WHERE fund_name='fund-a' ORDER BY ticker"
+    ).all() as Array<{ ticker: string; compatible: number }>;
+    expect(rows).toEqual([
+      { ticker: "AAPL", compatible: 1 },
+      { ticker: "MSFT", compatible: 1 },
+    ]);
+  });
+
+  it("tags include_tickers overrides as compatible=1", () => {
+    const resolutions = new Map([["fund-a", makeResolution()]]);
+    tagFundCompatibilityForTickers(db, resolutions, ["TSM"], 1000);
+    const row = db.prepare(
+      "SELECT compatible FROM watchlist_fund_tags WHERE ticker='TSM' AND fund_name='fund-a'"
+    ).get() as { compatible: number };
+    expect(row.compatible).toBe(1);
+  });
+
+  it("tags excluded tickers as compatible=0", () => {
+    const resolutions = new Map([["fund-a", makeResolution()]]);
+    tagFundCompatibilityForTickers(db, resolutions, ["TSLA"], 1000);
+    const row = db.prepare(
+      "SELECT compatible FROM watchlist_fund_tags WHERE ticker='TSLA' AND fund_name='fund-a'"
+    ).get() as { compatible: number };
+    expect(row.compatible).toBe(0);
+  });
+
+  it("tags out-of-universe tickers as compatible=0", () => {
+    const resolutions = new Map([["fund-a", makeResolution()]]);
+    tagFundCompatibilityForTickers(db, resolutions, ["ZZZZ"], 1000);
+    const row = db.prepare(
+      "SELECT compatible FROM watchlist_fund_tags WHERE ticker='ZZZZ' AND fund_name='fund-a'"
+    ).get() as { compatible: number };
+    expect(row.compatible).toBe(0);
+  });
+
+  it("tags across multiple funds", () => {
+    const resolutions = new Map([
+      ["fund-a", makeResolution({ final_tickers: ["AAPL"], base_tickers: ["AAPL"], include_applied: [], exclude_tickers_config: [] })],
+      ["fund-b", makeResolution({ final_tickers: ["MSFT"], base_tickers: ["MSFT"], include_applied: [], exclude_tickers_config: [] })],
+    ]);
+    tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
+    const rows = db.prepare(
+      "SELECT ticker, fund_name, compatible FROM watchlist_fund_tags ORDER BY fund_name, ticker"
+    ).all() as Array<{ ticker: string; fund_name: string; compatible: number }>;
+    expect(rows).toEqual([
+      { ticker: "AAPL", fund_name: "fund-a", compatible: 1 },
+      { ticker: "MSFT", fund_name: "fund-a", compatible: 0 },
+      { ticker: "AAPL", fund_name: "fund-b", compatible: 0 },
+      { ticker: "MSFT", fund_name: "fund-b", compatible: 1 },
+    ]);
+  });
+
+  it("upserts on conflict (re-running updates compatibility)", () => {
+    const resolutions1 = new Map([["fund-a", makeResolution({ final_tickers: [], base_tickers: [], include_applied: [] })]]);
+    tagFundCompatibilityForTickers(db, resolutions1, ["AAPL"], 1000);
+    const resolutions2 = new Map([["fund-a", makeResolution({ final_tickers: ["AAPL"], base_tickers: ["AAPL"], include_applied: [] })]]);
+    tagFundCompatibilityForTickers(db, resolutions2, ["AAPL"], 2000);
+    const row = db.prepare(
+      "SELECT compatible, tagged_at FROM watchlist_fund_tags WHERE ticker='AAPL'"
+    ).get() as { compatible: number; tagged_at: number };
+    expect(row.compatible).toBe(1);
+    expect(row.tagged_at).toBe(2000);
+  });
+
+  it("no-op when resolutions map is empty", () => {
+    tagFundCompatibilityForTickers(db, new Map(), ["AAPL"], 1000);
     const rows = db.prepare("SELECT * FROM watchlist_fund_tags").all();
     expect(rows).toHaveLength(0);
   });

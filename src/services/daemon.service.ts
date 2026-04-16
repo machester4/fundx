@@ -962,6 +962,7 @@ export async function startDaemon(): Promise<void> {
               universeLabel,
               fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
               fundConfigs: [cfg],
+              resolutions: new Map([[cfg.fund.name, resolution]]),
               now: Date.now(),
               screenName: "momentum-12-1",
             });
