@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { handleUpdateUniverse } from "../src/mcp/broker-local.js";
+import { handleUpdateUniverse } from "../src/mcp/broker-local-universe.js";
 import type { FundConfig, UniverseResolution } from "../src/types.js";
 
 function makeConfig(overrides: Partial<FundConfig["universe"]> = {}): FundConfig {
