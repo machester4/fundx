@@ -144,11 +144,10 @@ export async function buildUniverseBadge(fundName: string): Promise<UniverseBadg
     res.source.kind === "preset" ? res.source.preset.toUpperCase() : "FILTERS";
   const ageHours = Math.floor((Date.now() - res.resolved_at) / 3_600_000);
   const staleness: UniverseBadge["staleness"] =
-    res.resolved_from === "fmp"
-      ? "fresh"
-      : res.resolved_from === "stale_cache"
-        ? "stale"
-        : "fallback";
+    res.resolved_from === "fmp" && ageHours < 12 ? "fresh"
+    : res.resolved_from === "fmp" ? "stale"
+    : res.resolved_from === "stale_cache" ? "stale"
+    : "fallback";
   return { source, count: res.count, ageHours, staleness };
 }
 

@@ -123,4 +123,24 @@ describe("buildUniverseBadge", () => {
     expect(badge?.source).toBe("FILTERS");
     expect(badge?.count).toBe(250);
   });
+
+  it("marks fmp-resolved cache 20h old as stale, not fresh", async () => {
+    const stateDir = join(tmp, "funds", "testfund", "state");
+    mkdirSync(stateDir, { recursive: true });
+    const now = new Date("2026-04-16T10:00:00Z").getTime();
+    const resolution = {
+      resolved_at: now - 20 * 3_600_000,
+      config_hash: "h",
+      resolved_from: "fmp",
+      source: { kind: "preset", preset: "sp500" },
+      base_tickers: [], final_tickers: [], include_applied: [],
+      exclude_tickers_applied: [], exclude_sectors_applied: [],
+      exclude_tickers_config: [], exclude_sectors_config: [],
+      count: 500,
+    };
+    writeFileSync(join(stateDir, "universe.json"), JSON.stringify(resolution));
+    const badge = await buildUniverseBadge("testfund");
+    expect(badge?.staleness).toBe("stale");
+    expect(badge?.ageHours).toBe(20);
+  });
 });
