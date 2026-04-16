@@ -9,14 +9,21 @@ import {
   tagManually,
 } from "../services/watchlist.service.js";
 import { openPriceCache } from "../services/price-cache.service.js";
-import { getHistoricalDaily } from "../services/market.service.js";
+import {
+  getHistoricalDaily,
+  getScreenerResultsRaw,
+  getCompanyProfile,
+  type ScreenerResult,
+} from "../services/market.service.js";
 import { resolveUniverse } from "../services/universe.service.js";
-import { runScreen } from "../services/screening.service.js";
-import { getCompanyProfile } from "../services/market.service.js";
+import { runScreen, scoreMomentum121 } from "../services/screening.service.js";
+import { readBars, isFresh, writeBars } from "../services/price-cache.service.js";
 import {
   screenNameSchema,
   watchlistStatusSchema,
+  fmpScreenerFiltersSchema,
   type FundConfig,
+  type FmpScreenerFilters,
 } from "../types.js";
 import { loadGlobalConfig } from "../config.js";
 import { loadAllFundConfigs } from "../services/fund.service.js";
@@ -69,6 +76,114 @@ export async function handleScreenRun(
     getSector: deps.getSector,
   });
   return { summary };
+}
+
+export interface DiscoverResultEntry {
+  ticker: string;
+  score: number;
+  return_12_1: number;
+  adv_usd_30d: number;
+  last_price: number;
+  missing_days: number;
+  companyName?: string;
+  sector?: string;
+  market_cap?: number;
+  exchange?: string;
+  is_etf?: boolean;
+}
+
+export interface DiscoverResult {
+  candidates_fetched: number;
+  candidates_scored: number;
+  candidates_passed: number;
+  duration_ms: number;
+  results: DiscoverResultEntry[];
+}
+
+const MIN_PRICE = 5;
+const MIN_ADV_USD = 10_000_000;
+
+export async function handleScreenDiscover(
+  pcdb: Database.Database,
+  args: { filters: FmpScreenerFilters; screen?: string },
+  deps: {
+    fetchCandidates: (filters: FmpScreenerFilters) => Promise<ScreenerResult[]>;
+    fetchBars: (ticker: string) => Promise<import("../types.js").DailyBar[]>;
+    now: () => number;
+  },
+): Promise<DiscoverResult> {
+  const started = Date.now();
+  const now = deps.now();
+
+  let candidates: ScreenerResult[];
+  try {
+    candidates = await deps.fetchCandidates(args.filters);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("empty") || msg.includes("invalid body")) {
+      return { candidates_fetched: 0, candidates_scored: 0, candidates_passed: 0, duration_ms: 0, results: [] };
+    }
+    throw err;
+  }
+
+  if (candidates.length === 0) {
+    return { candidates_fetched: 0, candidates_scored: 0, candidates_passed: 0, duration_ms: 0, results: [] };
+  }
+
+  const metaMap = new Map<string, ScreenerResult>(candidates.map((c) => [c.symbol, c]));
+
+  let candidates_scored = 0;
+  let candidates_passed = 0;
+  const scored: DiscoverResultEntry[] = [];
+
+  for (const candidate of candidates) {
+    const ticker = candidate.symbol;
+    let bars: import("../types.js").DailyBar[];
+
+    if (isFresh(pcdb, ticker, now)) {
+      bars = readBars(pcdb, ticker);
+    } else {
+      try {
+        bars = await deps.fetchBars(ticker);
+        writeBars(pcdb, ticker, bars, now);
+      } catch {
+        continue;
+      }
+    }
+
+    const ms = scoreMomentum121(bars);
+    if (!ms) continue;
+    candidates_scored++;
+
+    if (ms.last_price < MIN_PRICE) continue;
+    if (ms.adv_usd_30d < MIN_ADV_USD) continue;
+    candidates_passed++;
+
+    const meta = metaMap.get(ticker);
+    scored.push({
+      ticker,
+      score: ms.score,
+      return_12_1: ms.return_12_1,
+      adv_usd_30d: ms.adv_usd_30d,
+      last_price: ms.last_price,
+      missing_days: ms.missing_days,
+      companyName: meta?.companyName,
+      sector: meta?.sector,
+      market_cap: meta?.marketCap,
+      exchange: meta?.exchange,
+      is_etf: meta?.isEtf,
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+
+  return {
+    candidates_fetched: candidates.length,
+    candidates_scored,
+    candidates_passed,
+    duration_ms: Date.now() - started,
+    results: scored,
+  };
 }
 
 export async function handleWatchlistQuery(
@@ -136,6 +251,23 @@ async function main() {
       return {
         content: [{ type: "text", text: JSON.stringify(res.summary, null, 2) }],
       };
+    },
+  );
+
+  server.tool(
+    "screen_discover",
+    "Discover assets using arbitrary FMP screener filters and score them with momentum-12-1. Results are ephemeral — not written to the watchlist. Use watchlist_tag to persist any ticker worth tracking.",
+    {
+      filters: fmpScreenerFiltersSchema,
+      screen: z.string().optional(),
+    },
+    async (args) => {
+      const res = await handleScreenDiscover(pcdb, args as { filters: FmpScreenerFilters; screen?: string }, {
+        fetchCandidates: (filters) => getScreenerResultsRaw(filters, apiKey),
+        fetchBars: (ticker) => getHistoricalDaily(ticker, 273, apiKey),
+        now: () => Date.now(),
+      });
+      return { content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
     },
   );
 

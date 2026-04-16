@@ -828,6 +828,22 @@ with reasoning.
 - **Fund tagging:** funds whose \`universe\` is declared by sector/strategy/protocol (not explicit ETF/ticker lists) receive no automatic fund tags. The watchlist will still surface workspace-wide candidates; apply the fund's universe filter mentally.
 - **Empty watchlist is normal** on a fresh install until the first daily run completes.
 
+## Out-of-Universe Discovery
+
+When the fund has a thesis on a sector or asset type outside the configured universe, use \`screen_discover\` instead of \`screen_run\`:
+
+\`\`\`
+screen_discover({ filters: { is_etf: true, sector: ["Basic Materials"], limit: 200 } })
+\`\`\`
+
+Results are ephemeral — evaluated in memory, not written to the watchlist. If a ticker merits ongoing tracking, persist it explicitly:
+
+\`\`\`
+watchlist_tag({ ticker: "GDXJ", status: "candidate", reason: "gold reentry — Fed pause catalyst within 30d, momentum recovering off lows" })
+\`\`\`
+
+\`screen_discover\` respects the \`limit\` in the FMP filters — keep it under 500 to avoid long fetch times.
+
 ## Output Format
 Produce a section titled **Opportunity shortlist** with one block per candidate:
 
