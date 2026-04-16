@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+  rename: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -9,12 +10,13 @@ vi.mock("node:fs", () => ({
   existsSync: vi.fn(() => false),
 }));
 
-import { writeFile } from "node:fs/promises";
+import { writeFile, rename } from "node:fs/promises";
 import { generateFundClaudeMd, buildClaudeMd } from "../src/template.js";
 import type { FundConfig } from "../src/types.js";
 import { fundConfigSchema } from "../src/types.js";
 
 const mockedWriteFile = vi.mocked(writeFile);
+const mockedRename = vi.mocked(rename);
 
 beforeEach(() => {
   vi.clearAllMocks();
