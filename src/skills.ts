@@ -217,6 +217,25 @@ Passing this thesis as out_of_universe_reason to place_order.
 <example type="bad">
 Skipping check_universe because I'm confident AAPL is in sp500.
 </example>
+
+### Modifying the universe
+
+If the user asks to change the fund's universe (e.g., "switch to Nasdaq 100", "exclude TSLA", "only tech stocks"), use the \`update_universe\` tool on the broker-local MCP. Never edit \`fund_config.yaml\` directly — the tool validates the change, writes atomically, invalidates the cache, and regenerates CLAUDE.md.
+
+**Tool semantics:**
+- \`mode.preset\` and \`mode.filters\` are mutually exclusive. Passing one switches modes.
+- \`include_tickers\`, \`exclude_tickers\`, \`exclude_sectors\` REPLACE their current lists. To ADD one ticker, first call \`list_universe\` or read the current universe via \`check_universe\`, then pass the full new list (current + added).
+- Omitted fields stay unchanged.
+
+<example type="good">
+User: "Exclude TSLA from my universe."
+Me: read current exclude_tickers (via check_universe or list_universe), then:
+update_universe({ exclude_tickers: [...existing, "TSLA"] })
+</example>
+
+<example type="bad">
+Editing fund_config.yaml directly with Write/Edit tools — bypasses validation and won't regenerate CLAUDE.md.
+</example>
 `,
   },
   {
