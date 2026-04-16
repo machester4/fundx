@@ -5,7 +5,8 @@ import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import { DAEMON_NEEDS_RESTART } from "../paths.js";
 import type { SessionLogV2, UniverseResolution } from "../types.js";
-import { readCachedUniverse } from "./universe.service.js";
+import { resolveUniverse } from "./universe.service.js";
+import { loadGlobalConfig } from "../config.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
@@ -74,7 +75,14 @@ export async function runFundSession(
   const today = new Date().toISOString().split("T")[0];
   const agents = buildAnalystAgents(fundName);
 
-  const universeResolution = await readCachedUniverse(fundName);
+  let universeResolution: UniverseResolution | null = null;
+  try {
+    const gcfg = await loadGlobalConfig();
+    const apiKey = gcfg.market_data?.fmp_api_key ?? "";
+    universeResolution = await resolveUniverse(fundName, config.universe, apiKey);
+  } catch (err) {
+    console.warn(`[session] universe resolution failed for ${fundName}:`, err instanceof Error ? err.message : err);
+  }
   const universeBlock = renderUniverseBlock(universeResolution);
 
   const prompt = [

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { handleBuyGate } from "../src/mcp/broker-local.js";
 import type { UniverseResolution } from "../src/types.js";
+// UniverseResolution is used in checkSector mock signatures
 
 function mockResolution(overrides: Partial<UniverseResolution> = {}): UniverseResolution {
   return {
@@ -20,10 +21,10 @@ function mockResolution(overrides: Partial<UniverseResolution> = {}): UniverseRe
   };
 }
 
-function baseDeps(overrides: Partial<{ resolve: () => Promise<UniverseResolution>; checkSector: (t: string) => Promise<{ excluded: boolean; sector?: string }> }> = {}) {
+function baseDeps(overrides: Partial<{ resolve: () => Promise<UniverseResolution>; checkSector: (t: string, res: UniverseResolution) => Promise<{ excluded: boolean; sector?: string }> }> = {}) {
   return {
     resolve: async () => mockResolution(),
-    checkSector: async () => ({ excluded: false }),
+    checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: false }),
     ...overrides,
   };
 }
@@ -37,7 +38,7 @@ describe("handleBuyGate", () => {
 
   it("accepts include_override ticker without sector check", async () => {
     // Even if sector would exclude, include_tickers wins
-    const deps = baseDeps({ checkSector: async () => ({ excluded: true, sector: "Energy" }) });
+    const deps = baseDeps({ checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: true, sector: "Energy" }) });
     const r = await handleBuyGate({ symbol: "TSM" }, deps);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.out_of_universe).toBe(false);
@@ -50,7 +51,7 @@ describe("handleBuyGate", () => {
   });
 
   it("hard-blocks ticker in exclude_sectors (preset mode)", async () => {
-    const deps = baseDeps({ checkSector: async () => ({ excluded: true, sector: "Energy" }) });
+    const deps = baseDeps({ checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: true, sector: "Energy" }) });
     const r = await handleBuyGate({ symbol: "XOM" }, deps);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("UNIVERSE_EXCLUDED");

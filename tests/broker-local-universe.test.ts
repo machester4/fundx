@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { handleCheckUniverse, handleListUniverse } from "../src/mcp/broker-local.js";
 import type { UniverseResolution } from "../src/types.js";
 
@@ -25,7 +25,7 @@ describe("handleCheckUniverse", () => {
     const res = mockResolution();
     const deps = {
       resolve: async () => res,
-      checkSector: async () => ({ excluded: false }),
+      checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: false }),
     };
     const r = await handleCheckUniverse({ ticker: "AAPL" }, deps);
     expect(r.in_universe).toBe(true);
@@ -34,7 +34,7 @@ describe("handleCheckUniverse", () => {
   });
 
   it("returns exclude_hard_block for TSLA (excluded ticker)", async () => {
-    const deps = { resolve: async () => mockResolution(), checkSector: async () => ({ excluded: false }) };
+    const deps = { resolve: async () => mockResolution(), checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: false }) };
     const r = await handleCheckUniverse({ ticker: "TSLA" }, deps);
     expect(r.in_universe).toBe(false);
     expect(r.exclude_hard_block).toBe(true);
@@ -44,7 +44,7 @@ describe("handleCheckUniverse", () => {
   it("returns exclude_hard_block when sector excluded (preset mode)", async () => {
     const deps = {
       resolve: async () => mockResolution(),
-      checkSector: async () => ({ excluded: true, sector: "Energy" }),
+      checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: true, sector: "Energy" }),
     };
     const r = await handleCheckUniverse({ ticker: "XOM" }, deps);
     expect(r.exclude_hard_block).toBe(true);
@@ -54,7 +54,7 @@ describe("handleCheckUniverse", () => {
   it("requires_justification for out-of-universe ticker without hard block", async () => {
     const deps = {
       resolve: async () => mockResolution(),
-      checkSector: async () => ({ excluded: false }),
+      checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: false }),
     };
     const r = await handleCheckUniverse({ ticker: "ZZZZ" }, deps);
     expect(r.in_universe).toBe(false);
@@ -63,7 +63,7 @@ describe("handleCheckUniverse", () => {
   });
 
   it("include override: TSM returns in_universe=true with include_override", async () => {
-    const deps = { resolve: async () => mockResolution(), checkSector: async () => ({ excluded: false }) };
+    const deps = { resolve: async () => mockResolution(), checkSector: async (_t: string, _res: UniverseResolution) => ({ excluded: false }) };
     const r = await handleCheckUniverse({ ticker: "TSM" }, deps);
     expect(r.in_universe).toBe(true);
     expect(r.include_override).toBe(true);
@@ -97,5 +97,26 @@ describe("handleListUniverse", () => {
     };
     const r = await handleListUniverse({ sector: "Technology" }, deps);
     expect(r.tickers).toEqual(["AAPL", "MSFT", "TSM"]);
+  });
+
+  it("defaults limit to 50 when sector is set", async () => {
+    const res = mockResolution({ final_tickers: Array.from({ length: 100 }, (_, i) => `T${i}`), count: 100 });
+    const deps = {
+      resolve: async () => res,
+      getProfile: async (t: string) => ({ symbol: t, sector: "Technology" }),
+    };
+    const r = await handleListUniverse({ sector: "Technology" }, deps);
+    expect(r.tickers.length).toBe(50);
+    expect(r.total).toBe(100);
+  });
+
+  it("batches profile calls in groups of 10 (sector filter)", async () => {
+    const tickers = Array.from({ length: 25 }, (_, i) => `T${i}`);
+    const res = mockResolution({ final_tickers: tickers, count: 25 });
+    const getProfile = vi.fn(async (t: string) => ({ symbol: t, sector: "Technology" }));
+    const deps = { resolve: async () => res, getProfile };
+    const r = await handleListUniverse({ sector: "Technology", limit: 25 }, deps);
+    expect(r.tickers).toHaveLength(25);
+    expect(getProfile).toHaveBeenCalledTimes(25);
   });
 });
