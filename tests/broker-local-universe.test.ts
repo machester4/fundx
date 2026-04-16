@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { handleCheckUniverse, handleListUniverse } from "../src/mcp/broker-local.js";
+import { handleCheckUniverse, handleListUniverse } from "../src/mcp/broker-local-universe.js";
 import type { UniverseResolution } from "../src/types.js";
 
 function mockResolution(overrides: Partial<UniverseResolution> = {}): UniverseResolution {
