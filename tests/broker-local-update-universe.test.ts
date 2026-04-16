@@ -266,3 +266,56 @@ describe("handleUpdateUniverse", () => {
     expect(invalidations.length).toBe(1);
   });
 });
+
+describe("handleUpdateUniverse — dry_run", () => {
+  it("does NOT call writeConfigYaml / invalidateUniverseCache / regenerateClaudeMd / auditLog on dry_run", async () => {
+    const cfg = makeConfig();
+    const { deps, writes, invalidations, regens, audits } = baseDeps(cfg);
+    const r = await handleUpdateUniverse(
+      { mode: { preset: "nasdaq100" }, dry_run: true },
+      deps,
+    );
+    expect(r.ok).toBe(true);
+    expect(r.dry_run).toBe(true);
+    expect(writes.length).toBe(0);
+    expect(invalidations.length).toBe(0);
+    expect(regens.length).toBe(0);
+    expect(audits.length).toBe(0);
+  });
+
+  it("still validates schema on dry_run", async () => {
+    const cfg = makeConfig();
+    const { deps } = baseDeps(cfg);
+    await expect(
+      handleUpdateUniverse({ exclude_sectors: ["NotASector"], dry_run: true }, deps),
+    ).rejects.toThrow();
+  });
+
+  it("still resolves on dry_run and returns count + warnings", async () => {
+    const cfg = makeConfig();
+    const { deps } = baseDeps(cfg);
+    deps.resolveNewUniverse = async () => ({
+      resolved_at: 1, config_hash: "h", resolved_from: "fmp",
+      source: { kind: "preset" as const, preset: "nasdaq100" as const },
+      base_tickers: ["AAPL"], final_tickers: ["AAPL"], include_applied: [],
+      exclude_tickers_applied: [], exclude_sectors_applied: [],
+      exclude_tickers_config: [], exclude_sectors_config: [],
+      count: 1,
+    });
+    const r = await handleUpdateUniverse(
+      { mode: { preset: "nasdaq100" }, dry_run: true },
+      deps,
+    );
+    expect(r.resolved.count).toBe(1);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("dry_run note differs from normal note", async () => {
+    const cfg = makeConfig();
+    const { deps } = baseDeps(cfg);
+    const a = await handleUpdateUniverse({ mode: { preset: "nasdaq100" }, dry_run: true }, deps);
+    const b = await handleUpdateUniverse({ mode: { preset: "nasdaq100" } }, deps);
+    expect(a.note).toContain("DRY RUN");
+    expect(b.note).not.toContain("DRY RUN");
+  });
+});
