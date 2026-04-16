@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,8 +13,8 @@ import {
   formatStopLossAlert,
   sendTelegram,
 } from "./broker-local-notify.js";
-import { fundConfigSchema } from "../types.js";
-import type { UniverseResolution, FundConfig } from "../types.js";
+import { fundConfigSchema, universeSchema } from "../types.js";
+import type { UniverseResolution, FundConfig, Universe, UniversePreset, FmpScreenerFilters } from "../types.js";
 import {
   resolveUniverse,
   checkSectorExclusion,
@@ -343,6 +343,92 @@ export async function handleBuyGate(
   return { ok: true, out_of_universe: true, out_of_universe_reason: trimmed };
 }
 
+// ── Update Universe handler (pure, testable) ──────────────────
+
+export interface UpdateUniverseInput {
+  mode?: { preset?: UniversePreset; filters?: Record<string, unknown> };
+  include_tickers?: string[];
+  exclude_tickers?: string[];
+  exclude_sectors?: string[];
+}
+export interface UpdateUniverseDeps {
+  loadCurrentConfig: () => Promise<FundConfig>;
+  writeConfigYaml: (config: FundConfig) => Promise<void>;
+  invalidateUniverseCache: () => Promise<void>;
+  regenerateClaudeMd: (config: FundConfig) => Promise<void>;
+}
+export interface UpdateUniverseOutput {
+  ok: true;
+  before: { source: string; include_count: number; exclude_tickers_count: number; exclude_sectors_count: number };
+  after: { source: string; include_count: number; exclude_tickers_count: number; exclude_sectors_count: number };
+  note: string;
+}
+
+function summarizeUniverse(u: Universe): { source: string; include_count: number; exclude_tickers_count: number; exclude_sectors_count: number } {
+  const source = u.preset ? `preset:${u.preset}` : "filters";
+  return {
+    source,
+    include_count: u.include_tickers.length,
+    exclude_tickers_count: u.exclude_tickers.length,
+    exclude_sectors_count: u.exclude_sectors.length,
+  };
+}
+
+export async function handleUpdateUniverse(
+  input: UpdateUniverseInput,
+  deps: UpdateUniverseDeps,
+): Promise<UpdateUniverseOutput> {
+  // Validate XOR constraint at input level first (before schema re-parse)
+  if (input.mode?.preset && input.mode?.filters) {
+    throw new Error("mode.preset and mode.filters are mutually exclusive — pass exactly one.");
+  }
+
+  const current = await deps.loadCurrentConfig();
+  const before = summarizeUniverse(current.universe);
+
+  // Build patched universe
+  let next: Universe = { ...current.universe };
+  if (input.mode?.preset) {
+    next = {
+      preset: input.mode.preset,
+      // Drop filters when switching to preset
+      include_tickers: next.include_tickers,
+      exclude_tickers: next.exclude_tickers,
+      exclude_sectors: next.exclude_sectors,
+    };
+  } else if (input.mode?.filters) {
+    next = {
+      filters: input.mode.filters as FmpScreenerFilters,
+      // Drop preset when switching to filters
+      include_tickers: next.include_tickers,
+      exclude_tickers: next.exclude_tickers,
+      exclude_sectors: next.exclude_sectors,
+    };
+  }
+  if (input.include_tickers !== undefined) next.include_tickers = input.include_tickers;
+  if (input.exclude_tickers !== undefined) next.exclude_tickers = input.exclude_tickers;
+  if (input.exclude_sectors !== undefined) next.exclude_sectors = input.exclude_sectors as Universe["exclude_sectors"];
+
+  // Schema validation — throws a Zod error with a clear message if bad
+  const validated = universeSchema.parse(next);
+
+  // Wrap in the full fundConfigSchema for belt-and-suspenders
+  const newConfig = fundConfigSchema.parse({ ...current, universe: validated });
+
+  // Persist
+  await deps.writeConfigYaml(newConfig);
+  await deps.invalidateUniverseCache();
+  await deps.regenerateClaudeMd(newConfig);
+
+  const after = summarizeUniverse(newConfig.universe);
+  return {
+    ok: true,
+    before,
+    after,
+    note: "Universe updated. Next `check_universe` / `list_universe` / `place_order` calls will resolve against the new config (cache invalidated). CLAUDE.md regenerated with the updated 'Your Universe' section.",
+  };
+}
+
 async function fetchFmpPrice(symbol: string): Promise<number> {
   if (!FMP_API_KEY) throw new Error("FMP_API_KEY not configured");
   const resp = await fetch(`${FMP_BASE}/quote/${encodeURIComponent(symbol)}?apikey=${FMP_API_KEY}`, {
@@ -632,6 +718,53 @@ server.tool(
     const getProfile = (t: string) => getCompanyProfile(t, apiKey);
     const r = await handleListUniverse(args, { resolve, getProfile });
     return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+  },
+);
+
+server.tool(
+  "update_universe",
+  "Mutate this fund's universe block in fund_config.yaml. Validates with the schema, writes atomically, invalidates the resolver cache, and regenerates CLAUDE.md. Use this instead of editing fund_config.yaml directly. Semantics: mode.preset|filters switches source (mutually exclusive — passing both is an error); include_tickers/exclude_tickers/exclude_sectors REPLACE their current lists (to add one item, first call check_universe or list_universe to read the current list, then pass the full new list including the addition). Omitted fields leave current values unchanged. Tickers are uppercased automatically.",
+  {
+    mode: z.object({
+      preset: z.enum(["sp500", "nasdaq100", "dow30"]).optional().describe("Switch to a canonical index preset"),
+      filters: z.record(z.string(), z.any()).optional().describe("Switch to custom FMP screener filters. If provided, REPLACES any current filters. Must pass Zod validation (see universe schema)."),
+    }).optional().describe("Change the universe source. Omit to keep current preset/filters. Pass exactly one of preset OR filters."),
+    include_tickers: z.array(z.string()).optional().describe("REPLACES the current include_tickers list (always-include tickers, bypass universe filters)"),
+    exclude_tickers: z.array(z.string()).optional().describe("REPLACES the current exclude_tickers list (hard-block these tickers)"),
+    exclude_sectors: z.array(z.string()).optional().describe("REPLACES the current exclude_sectors list (hard-block these sectors, FMP canonical names like 'Technology', 'Energy')"),
+  },
+  async (args) => {
+    try {
+      const r = await handleUpdateUniverse(args, {
+        loadCurrentConfig: async () => {
+          // Bypass the module cache to always read fresh
+          const yamlPath = join(FUND_DIR, "fund_config.yaml");
+          const raw = await readFile(yamlPath, "utf-8");
+          return fundConfigSchema.parse(yaml.load(raw));
+        },
+        writeConfigYaml: async (config) => {
+          const yamlPath = join(FUND_DIR, "fund_config.yaml");
+          const tmp = `${yamlPath}.tmp`;
+          await writeFile(tmp, yaml.dump(config, { lineWidth: 120 }), "utf-8");
+          await rename(tmp, yamlPath);
+          cachedFundConfig = null; // invalidate module cache
+        },
+        invalidateUniverseCache: async () => {
+          const { fundPaths } = await import("../paths.js");
+          const fundName = fundNameFromEnv();
+          const p = fundPaths(fundName).state.universe;
+          try { await unlink(p); } catch { /* already absent — ignore */ }
+        },
+        regenerateClaudeMd: async (config) => {
+          const { generateFundClaudeMd } = await import("../template.js");
+          await generateFundClaudeMd(config);
+        },
+      });
+      return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }) }] };
+    }
   },
 );
 

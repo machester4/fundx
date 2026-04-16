@@ -99,6 +99,13 @@ describe("BUILTIN_SKILLS", () => {
     expect(skill!.content).toContain("list_universe");
   });
 
+  it("risk-assessment skill mentions update_universe tool", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.dirName === "risk-assessment");
+    expect(skill).toBeDefined();
+    expect(skill!.content).toContain("update_universe");
+    expect(skill!.content).toContain("Modifying the universe");
+  });
+
   it("includes Trade Memory skill with R-multiple framework", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Memory");
     expect(skill).toBeDefined();
