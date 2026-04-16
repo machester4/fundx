@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { writeFile, rename } from "node:fs/promises";
 import type { FundConfig } from "./types.js";
 import { fundPaths } from "./paths.js";
 
@@ -6,7 +6,9 @@ import { fundPaths } from "./paths.js";
 export async function generateFundClaudeMd(config: FundConfig): Promise<void> {
   const paths = fundPaths(config.fund.name);
   const content = buildClaudeMd(config);
-  await writeFile(paths.claudeMd, content, "utf-8");
+  const tmp = `${paths.claudeMd}.tmp`;
+  await writeFile(tmp, content, "utf-8");
+  await rename(tmp, paths.claudeMd);
 }
 
 function renderUniverseSection(c: FundConfig): string {
