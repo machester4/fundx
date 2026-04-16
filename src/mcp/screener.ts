@@ -8,7 +8,7 @@ import {
   getTrajectory,
   tagManually,
 } from "../services/watchlist.service.js";
-import { openPriceCache } from "../services/price-cache.service.js";
+import { openPriceCache, readBars, isFresh, writeBars } from "../services/price-cache.service.js";
 import {
   getHistoricalDaily,
   getScreenerResultsRaw,
@@ -17,13 +17,15 @@ import {
 } from "../services/market.service.js";
 import { resolveUniverse } from "../services/universe.service.js";
 import { runScreen, scoreMomentum121 } from "../services/screening.service.js";
-import { readBars, isFresh, writeBars } from "../services/price-cache.service.js";
 import {
   screenNameSchema,
   watchlistStatusSchema,
   fmpScreenerFiltersSchema,
   type FundConfig,
   type FmpScreenerFilters,
+  type DailyBar,
+  type DiscoverResult,
+  type DiscoverResultEntry,
 } from "../types.js";
 import { loadGlobalConfig } from "../config.js";
 import { loadAllFundConfigs } from "../services/fund.service.js";
@@ -78,40 +80,24 @@ export async function handleScreenRun(
   return { summary };
 }
 
-export interface DiscoverResultEntry {
-  ticker: string;
-  score: number;
-  return_12_1: number;
-  adv_usd_30d: number;
-  last_price: number;
-  missing_days: number;
-  companyName?: string;
-  sector?: string;
-  market_cap?: number;
-  exchange?: string;
-  is_etf?: boolean;
-}
-
-export interface DiscoverResult {
-  candidates_fetched: number;
-  candidates_scored: number;
-  candidates_passed: number;
-  duration_ms: number;
-  results: DiscoverResultEntry[];
-}
-
 const MIN_PRICE = 5;
 const MIN_ADV_USD = 10_000_000;
+
+// Message thrown by getScreenerResultsRaw when FMP returns an empty array.
+// HTTP errors produce a different message ("FMP /company-screener returned HTTP <status>").
+const FMP_EMPTY_BODY_MSG = "FMP screener returned empty/invalid body";
 
 export async function handleScreenDiscover(
   pcdb: Database.Database,
   args: { filters: FmpScreenerFilters; screen?: string },
   deps: {
     fetchCandidates: (filters: FmpScreenerFilters) => Promise<ScreenerResult[]>;
-    fetchBars: (ticker: string) => Promise<import("../types.js").DailyBar[]>;
+    fetchBars: (ticker: string) => Promise<DailyBar[]>;
     now: () => number;
   },
 ): Promise<DiscoverResult> {
+  screenNameSchema.parse(args.screen ?? "momentum-12-1");
+
   const started = Date.now();
   const now = deps.now();
 
@@ -120,7 +106,7 @@ export async function handleScreenDiscover(
     candidates = await deps.fetchCandidates(args.filters);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("empty") || msg.includes("invalid body")) {
+    if (msg === FMP_EMPTY_BODY_MSG) {
       return { candidates_fetched: 0, candidates_scored: 0, candidates_passed: 0, duration_ms: 0, results: [] };
     }
     throw err;
@@ -138,7 +124,7 @@ export async function handleScreenDiscover(
 
   for (const candidate of candidates) {
     const ticker = candidate.symbol;
-    let bars: import("../types.js").DailyBar[];
+    let bars: DailyBar[];
 
     if (isFresh(pcdb, ticker, now)) {
       bars = readBars(pcdb, ticker);
