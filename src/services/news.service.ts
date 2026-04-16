@@ -5,6 +5,7 @@ import { XMLParser } from "fast-xml-parser";
 import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig } from "./fund.service.js";
+import { resolveUniverse } from "./universe.service.js";
 import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCounts } from "../state.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed, type FundConfig } from "../types.js";
 
@@ -277,12 +278,19 @@ async function fetchSingleFeed(feed: NewsFeed, maxPerFeed: number, knownTickers:
   return newArticles;
 }
 
-// Temporary helper until the per-fund universe resolver informs news relevance
-// matching. Currently returns only explicit include_tickers, not the resolved
-// universe. See feat/per-fund-universe feature plan.
-// TODO(per-fund-universe): use resolveUniverse() here.
-function getKnownUniverseTickers(config: FundConfig): string[] {
-  return [...config.universe.include_tickers];
+async function getKnownUniverseTickers(fundName: string, config: FundConfig): Promise<string[]> {
+  try {
+    const gcfg = await loadGlobalConfig();
+    const apiKey = gcfg.market_data?.fmp_api_key ?? "";
+    const resolution = await resolveUniverse(fundName, config.universe, apiKey);
+    return resolution.final_tickers;
+  } catch (err) {
+    console.warn(
+      `[news] universe resolution failed for ${fundName}, using include_tickers fallback:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [...config.universe.include_tickers];
+  }
 }
 
 async function gatherKnownTickers(): Promise<string[]> {
@@ -292,8 +300,8 @@ async function gatherKnownTickers(): Promise<string[]> {
     try {
       const config = await loadFundConfig(name);
       if (config.fund.status !== "active") continue;
-      // Tickers from universe (include_tickers only — full resolved universe not yet available)
-      for (const t of getKnownUniverseTickers(config)) tickers.add(t);
+      // Tickers from resolved universe
+      for (const t of await getKnownUniverseTickers(name, config)) tickers.add(t);
       // Tickers from portfolio
       const portfolio = await readPortfolio(name).catch(() => null);
       if (portfolio) {
@@ -525,8 +533,7 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
     try {
       const config = await loadFundConfig(name);
       if (config.fund.status !== "active") continue;
-      // include_tickers only — full resolved universe not yet available
-      const tickers: string[] = getKnownUniverseTickers(config);
+      const tickers: string[] = await getKnownUniverseTickers(name, config);
       const portfolio = await readPortfolio(name).catch(() => null);
       if (portfolio) portfolio.positions.forEach((p) => tickers.push(p.symbol));
       fundTickers.set(name, [...new Set(tickers)]);
