@@ -27,6 +27,7 @@ import {
   handleListUniverse,
   handleBuyGate,
   handleUpdateUniverse,
+  MIN_OOU_REASON_LENGTH,
 } from "./broker-local-universe.js";
 import { getCompanyProfile } from "../services/market.service.js";
 
@@ -283,7 +284,7 @@ server.tool(
     side: z.enum(["buy", "sell"]).describe("Order side"),
     stop_loss: z.number().positive().optional().describe("Stop-loss price (set on buy, optional)"),
     entry_reason: z.string().optional().describe("Thesis or reason for the trade"),
-    out_of_universe_reason: z.string().optional().describe("Required when buying a ticker outside the fund universe (>=20 chars)"),
+    out_of_universe_reason: z.string().optional().describe(`Required when buying a ticker outside the fund universe (>=${MIN_OOU_REASON_LENGTH} chars)`),
   },
   async ({ symbol, qty, side, stop_loss, entry_reason, out_of_universe_reason }) => {
     // Universe gate: buys only — sells are always allowed
@@ -507,10 +508,13 @@ server.tool(
           const { generateFundClaudeMd } = await import("../template.js");
           await generateFundClaudeMd(config);
         },
-        resolveNewUniverse: async (config) => {
+        resolveNewUniverse: async (config, opts) => {
           if (!FMP_API_KEY) throw new Error("FMP_API_KEY not configured for post-write validation");
           const fundName = fundNameFromEnv();
-          return resolveUniverse(fundName, config.universe, FMP_API_KEY, { force: true });
+          return resolveUniverse(fundName, config.universe, FMP_API_KEY, {
+            force: true,
+            persist: !opts.dryRun,
+          });
         },
         auditLog: async (entry) => {
           const { join: pathJoin } = await import("node:path");
