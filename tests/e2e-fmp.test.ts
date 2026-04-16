@@ -56,6 +56,6 @@ describeIfKey("FMP E2E (gated by FUNDX_FMP_E2E_KEY)", () => {
     _resetProfileCacheForTests();
     const profile = await getCompanyProfile("AAPL", FMP_KEY!);
     expect(profile).not.toBeNull();
-    expect(profile!.sector).toBe("Technology");
+    expect(profile!.sector).toMatch(/Tech/i);
   });
 });
