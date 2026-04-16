@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  FMP_EXCHANGES_ALL,
+  FMP_SECTORS,
+  UNIVERSE_PRESETS,
+} from "./constants/fmp-enums.js";
 
 // ── Objective Schemas ──────────────────────────────────────────
 
@@ -59,18 +64,71 @@ export const riskSchema = z.object({
 
 // ── Universe Schema ────────────────────────────────────────────
 
-const assetEntrySchema = z.object({
-  type: z.string(),
-  tickers: z.array(z.string()).optional(),
-  sectors: z.array(z.string()).optional(),
-  strategies: z.array(z.string()).optional(),
-  protocols: z.array(z.string()).optional(),
-});
+export const universePresetSchema = z.enum(UNIVERSE_PRESETS);
+export type UniversePreset = z.infer<typeof universePresetSchema>;
 
-export const universeSchema = z.object({
-  allowed: z.array(assetEntrySchema).default([]),
-  forbidden: z.array(assetEntrySchema).default([]),
-});
+export const fmpExchangeSchema = z.enum(FMP_EXCHANGES_ALL);
+export const fmpSectorSchema = z.enum(FMP_SECTORS);
+
+export const fmpScreenerFiltersSchema = z
+  .object({
+    market_cap_min: z.number().nonnegative().optional(),
+    market_cap_max: z.number().positive().optional(),
+    price_min: z.number().nonnegative().optional(),
+    price_max: z.number().positive().optional(),
+    beta_min: z.number().optional(),
+    beta_max: z.number().optional(),
+    dividend_min: z.number().nonnegative().optional(),
+    dividend_max: z.number().nonnegative().optional(),
+    volume_min: z.number().nonnegative().optional(),
+    volume_max: z.number().positive().optional(),
+    sector: z.array(fmpSectorSchema).optional(),
+    industry: z.string().optional(),
+    exchange: z.array(fmpExchangeSchema).optional(),
+    country: z.string().regex(/^[A-Z]{2}$/).optional(),
+    is_etf: z.boolean().optional(),
+    is_fund: z.boolean().optional(),
+    is_actively_trading: z.boolean().default(true),
+    include_all_share_classes: z.boolean().optional(),
+    limit: z.number().int().min(1).max(10_000).default(500),
+  })
+  .refine(
+    (f) => !(f.market_cap_min != null && f.market_cap_max != null) || f.market_cap_min < f.market_cap_max,
+    { message: "market_cap_min must be < market_cap_max" },
+  )
+  .refine(
+    (f) => !(f.price_min != null && f.price_max != null) || f.price_min < f.price_max,
+    { message: "price_min must be < price_max" },
+  )
+  .refine(
+    (f) => !(f.beta_min != null && f.beta_max != null) || f.beta_min < f.beta_max,
+    { message: "beta_min must be < beta_max" },
+  )
+  .refine(
+    (f) => !(f.dividend_min != null && f.dividend_max != null) || f.dividend_min < f.dividend_max,
+    { message: "dividend_min must be < dividend_max" },
+  )
+  .refine(
+    (f) => !(f.volume_min != null && f.volume_max != null) || f.volume_min < f.volume_max,
+    { message: "volume_min must be < volume_max" },
+  );
+
+export type FmpScreenerFilters = z.infer<typeof fmpScreenerFiltersSchema>;
+
+export const universeSchema = z
+  .object({
+    preset: universePresetSchema.optional(),
+    filters: fmpScreenerFiltersSchema.optional(),
+    include_tickers: z.array(z.string().transform((s) => s.toUpperCase())).default([]),
+    exclude_tickers: z.array(z.string().transform((s) => s.toUpperCase())).default([]),
+    exclude_sectors: z.array(fmpSectorSchema).default([]),
+  })
+  .refine(
+    (u) => (u.preset != null) !== (u.filters != null),
+    { message: "universe must have exactly one of `preset` or `filters`" },
+  );
+
+export type Universe = z.infer<typeof universeSchema>;
 
 // ── Schedule Schema ────────────────────────────────────────────
 
@@ -740,3 +798,24 @@ export const watchlistFundTagSchema = z.object({
   tagged_at: z.number().int().positive(),
 });
 export type WatchlistFundTag = z.infer<typeof watchlistFundTagSchema>;
+
+// ── Universe Resolution Schema ────────────────────────────────
+
+export const universeResolutionSchema = z.object({
+  resolved_at: z.number().int().positive(),
+  config_hash: z.string(),
+  resolved_from: z.enum(["fmp", "stale_cache", "static_fallback"]),
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("preset"), preset: universePresetSchema }),
+    z.object({ kind: z.literal("filters") }),
+  ]),
+  base_tickers: z.array(z.string()),
+  final_tickers: z.array(z.string()),
+  include_applied: z.array(z.string()),
+  exclude_tickers_applied: z.array(z.string()),
+  exclude_sectors_applied: z.array(z.string()),
+  exclude_tickers_config: z.array(z.string()),
+  exclude_sectors_config: z.array(z.string()),
+  count: z.number().int().nonnegative(),
+});
+export type UniverseResolution = z.infer<typeof universeResolutionSchema>;

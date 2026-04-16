@@ -545,22 +545,12 @@ export function tagFundCompatibilityForTickers(
   tickers: string[],
   now: number,
 ): void {
-  const stmt = db.prepare(
-    "INSERT INTO watchlist_fund_tags (ticker, fund_name, compatible, tagged_at) " +
-      "VALUES (?, ?, ?, ?) " +
-      "ON CONFLICT(ticker, fund_name) DO UPDATE SET compatible = excluded.compatible, tagged_at = excluded.tagged_at",
-  );
-  const tx = db.transaction(() => {
-    for (const fund of fundConfigs) {
-      const etfEntries = fund.universe.allowed.filter(
-        (e) => e.type === "etf",
-      ) as Array<{ type: "etf"; tickers: string[] }>;
-      if (etfEntries.length === 0) continue;
-      const allowed = new Set(etfEntries.flatMap((e) => e.tickers ?? []));
-      for (const t of tickers) {
-        stmt.run(t, fund.fund.name, allowed.has(t) ? 1 : 0, now);
-      }
-    }
-  });
-  tx();
+  // Under the new per-fund universe schema, ETF-based compatibility tagging
+  // no longer applies. This function is retained as a no-op until the new
+  // universe model informs a replacement (see per-fund-universe feature plan).
+  // TODO(per-fund-universe): rewrite using resolveUniverse() once available.
+  void db;
+  void fundConfigs;
+  void tickers;
+  void now;
 }

@@ -34,7 +34,7 @@ describe("Phase 5 Zod Schemas", () => {
         capital: { initial: 10000, currency: "USD" },
         objective: { type: "growth", target_multiple: 2 },
         risk: { profile: "moderate" },
-        universe: {},
+        universe: { preset: "sp500" },
         schedule: {},
         broker: { mode: "paper" },
       },
@@ -234,7 +234,7 @@ describe("Special Sessions", () => {
       capital: { initial: 10000 },
       objective: { type: "growth", target_multiple: 2 },
       risk: { profile: "moderate" },
-      universe: { allowed: [], forbidden: [] },
+      universe: { preset: "sp500" },
       schedule: {
         special_sessions: [
           {
@@ -264,7 +264,7 @@ describe("Special Sessions", () => {
       capital: { initial: 10000 },
       objective: { type: "growth", target_multiple: 2 },
       risk: { profile: "moderate" },
-      universe: { allowed: [], forbidden: [] },
+      universe: { preset: "sp500" },
       schedule: {
         special_sessions: [
           {
@@ -293,7 +293,7 @@ describe("Special Sessions", () => {
       capital: { initial: 10000 },
       objective: { type: "growth", target_multiple: 2 },
       risk: { profile: "moderate" },
-      universe: { allowed: [], forbidden: [] },
+      universe: { preset: "sp500" },
       schedule: {
         special_sessions: [
           {

@@ -163,7 +163,8 @@ describe("E2E: init → create fund → run session", () => {
         max_position_pct: 15,
       },
       universe: {
-        allowed: [{ type: "etf", tickers: ["SPY", "QQQ", "BND", "GLD"] }],
+        preset: "sp500",
+        include_tickers: ["SPY", "QQQ", "BND", "GLD"],
       },
       schedule: {
         timezone: "America/New_York",
@@ -250,7 +251,7 @@ describe("E2E: init → create fund → run session", () => {
         monthly_burn: 2500,
       },
       risk: { profile: "conservative" },
-      universe: { allowed: [] },
+      universe: { preset: "sp500" },
       schedule: {
         sessions: {
           pre_market: {
@@ -309,7 +310,8 @@ describe("E2E: init → create fund → run session", () => {
       objective: { type: "growth", target_multiple: 2 },
       risk: { profile: "moderate" },
       universe: {
-        allowed: [{ type: "etf", tickers: ["SPY", "QQQ", "ARKK"] }],
+        preset: "nasdaq100",
+        include_tickers: ["SPY", "QQQ", "ARKK"],
       },
       schedule: {
         sessions: {

@@ -197,6 +197,26 @@ Only after all checks pass, specify the exact order:
 ## Output
 Structured checklist: EV calculation (with drawdown recovery context), dual-method size
 validation, and final order specification or rejection with reason.
+
+## Universe awareness
+
+Before calling \`place_order\` (buy side), validate the ticker via the \`check_universe\` tool on the broker-local MCP. If \`in_universe: false\` and \`exclude_hard_block: false\`, you may proceed by including \`out_of_universe_reason\` (>= 20 chars, material and time-sensitive) in the trade call. If \`exclude_hard_block: true\`, do not attempt the trade — excluded tickers and sectors are set by the mandate and cannot be overridden.
+
+Use \`list_universe({ sector })\` when you need to survey what's available in a particular area of your universe.
+
+<example type="good">
+check_universe({ ticker: "CRWD" }) returned in_universe: true, base_match: true. Proceeding with place_order.
+</example>
+
+<example type="good">
+check_universe({ ticker: "NVDA" }) returned in_universe: false, requires_justification: true (NVDA is outside nasdaq100 — hypothetical).
+Thesis: "NVDA announced Q1 beat with forward guidance +$2B above consensus, and the options-implied move is 5% vs historical average 3% — event-driven catalyst within 72h."
+Passing this thesis as out_of_universe_reason to place_order.
+</example>
+
+<example type="bad">
+Skipping check_universe because I'm confident AAPL is in sp500.
+</example>
 `,
   },
   {

@@ -62,7 +62,7 @@ const makeFundConfig = (sessionOverrides: Record<string, unknown> = {}) => ({
   capital: { initial: 50000, currency: "USD" },
   objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
   risk: { profile: "conservative" },
-  universe: { allowed: [] },
+  universe: { preset: "sp500" },
   schedule: {
     sessions: {
       pre_market: {
@@ -88,6 +88,15 @@ vi.mock("../src/services/fund.service.js", () => ({
   listFundNames: vi.fn(async () => ["test-fund"]),
 }));
 
+const mockResolveUniverse = vi.fn();
+vi.mock("../src/services/universe.service.js", () => ({
+  resolveUniverse: (...args: unknown[]) => mockResolveUniverse(...args),
+}));
+
+vi.mock("../src/config.js", () => ({
+  loadGlobalConfig: vi.fn(async () => ({ market_data: { fmp_api_key: "test" } })),
+}));
+
 import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 
@@ -96,6 +105,7 @@ const mockedLoadFundConfig = vi.mocked(loadFundConfig);
 beforeEach(() => {
   vi.clearAllMocks();
   mockedLoadFundConfig.mockResolvedValue(makeFundConfig() as never);
+  mockResolveUniverse.mockResolvedValue(null);
   mockRunAgentQuery.mockResolvedValue({
     output: "Session complete. No trades.",
     cost_usd: 0.03,
@@ -268,5 +278,90 @@ describe("runFundSession with agents", () => {
     const opts = mockRunAgentQuery.mock.calls[0][0];
     expect(opts.prompt).toContain("session-init rule");
     expect(opts.prompt).toContain("Session Protocol");
+  });
+});
+
+// ── fund_universe block in session prompt ─────────────────────
+
+describe("runFundSession — fund_universe block", () => {
+  it("includes <fund_universe> block when cached resolution exists", async () => {
+    mockResolveUniverse.mockResolvedValue({
+      resolved_at: 1_744_000_000_000,
+      config_hash: "abc123",
+      resolved_from: "fmp",
+      source: { kind: "preset", preset: "sp500" },
+      base_tickers: ["AAPL", "MSFT"],
+      final_tickers: ["AAPL", "MSFT"],
+      include_applied: [],
+      exclude_tickers_applied: [],
+      exclude_sectors_applied: [],
+      exclude_tickers_config: [],
+      exclude_sectors_config: [],
+      count: 2,
+    });
+
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("<fund_universe>");
+    expect(opts.prompt).toContain("count: 2");
+    expect(opts.prompt).toContain("source: preset:sp500");
+    expect(opts.prompt).toContain("resolved_from: fmp");
+    expect(opts.prompt).toContain("</fund_universe>");
+  });
+
+  it("omits <fund_universe> block when no cached resolution", async () => {
+    mockResolveUniverse.mockResolvedValue(null);
+
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).not.toContain("<fund_universe>");
+  });
+
+  it("adds freshness_warning when resolved_from is stale_cache", async () => {
+    mockResolveUniverse.mockResolvedValue({
+      resolved_at: 1_744_000_000_000,
+      config_hash: "abc123",
+      resolved_from: "stale_cache",
+      source: { kind: "preset", preset: "nasdaq100" },
+      base_tickers: ["AAPL"],
+      final_tickers: ["AAPL"],
+      include_applied: [],
+      exclude_tickers_applied: [],
+      exclude_sectors_applied: [],
+      exclude_tickers_config: [],
+      exclude_sectors_config: [],
+      count: 1,
+    });
+
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("freshness_warning");
+    expect(opts.prompt).toContain("stale_cache");
+  });
+
+  it("includes excluded_tickers and excluded_sectors when present", async () => {
+    mockResolveUniverse.mockResolvedValue({
+      resolved_at: 1_744_000_000_000,
+      config_hash: "abc123",
+      resolved_from: "fmp",
+      source: { kind: "preset", preset: "sp500" },
+      base_tickers: ["AAPL", "TSLA"],
+      final_tickers: ["AAPL"],
+      include_applied: [],
+      exclude_tickers_applied: ["TSLA"],
+      exclude_sectors_applied: [],
+      exclude_tickers_config: ["TSLA"],
+      exclude_sectors_config: ["Energy"],
+      count: 1,
+    });
+
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("excluded_tickers: [TSLA]");
+    expect(opts.prompt).toContain("excluded_sectors: [Energy]");
   });
 });

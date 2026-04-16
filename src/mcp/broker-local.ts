@@ -1,9 +1,10 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import Database from "better-sqlite3";
+import yaml from "js-yaml";
 import { executeBuy, executeSell } from "../paper-trading.js";
 import {
   isInQuietHoursEnv,
@@ -12,6 +13,14 @@ import {
   formatStopLossAlert,
   sendTelegram,
 } from "./broker-local-notify.js";
+import { fundConfigSchema } from "../types.js";
+import type { UniverseResolution, FundConfig } from "../types.js";
+import {
+  resolveUniverse,
+  checkSectorExclusion,
+  isInUniverse,
+} from "../services/universe.service.js";
+import { getCompanyProfile } from "../services/market.service.js";
 
 // ── State helpers ────────────────────────────────────────────
 
@@ -19,8 +28,10 @@ const FUND_DIR = process.env.FUND_DIR!;
 const FMP_API_KEY = process.env.FMP_API_KEY;
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
 
-const portfolioPath = join(FUND_DIR, "state", "portfolio.json");
-const journalPath = join(FUND_DIR, "state", "trade_journal.sqlite");
+// Lazy path getters — evaluated at call time so tests importing pure handlers
+// don't trigger errors when FUND_DIR is undefined.
+function getPortfolioPath(): string { return join(FUND_DIR, "state", "portfolio.json"); }
+function getJournalPath(): string { return join(FUND_DIR, "state", "trade_journal.sqlite"); }
 
 interface Position {
   symbol: string;
@@ -44,11 +55,12 @@ interface Portfolio {
 }
 
 async function readPortfolio(): Promise<Portfolio> {
-  const raw = await readFile(portfolioPath, "utf-8");
+  const raw = await readFile(getPortfolioPath(), "utf-8");
   return JSON.parse(raw) as Portfolio;
 }
 
 async function writePortfolioAtomic(portfolio: Portfolio): Promise<void> {
+  const portfolioPath = getPortfolioPath();
   await mkdir(dirname(portfolioPath), { recursive: true });
   const tmp = portfolioPath + ".tmp";
   await writeFile(tmp, JSON.stringify(portfolio, null, 2), "utf-8");
@@ -63,8 +75,10 @@ function logTrade(trade: {
   total_value: number;
   reason: string;
   sessionType: string;
+  outOfUniverse?: boolean;
+  outOfUniverseReason?: string | null;
 }): void {
-  const db = new Database(journalPath);
+  const db = new Database(getJournalPath());
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
   db.exec(`
@@ -86,16 +100,23 @@ function logTrade(trade: {
       pnl REAL,
       pnl_pct REAL,
       lessons_learned TEXT,
-      market_context TEXT
+      market_context TEXT,
+      out_of_universe INTEGER NOT NULL DEFAULT 0,
+      out_of_universe_reason TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_trades_fund ON trades(fund);
     CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
     CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
   `);
+  // Idempotent column additions for databases created before these columns existed.
+  // SQLite ALTER TABLE ADD COLUMN throws if the column already exists, so we catch
+  // and ignore the duplicate-column error to make upgrades safe.
+  try { db.exec(`ALTER TABLE trades ADD COLUMN out_of_universe INTEGER NOT NULL DEFAULT 0`); } catch { /* already exists */ }
+  try { db.exec(`ALTER TABLE trades ADD COLUMN out_of_universe_reason TEXT`); } catch { /* already exists */ }
   const fundName = FUND_DIR.split("/").pop() ?? "unknown";
   db.prepare(`
-    INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, total_value, order_type, session_type, reasoning)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, total_value, order_type, session_type, reasoning, out_of_universe, out_of_universe_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     new Date().toISOString(),
     fundName,
@@ -107,8 +128,219 @@ function logTrade(trade: {
     "market",
     trade.sessionType,
     trade.reason,
+    trade.outOfUniverse ? 1 : 0,
+    trade.outOfUniverseReason ?? null,
   );
   db.close();
+}
+
+// ── Fund config (cached) ──────────────────────────────────────
+// Cache scope: per-MCP-subprocess. The broker-local MCP is spawned fresh
+// at each session start, so this cache is never stale across sessions.
+// Mid-session YAML edits to fund_config.yaml are NOT picked up — restart
+// the session (or the daemon) to apply config changes.
+let cachedFundConfig: FundConfig | null = null;
+
+async function loadFundConfigForMcp(): Promise<FundConfig> {
+  if (cachedFundConfig) return cachedFundConfig;
+  const yamlPath = join(FUND_DIR, "fund_config.yaml");
+  const raw = await readFile(yamlPath, "utf-8");
+  const parsed = yaml.load(raw);
+  cachedFundConfig = fundConfigSchema.parse(parsed);
+  return cachedFundConfig;
+}
+
+function fundNameFromEnv(): string {
+  return basename(FUND_DIR);
+}
+
+// ── Universe tool handlers (pure, testable) ───────────────────
+export interface CheckUniverseInput { ticker: string }
+export interface CheckUniverseDeps {
+  resolve: () => Promise<UniverseResolution>;
+  checkSector: (ticker: string, resolution: UniverseResolution) => Promise<{ excluded: boolean; sector?: string }>;
+}
+export interface CheckUniverseOutput {
+  in_universe: boolean;
+  base_match: boolean;
+  include_override: boolean;
+  exclude_hard_block: boolean;
+  exclude_reason?: "ticker" | "sector";
+  requires_justification: boolean;
+  resolved_at: number;
+  resolved_from: string;
+}
+
+export async function handleCheckUniverse(
+  input: CheckUniverseInput,
+  deps: CheckUniverseDeps,
+): Promise<CheckUniverseOutput> {
+  const resolution = await deps.resolve();
+  const status = isInUniverse(resolution, input.ticker);
+  // Hard block: excluded by ticker config
+  if (status.exclude_hard_block) {
+    return {
+      in_universe: false,
+      base_match: status.base_match,
+      include_override: false,
+      exclude_hard_block: true,
+      exclude_reason: status.exclude_reason,
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  // Explicit include_tickers takes precedence over exclude_sectors
+  if (status.include_override) {
+    return {
+      in_universe: true,
+      base_match: status.base_match,
+      include_override: true,
+      exclude_hard_block: false,
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  // Preset mode: check sector exclusion via profile
+  const sectorCheck = await deps.checkSector(input.ticker, resolution);
+  if (sectorCheck.excluded) {
+    return {
+      in_universe: false,
+      base_match: status.base_match,
+      include_override: false,
+      exclude_hard_block: true,
+      exclude_reason: "sector",
+      requires_justification: false,
+      resolved_at: resolution.resolved_at,
+      resolved_from: resolution.resolved_from,
+    };
+  }
+  return {
+    in_universe: status.in_universe,
+    base_match: status.base_match,
+    include_override: false,
+    exclude_hard_block: false,
+    requires_justification: !status.in_universe,
+    resolved_at: resolution.resolved_at,
+    resolved_from: resolution.resolved_from,
+  };
+}
+
+export interface ListUniverseInput { sector?: string; limit?: number }
+export interface ListUniverseDeps {
+  resolve: () => Promise<UniverseResolution>;
+  getProfile: (ticker: string) => Promise<{ sector?: string } | null>;
+}
+export interface ListUniverseOutput {
+  tickers: string[];
+  total: number;
+  resolved_at: number;
+  resolved_from: string;
+}
+
+export async function handleListUniverse(
+  input: ListUniverseInput,
+  deps: ListUniverseDeps,
+): Promise<ListUniverseOutput> {
+  const resolution = await deps.resolve();
+  let tickers = resolution.final_tickers;
+  if (input.sector) {
+    const matching: string[] = [];
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const batch = tickers.slice(i, i + BATCH_SIZE);
+      const profiles = await Promise.all(
+        batch.map((t) => deps.getProfile(t).then((p) => ({ t, p }))),
+      );
+      for (const { t, p } of profiles) {
+        if (p?.sector === input.sector) matching.push(t);
+      }
+    }
+    tickers = matching;
+  }
+  const total = tickers.length;
+  const effectiveLimit = input.limit ?? (input.sector ? 50 : undefined);
+  if (effectiveLimit && effectiveLimit > 0) tickers = tickers.slice(0, effectiveLimit);
+  return {
+    tickers,
+    total,
+    resolved_at: resolution.resolved_at,
+    resolved_from: resolution.resolved_from,
+  };
+}
+
+// ── Buy-gate handler (pure, testable) ──────────────────────────
+export interface BuyGateInput {
+  symbol: string;
+  out_of_universe_reason?: string;
+}
+export interface BuyGateDeps {
+  resolve: () => Promise<UniverseResolution>;
+  checkSector: (ticker: string, resolution: UniverseResolution) => Promise<{ excluded: boolean; sector?: string }>;
+}
+export type BuyGateResult =
+  | { ok: true; out_of_universe: boolean; out_of_universe_reason: string | null }
+  | { ok: false; code: "UNIVERSE_EXCLUDED" | "UNIVERSE_SOFT_GATE" | "UNIVERSE_REASON_TOO_SHORT"; message: string; exclude_reason?: "ticker" | "sector" };
+
+const MIN_OOU_REASON_LENGTH = 20;
+
+export async function handleBuyGate(
+  input: BuyGateInput,
+  deps: BuyGateDeps,
+): Promise<BuyGateResult> {
+  const t = input.symbol.toUpperCase();
+  const resolution = await deps.resolve();
+  const status = isInUniverse(resolution, t);
+
+  // Hard block by ticker config (exclude_tickers takes precedence)
+  if (status.exclude_hard_block) {
+    return {
+      ok: false,
+      code: "UNIVERSE_EXCLUDED",
+      message: `${t} is in this fund's exclude_tickers list.`,
+      exclude_reason: "ticker",
+    };
+  }
+
+  // Explicit include_tickers bypasses sector check (matches check_universe precedence)
+  if (status.include_override) {
+    return { ok: true, out_of_universe: false, out_of_universe_reason: null };
+  }
+
+  // Preset mode: check sector exclusion via profile
+  const sectorCheck = await deps.checkSector(t, resolution);
+  if (sectorCheck.excluded) {
+    return {
+      ok: false,
+      code: "UNIVERSE_EXCLUDED",
+      message: `${t} is in sector '${sectorCheck.sector}' which is excluded by this fund.`,
+      exclude_reason: "sector",
+    };
+  }
+
+  if (status.in_universe) {
+    return { ok: true, out_of_universe: false, out_of_universe_reason: null };
+  }
+
+  // Out-of-universe: require justification
+  const raw = input.out_of_universe_reason ?? "";
+  if (!raw) {
+    return {
+      ok: false,
+      code: "UNIVERSE_SOFT_GATE",
+      message: `${t} is outside this fund's universe. Pass out_of_universe_reason (>=${MIN_OOU_REASON_LENGTH} chars) describing a time-sensitive thesis to proceed.`,
+    };
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length < MIN_OOU_REASON_LENGTH) {
+    return {
+      ok: false,
+      code: "UNIVERSE_REASON_TOO_SHORT",
+      message: `out_of_universe_reason must be at least ${MIN_OOU_REASON_LENGTH} characters (got ${trimmed.length}).`,
+    };
+  }
+  return { ok: true, out_of_universe: true, out_of_universe_reason: trimmed };
 }
 
 async function fetchFmpPrice(symbol: string): Promise<number> {
@@ -210,15 +442,51 @@ server.tool(
 
 server.tool(
   "place_order",
-  "Place a paper buy or sell order. Fetches current market price from FMP and executes immediately. Returns the updated position and trade details.",
+  "Place a paper buy or sell order. Fetches current market price from FMP and executes immediately. For buys, the ticker is checked against this fund's universe (see check_universe). Hard-excluded tickers/sectors cannot be traded. Out-of-universe tickers require out_of_universe_reason (>=20 chars) describing a material, time-sensitive thesis. Sells are always allowed. Returns the updated position and trade details.",
   {
     symbol: z.string().describe("Ticker symbol"),
     qty: z.number().positive().describe("Number of shares"),
     side: z.enum(["buy", "sell"]).describe("Order side"),
     stop_loss: z.number().positive().optional().describe("Stop-loss price (set on buy, optional)"),
     entry_reason: z.string().optional().describe("Thesis or reason for the trade"),
+    out_of_universe_reason: z.string().optional().describe("Required when buying a ticker outside the fund universe (>=20 chars)"),
   },
-  async ({ symbol, qty, side, stop_loss, entry_reason }) => {
+  async ({ symbol, qty, side, stop_loss, entry_reason, out_of_universe_reason }) => {
+    // Universe gate: buys only — sells are always allowed
+    let outOfUniverse = false;
+    let outOfUniverseReason: string | null = null;
+    if (side === "buy") {
+      if (!FMP_API_KEY) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not configured for universe check" }) }] };
+      }
+      const cfg = await loadFundConfigForMcp();
+      const fundName = fundNameFromEnv();
+      const apiKey = FMP_API_KEY;
+      const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+      const checkSector = (t: string, res: UniverseResolution) => checkSectorExclusion(res, t, apiKey);
+      const gate = await handleBuyGate({ symbol, out_of_universe_reason }, { resolve, checkSector });
+      if (!gate.ok) {
+        return { content: [{ type: "text", text: JSON.stringify({ error: gate.code, message: gate.message }) }] };
+      }
+      outOfUniverse = gate.out_of_universe;
+      outOfUniverseReason = gate.out_of_universe_reason;
+    } else {
+      // Sell: universe gate does NOT apply (always allow), but tag the journal
+      // with whether the sold ticker is currently out-of-universe (for audit).
+      if (FMP_API_KEY) {
+        try {
+          const cfg = await loadFundConfigForMcp();
+          const fundName = fundNameFromEnv();
+          const resolution = await resolveUniverse(fundName, cfg.universe, FMP_API_KEY);
+          const status = isInUniverse(resolution, symbol.toUpperCase());
+          // Only set the flag when we can confirm; leave false on uncertain.
+          outOfUniverse = !status.in_universe && !status.exclude_hard_block;
+        } catch {
+          // Swallow — journal will report outOfUniverse=false (conservative default).
+        }
+      }
+    }
+
     const price = await fetchFmpPrice(symbol.toUpperCase());
     const portfolio = await readPortfolio();
 
@@ -241,6 +509,8 @@ server.tool(
       total_value: result.trade.total_value,
       reason: result.trade.reason,
       sessionType: "agent",
+      outOfUniverse,
+      outOfUniverseReason,
     });
 
     // ── Notify via Telegram (best-effort) ──────────────────────
@@ -323,6 +593,45 @@ server.tool(
         text: JSON.stringify({ symbol: symbol.toUpperCase(), price, timestamp: new Date().toISOString() }, null, 2),
       }],
     };
+  },
+);
+
+server.tool(
+  "check_universe",
+  "Check whether a ticker is in this fund's universe, and why. Returns base_match, include_override, exclude_hard_block, requires_justification.",
+  { ticker: z.string().describe("The ticker symbol to check (e.g. 'AAPL')") },
+  async (args) => {
+    if (!FMP_API_KEY) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not set" }) }] };
+    }
+    const cfg = await loadFundConfigForMcp();
+    const fundName = fundNameFromEnv();
+    const apiKey = FMP_API_KEY;
+    const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+    const checkSector = (t: string, res: UniverseResolution) => checkSectorExclusion(res, t, apiKey);
+    const r = await handleCheckUniverse({ ticker: args.ticker }, { resolve, checkSector });
+    return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
+  },
+);
+
+server.tool(
+  "list_universe",
+  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups with 10x concurrency; defaults limit to 50 when sector is set).",
+  {
+    sector: z.string().optional().describe("Filter to tickers in this sector (e.g. 'Technology')"),
+    limit: z.number().int().positive().optional().describe("Max tickers to return"),
+  },
+  async (args) => {
+    if (!FMP_API_KEY) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: "FMP_API_KEY not set" }) }] };
+    }
+    const cfg = await loadFundConfigForMcp();
+    const fundName = fundNameFromEnv();
+    const apiKey = FMP_API_KEY;
+    const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
+    const getProfile = (t: string) => getCompanyProfile(t, apiKey);
+    const r = await handleListUniverse(args, { resolve, getProfile });
+    return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   },
 );
 

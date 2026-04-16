@@ -90,6 +90,15 @@ describe("BUILTIN_SKILLS", () => {
     expect(skill!.content).toContain("TWO sizing methods");
   });
 
+  it("risk-assessment skill mentions check_universe and out_of_universe_reason", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.dirName === "risk-assessment");
+    expect(skill).toBeDefined();
+    expect(skill!.content).toContain("Universe awareness");
+    expect(skill!.content).toContain("check_universe");
+    expect(skill!.content).toContain("out_of_universe_reason");
+    expect(skill!.content).toContain("list_universe");
+  });
+
   it("includes Trade Memory skill with R-multiple framework", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Memory");
     expect(skill).toBeDefined();

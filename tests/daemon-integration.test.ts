@@ -161,7 +161,7 @@ const makeFundConfig = (overrides?: Partial<FundConfig>): FundConfig =>
     capital: { initial: 50000, currency: "USD" },
     objective: { type: "runway", target_months: 18, monthly_burn: 2500 },
     risk: { profile: "conservative", stop_loss_pct: 8 },
-    universe: { allowed: [] },
+    universe: { preset: "sp500" },
     schedule: {
       trading_days: ["MON", "TUE", "WED", "THU", "FRI"],
       sessions: {
