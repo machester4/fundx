@@ -27,7 +27,7 @@ import { isInQuietHoursEnv } from "../mcp/broker-local-notify.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
-import { getHistoricalDaily } from "./market.service.js";
+import { getHistoricalDaily, getCompanyProfile } from "./market.service.js";
 import { resolveUniverse } from "./universe.service.js";
 
 // ── Schedule Constants ────────────────────────────────────────
@@ -965,6 +965,10 @@ export async function startDaemon(): Promise<void> {
               resolutions: new Map([[cfg.fund.name, resolution]]),
               now: Date.now(),
               screenName: "momentum-12-1",
+              getSector: async (ticker) => {
+                const profile = await getCompanyProfile(ticker, apiKey);
+                return profile?.sector ?? null;
+              },
             });
             await log(
               `[screening] ${cfg.fund.name} run ${summary.run_id} ok: ` +

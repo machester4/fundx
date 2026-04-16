@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import { z } from "zod";
 import { openWatchlistDb } from "../../services/watchlist.service.js";
 import { openPriceCache } from "../../services/price-cache.service.js";
-import { getHistoricalDaily } from "../../services/market.service.js";
+import { getHistoricalDaily, getCompanyProfile } from "../../services/market.service.js";
 import { resolveUniverse } from "../../services/universe.service.js";
 import { runScreen } from "../../services/screening.service.js";
 import { loadGlobalConfig } from "../../config.js";
@@ -48,6 +48,10 @@ export default function ScreenRun({ options: opts }: Props) {
         resolutions: new Map([[fundName, resolution]]),
         now: Date.now(),
         screenName: opts.screen,
+        getSector: async (ticker) => {
+          const profile = await getCompanyProfile(ticker, apiKey);
+          return profile?.sector ?? null;
+        },
       });
     } finally {
       wdb.close();

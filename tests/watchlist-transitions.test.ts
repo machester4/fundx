@@ -227,9 +227,9 @@ describe("tagFundCompatibilityForTickers", () => {
     };
   }
 
-  it("tags tickers in base universe as compatible=1", () => {
+  it("tags tickers in base universe as compatible=1", async () => {
     const resolutions = new Map([["fund-a", makeResolution()]]);
-    tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
     const rows = db.prepare(
       "SELECT ticker, compatible FROM watchlist_fund_tags WHERE fund_name='fund-a' ORDER BY ticker"
     ).all() as Array<{ ticker: string; compatible: number }>;
@@ -239,39 +239,39 @@ describe("tagFundCompatibilityForTickers", () => {
     ]);
   });
 
-  it("tags include_tickers overrides as compatible=1", () => {
+  it("tags include_tickers overrides as compatible=1", async () => {
     const resolutions = new Map([["fund-a", makeResolution()]]);
-    tagFundCompatibilityForTickers(db, resolutions, ["TSM"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions, ["TSM"], 1000);
     const row = db.prepare(
       "SELECT compatible FROM watchlist_fund_tags WHERE ticker='TSM' AND fund_name='fund-a'"
     ).get() as { compatible: number };
     expect(row.compatible).toBe(1);
   });
 
-  it("tags excluded tickers as compatible=0", () => {
+  it("tags excluded tickers as compatible=0", async () => {
     const resolutions = new Map([["fund-a", makeResolution()]]);
-    tagFundCompatibilityForTickers(db, resolutions, ["TSLA"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions, ["TSLA"], 1000);
     const row = db.prepare(
       "SELECT compatible FROM watchlist_fund_tags WHERE ticker='TSLA' AND fund_name='fund-a'"
     ).get() as { compatible: number };
     expect(row.compatible).toBe(0);
   });
 
-  it("tags out-of-universe tickers as compatible=0", () => {
+  it("tags out-of-universe tickers as compatible=0", async () => {
     const resolutions = new Map([["fund-a", makeResolution()]]);
-    tagFundCompatibilityForTickers(db, resolutions, ["ZZZZ"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions, ["ZZZZ"], 1000);
     const row = db.prepare(
       "SELECT compatible FROM watchlist_fund_tags WHERE ticker='ZZZZ' AND fund_name='fund-a'"
     ).get() as { compatible: number };
     expect(row.compatible).toBe(0);
   });
 
-  it("tags across multiple funds", () => {
+  it("tags across multiple funds", async () => {
     const resolutions = new Map([
       ["fund-a", makeResolution({ final_tickers: ["AAPL"], base_tickers: ["AAPL"], include_applied: [], exclude_tickers_config: [] })],
       ["fund-b", makeResolution({ final_tickers: ["MSFT"], base_tickers: ["MSFT"], include_applied: [], exclude_tickers_config: [] })],
     ]);
-    tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions, ["AAPL", "MSFT"], 1000);
     const rows = db.prepare(
       "SELECT ticker, fund_name, compatible FROM watchlist_fund_tags ORDER BY fund_name, ticker"
     ).all() as Array<{ ticker: string; fund_name: string; compatible: number }>;
@@ -283,11 +283,11 @@ describe("tagFundCompatibilityForTickers", () => {
     ]);
   });
 
-  it("upserts on conflict (re-running updates compatibility)", () => {
+  it("upserts on conflict (re-running updates compatibility)", async () => {
     const resolutions1 = new Map([["fund-a", makeResolution({ final_tickers: [], base_tickers: [], include_applied: [] })]]);
-    tagFundCompatibilityForTickers(db, resolutions1, ["AAPL"], 1000);
+    await tagFundCompatibilityForTickers(db, resolutions1, ["AAPL"], 1000);
     const resolutions2 = new Map([["fund-a", makeResolution({ final_tickers: ["AAPL"], base_tickers: ["AAPL"], include_applied: [] })]]);
-    tagFundCompatibilityForTickers(db, resolutions2, ["AAPL"], 2000);
+    await tagFundCompatibilityForTickers(db, resolutions2, ["AAPL"], 2000);
     const row = db.prepare(
       "SELECT compatible, tagged_at FROM watchlist_fund_tags WHERE ticker='AAPL'"
     ).get() as { compatible: number; tagged_at: number };
@@ -295,9 +295,45 @@ describe("tagFundCompatibilityForTickers", () => {
     expect(row.tagged_at).toBe(2000);
   });
 
-  it("no-op when resolutions map is empty", () => {
-    tagFundCompatibilityForTickers(db, new Map(), ["AAPL"], 1000);
+  it("no-op when resolutions map is empty", async () => {
+    await tagFundCompatibilityForTickers(db, new Map(), ["AAPL"], 1000);
     const rows = db.prepare("SELECT * FROM watchlist_fund_tags").all();
     expect(rows).toHaveLength(0);
+  });
+
+  it("marks sector-excluded ticker as compatible=0 when getSector is provided", async () => {
+    const resolutions = new Map([
+      ["fund-a", makeResolution({
+        base_tickers: ["XOM", "AAPL"],
+        final_tickers: ["XOM", "AAPL"],
+        exclude_sectors_config: ["Energy"],
+      })],
+    ]);
+    const getSector = async (t: string) => t === "XOM" ? "Energy" : "Technology";
+    await tagFundCompatibilityForTickers(
+      db, resolutions, ["XOM", "AAPL"], 1000, { getSector },
+    );
+    const rows = db.prepare(
+      "SELECT ticker, compatible FROM watchlist_fund_tags WHERE fund_name='fund-a' ORDER BY ticker"
+    ).all() as Array<{ ticker: string; compatible: number }>;
+    expect(rows).toEqual([
+      { ticker: "AAPL", compatible: 1 },
+      { ticker: "XOM", compatible: 0 },
+    ]);
+  });
+
+  it("falls back to advisory behavior (no sector check) when getSector is not provided", async () => {
+    const resolutions = new Map([
+      ["fund-a", makeResolution({
+        base_tickers: ["XOM"],
+        final_tickers: ["XOM"],
+        exclude_sectors_config: ["Energy"],
+      })],
+    ]);
+    await tagFundCompatibilityForTickers(db, resolutions, ["XOM"], 1000);
+    const row = db.prepare(
+      "SELECT compatible FROM watchlist_fund_tags WHERE ticker='XOM'"
+    ).get() as { compatible: number };
+    expect(row.compatible).toBe(1); // advisory — XOM is in base, sector check skipped
   });
 });
