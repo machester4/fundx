@@ -137,6 +137,7 @@ export interface ResolveOpts {
   force?: boolean;
   now?: number;
   ttlMs?: number;
+  persist?: boolean; // default true; when false, resolves without writing cache file
 }
 
 export async function resolveUniverse(
@@ -176,7 +177,9 @@ export async function resolveUniverse(
         exclude_sectors_config: [...universe.exclude_sectors],
         count: final.length,
       };
-      await writeJsonAtomic(fundPaths(fundName).state.universe, resolution);
+      if (opts.persist !== false) {
+        await writeJsonAtomic(fundPaths(fundName).state.universe, resolution);
+      }
       return resolution;
     }
 
@@ -200,7 +203,9 @@ export async function resolveUniverse(
         exclude_sectors_config: [...universe.exclude_sectors],
         count: final.length,
       };
-      await writeJsonAtomic(fundPaths(fundName).state.universe, resolution);
+      if (opts.persist !== false) {
+        await writeJsonAtomic(fundPaths(fundName).state.universe, resolution);
+      }
       return resolution;
     }
   } catch (err) {

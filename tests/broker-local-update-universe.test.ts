@@ -81,7 +81,7 @@ function baseDeps(current: FundConfig) {
       writeConfigYaml: async (c: FundConfig) => { writes.push(c); },
       invalidateUniverseCache: async () => { invalidations.push(Date.now()); },
       regenerateClaudeMd: async (c: FundConfig) => { regens.push(c); },
-      resolveNewUniverse: async (c: FundConfig) => makeResolutionFor(c),
+      resolveNewUniverse: async (c: FundConfig, _opts?: { dryRun: boolean }) => makeResolutionFor(c),
       auditLog: async (entry: { before: unknown; after: unknown; timestamp: string }) => { audits.push(entry); },
     },
     writes,
@@ -317,5 +317,43 @@ describe("handleUpdateUniverse — dry_run", () => {
     const b = await handleUpdateUniverse({ mode: { preset: "nasdaq100" } }, deps);
     expect(a.note).toContain("DRY RUN");
     expect(b.note).not.toContain("DRY RUN");
+  });
+
+  it("passes dryRun:true to resolveNewUniverse on dry_run path", async () => {
+    const cfg = makeConfig();
+    const { deps } = baseDeps(cfg);
+    let capturedOpts: { dryRun: boolean } | undefined;
+    deps.resolveNewUniverse = async (_c: FundConfig, opts: { dryRun: boolean }) => {
+      capturedOpts = opts;
+      return {
+        resolved_at: 1, config_hash: "h", resolved_from: "fmp",
+        source: { kind: "preset" as const, preset: "sp500" as const },
+        base_tickers: [], final_tickers: [], include_applied: [],
+        exclude_tickers_applied: [], exclude_sectors_applied: [],
+        exclude_tickers_config: [], exclude_sectors_config: [],
+        count: 0,
+      };
+    };
+    await handleUpdateUniverse({ mode: { preset: "nasdaq100" }, dry_run: true }, deps);
+    expect(capturedOpts?.dryRun).toBe(true);
+  });
+
+  it("passes dryRun:false to resolveNewUniverse on commit path", async () => {
+    const cfg = makeConfig();
+    const { deps } = baseDeps(cfg);
+    let capturedOpts: { dryRun: boolean } | undefined;
+    deps.resolveNewUniverse = async (_c: FundConfig, opts: { dryRun: boolean }) => {
+      capturedOpts = opts;
+      return {
+        resolved_at: 1, config_hash: "h", resolved_from: "fmp",
+        source: { kind: "preset" as const, preset: "sp500" as const },
+        base_tickers: [], final_tickers: [], include_applied: [],
+        exclude_tickers_applied: [], exclude_sectors_applied: [],
+        exclude_tickers_config: [], exclude_sectors_config: [],
+        count: 0,
+      };
+    };
+    await handleUpdateUniverse({ mode: { preset: "nasdaq100" } }, deps);
+    expect(capturedOpts?.dryRun).toBe(false);
   });
 });

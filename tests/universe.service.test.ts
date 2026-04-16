@@ -262,4 +262,15 @@ describe("resolveUniverse (filters)", () => {
     expect(res.final_tickers).not.toContain("XOM");
     expect(res.exclude_sectors_applied).toEqual(["XOM"]);
   });
+
+  it("persist:false skips writing cache file on successful FMP resolution", async () => {
+    setupFundDir("testfund");
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify([{ symbol: "AAPL" }]), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const cfg: Universe = { preset: "sp500", include_tickers: [], exclude_tickers: [], exclude_sectors: [] };
+    const res = await resolveUniverse("testfund", cfg, "KEY", { now: 1_000_000, persist: false });
+    expect(res.resolved_from).toBe("fmp");
+    expect(existsSync(join(tmp, "funds", "testfund", "state", "universe.json"))).toBe(false);
+  });
 });
