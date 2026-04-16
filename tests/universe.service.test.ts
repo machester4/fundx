@@ -224,6 +224,22 @@ describe("resolveUniverse (fallback chain)", () => {
     expect(res.resolved_from).toBe("static_fallback");
     expect(res.count).toBeGreaterThan(0);
   });
+
+  it("falls through to static_fallback when stale cache has a mismatched config_hash", async () => {
+    setupFundDir("testfund");
+    // Seed cache with nasdaq100
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify([{ symbol: "AAPL" }, { symbol: "MSFT" }]), { status: 200 }),
+    ) as any;
+    const a: Universe = { preset: "nasdaq100", include_tickers: [], exclude_tickers: [], exclude_sectors: [] };
+    await resolveUniverse("testfund", a, "KEY", { now: 1_000_000 });
+
+    // Now change config to sp500 and fail FMP
+    globalThis.fetch = vi.fn(async () => new Response("x", { status: 500 })) as any;
+    const b: Universe = { preset: "sp500", include_tickers: [], exclude_tickers: [], exclude_sectors: [] };
+    const res = await resolveUniverse("testfund", b, "KEY", { now: 1_000_000 + 60_000 });
+    expect(res.resolved_from).toBe("static_fallback");
+  });
 });
 
 describe("resolveUniverse (filters)", () => {

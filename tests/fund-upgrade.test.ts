@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockedReadFile = vi.fn();
 const mockedWriteFile = vi.fn();
 const mockedCopyFile = vi.fn();
+const mockedRename = vi.fn().mockResolvedValue(undefined);
 const mockedMkdir = vi.fn();
 const mockedRm = vi.fn();
 const mockedReaddir = vi.fn();
@@ -12,6 +13,7 @@ vi.mock("node:fs/promises", () => ({
   readFile: (...args: unknown[]) => mockedReadFile(...args),
   writeFile: (...args: unknown[]) => mockedWriteFile(...args),
   copyFile: (...args: unknown[]) => mockedCopyFile(...args),
+  rename: (...args: unknown[]) => mockedRename(...args),
   mkdir: (...args: unknown[]) => mockedMkdir(...args),
   rm: (...args: unknown[]) => mockedRm(...args),
   readdir: (...args: unknown[]) => mockedReaddir(...args),
@@ -230,12 +232,17 @@ claude:
       "/home/test/.fundx/funds/test-fund/fund_config.yaml",
       "/home/test/.fundx/funds/test-fund/fund_config.yaml.bak",
     );
-    // writeFile should have been called for the migrated YAML (among others)
+    // writeFile should have been called with the .tmp file (atomic write pattern)
     const writeFileCalls = mockedWriteFile.mock.calls;
-    const configWrite = writeFileCalls.find((c: unknown[]) =>
-      typeof c[0] === "string" && c[0].endsWith("fund_config.yaml"),
+    const tmpWrite = writeFileCalls.find((c: unknown[]) =>
+      typeof c[0] === "string" && c[0].endsWith("fund_config.yaml.tmp"),
     );
-    expect(configWrite).toBeDefined();
+    expect(tmpWrite).toBeDefined();
+    // rename should atomically move .tmp → config
+    expect(mockedRename).toHaveBeenCalledWith(
+      "/home/test/.fundx/funds/test-fund/fund_config.yaml.tmp",
+      "/home/test/.fundx/funds/test-fund/fund_config.yaml",
+    );
   });
 
   it("does not migrate when universe is already new schema", async () => {
