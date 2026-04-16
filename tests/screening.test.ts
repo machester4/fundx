@@ -106,6 +106,7 @@ describe("runScreen (integration)", () => {
         throw new Error("should not fetch — cache is primed");
       },
       fundConfigs: [],
+      resolutions: new Map(),
       now: Date.now(),
     });
 
@@ -160,6 +161,7 @@ describe("runScreen (integration)", () => {
         throw new Error("simulated FMP failure");
       },
       fundConfigs: [],
+      resolutions: new Map(),
       now: Date.now(),
     });
 
@@ -189,6 +191,7 @@ describe("runScreen (integration)", () => {
           universeLabel: "test",
           fetchBars: async () => [],
           fundConfigs: [],
+          resolutions: new Map(),
           now: Date.now(),
         }),
       ).rejects.toThrow(/already.*progress|in progress/i);

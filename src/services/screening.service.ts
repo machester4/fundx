@@ -115,8 +115,8 @@ export interface RunScreenOptions {
   universeLabel: string;
   fetchBars: (ticker: string) => Promise<DailyBar[]>;
   fundConfigs: FundConfig[];
-  /** Map of fund name → resolved universe. When provided, used to tag watchlist compatibility. */
-  resolutions?: Map<string, UniverseResolution>;
+  /** Map of fund name → resolved universe. Used to tag watchlist compatibility. Pass new Map() if not applicable. */
+  resolutions: Map<string, UniverseResolution>;
   /** Optional sector lookup for sector-exclusion tagging accuracy. */
   getSector?: (ticker: string) => Promise<string | null>;
   now: number;
@@ -212,7 +212,7 @@ export async function runScreen(
 
   applyTransitionsForRun(opts.watchlistDb, runId, opts.now);
 
-  if (opts.resolutions && opts.resolutions.size > 0 && passedSet.size > 0) {
+  if (opts.resolutions.size > 0 && passedSet.size > 0) {
     await tagFundCompatibilityForTickers(
       opts.watchlistDb,
       opts.resolutions,
