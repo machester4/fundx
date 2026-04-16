@@ -819,3 +819,27 @@ export const universeResolutionSchema = z.object({
   count: z.number().int().nonnegative(),
 });
 export type UniverseResolution = z.infer<typeof universeResolutionSchema>;
+
+// ── screen_discover ───────────────────────────────────────────────────────────
+
+export interface DiscoverResultEntry {
+  ticker: string;
+  score: number;
+  return_12_1: number;
+  adv_usd_30d: number;
+  last_price: number;
+  missing_days: number;
+  companyName?: string;
+  sector?: string;
+  market_cap?: number;
+  exchange?: string;
+  is_etf?: boolean;
+}
+
+export interface DiscoverResult {
+  candidates_fetched: number;
+  candidates_scored: number;
+  candidates_passed: number;
+  duration_ms: number;
+  results: DiscoverResultEntry[];
+}

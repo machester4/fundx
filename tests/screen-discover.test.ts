@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { handleScreenDiscover } from "../src/mcp/screener.js";
 import { openWatchlistDb, queryWatchlist } from "../src/services/watchlist.service.js";
 import { openPriceCache, writeBars } from "../src/services/price-cache.service.js";
-import type { DailyBar } from "../src/types.js";
+import type { DailyBar, DiscoverResult } from "../src/types.js";
 import type { ScreenerResult } from "../src/services/market.service.js";
+
+// Ensure return type is imported from types.ts, not re-exported from screener.ts
+type _assertDiscoverResult = DiscoverResult;
 
 // 273 bars with linear interpolation between startClose and endClose.
 // volume: 500_000 → ADV ~= last_close * 500_000 (well above $10M for close > $5).
@@ -38,11 +41,9 @@ const NOW = 1_700_000_000_000;
 
 describe("handleScreenDiscover", () => {
   let pcdb: ReturnType<typeof openPriceCache>;
-  let wdb: ReturnType<typeof openWatchlistDb>;
 
   beforeEach(() => {
     pcdb = openPriceCache(":memory:");
-    wdb = openWatchlistDb(":memory:");
   });
 
   it("returns empty results when fetchCandidates returns no tickers", async () => {
@@ -166,6 +167,9 @@ describe("handleScreenDiscover", () => {
   });
 
   it("does not write to the watchlist", async () => {
+    // handleScreenDiscover has no wdb parameter — it structurally cannot write to the watchlist.
+    // This test verifies the guarantee is preserved end-to-end by checking an independent db.
+    const wdb = openWatchlistDb(":memory:");
     writeBars(pcdb, "AAA", makeFixtureBars(100, 200), NOW);
 
     await handleScreenDiscover(
