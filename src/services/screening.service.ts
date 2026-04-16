@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { DailyBar, ScoreMetadata, FundConfig, ScreenName } from "../types.js";
+import type { DailyBar, ScoreMetadata, FundConfig, ScreenName, UniverseResolution } from "../types.js";
 import {
   insertScreenRun,
   insertScore,
@@ -115,6 +115,8 @@ export interface RunScreenOptions {
   universeLabel: string;
   fetchBars: (ticker: string) => Promise<DailyBar[]>;
   fundConfigs: FundConfig[];
+  /** Map of fund name → resolved universe. When provided, used to tag watchlist compatibility. */
+  resolutions?: Map<string, UniverseResolution>;
   now: number;
   screenName?: ScreenName;
 }
@@ -208,10 +210,10 @@ export async function runScreen(
 
   applyTransitionsForRun(opts.watchlistDb, runId, opts.now);
 
-  if (opts.fundConfigs.length > 0 && passedSet.size > 0) {
+  if (opts.resolutions && opts.resolutions.size > 0 && passedSet.size > 0) {
     tagFundCompatibilityForTickers(
       opts.watchlistDb,
-      opts.fundConfigs,
+      opts.resolutions,
       [...passedSet],
       opts.now,
     );

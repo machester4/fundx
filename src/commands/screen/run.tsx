@@ -45,6 +45,7 @@ export default function ScreenRun({ options: opts }: Props) {
         universeLabel,
         fetchBars: (t) => getHistoricalDaily(t, 273, apiKey),
         fundConfigs: [cfg],
+        resolutions: new Map([[fundName, resolution]]),
         now: Date.now(),
         screenName: opts.screen,
       });

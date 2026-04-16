@@ -61,6 +61,7 @@ export async function handleScreenRun(
     universeLabel,
     fetchBars: deps.fetchBars,
     fundConfigs: [target],
+    resolutions: new Map([[fundName, resolution]]),
     now: deps.now(),
     screenName: screen,
   });

@@ -9,11 +9,12 @@ import {
   type WatchlistStatus,
   type ScreenName,
   type StatusTransition,
-  type FundConfig,
+  type UniverseResolution,
   watchlistStatusSchema,
   screenNameSchema,
   statusTransitionSchema,
 } from "../types.js";
+import { isInUniverse } from "./universe.service.js";
 import { WATCHLIST_DB } from "../paths.js";
 
 const DDL: string[] = [
@@ -541,16 +542,29 @@ export function getTrajectory(
 
 export function tagFundCompatibilityForTickers(
   db: Database.Database,
-  fundConfigs: FundConfig[],
+  resolutions: Map<string, UniverseResolution>,
   tickers: string[],
   now: number,
 ): void {
-  // Under the new per-fund universe schema, ETF-based compatibility tagging
-  // no longer applies. This function is retained as a no-op until the new
-  // universe model informs a replacement (see per-fund-universe feature plan).
-  // TODO(per-fund-universe): rewrite using resolveUniverse() once available.
-  void db;
-  void fundConfigs;
-  void tickers;
-  void now;
+  if (resolutions.size === 0 || tickers.length === 0) return;
+
+  const stmt = db.prepare(
+    `INSERT INTO watchlist_fund_tags (ticker, fund_name, compatible, tagged_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(ticker, fund_name) DO UPDATE SET
+       compatible = excluded.compatible,
+       tagged_at = excluded.tagged_at`,
+  );
+  const tx = db.transaction(() => {
+    for (const [fundName, resolution] of resolutions) {
+      for (const t of tickers) {
+        const status = isInUniverse(resolution, t);
+        // Note: for preset mode, sector exclusion requires a profile lookup
+        // and is enforced at trade-time by broker-local, not here. This tag is advisory.
+        const compatible = status.in_universe ? 1 : 0;
+        stmt.run(t, fundName, compatible, now);
+      }
+    }
+  });
+  tx();
 }
