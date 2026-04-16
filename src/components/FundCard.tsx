@@ -83,7 +83,7 @@ export function FundCard({ fund, extras, isSelected, width }: FundCardProps) {
             ●
           </Text>
           {" "}
-          Universe: {extras.universe.source} · {extras.universe.count} tickers · {extras.universe.ageHours}h ago
+          Universe: {extras.universe.source} · {extras.universe.count} tickers · {extras.universe.ageHours === 0 ? "<1h" : `${extras.universe.ageHours}h`} ago
         </Text>
       )}
 
