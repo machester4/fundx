@@ -204,11 +204,17 @@ describe("tagFundCompatibilityForTickers", () => {
   let db: Database.Database;
   beforeEach(() => (db = openWatchlistDb(":memory:")));
 
-  function fundWithEtf(name: string, tickers: string[]): FundConfig {
-    return {
+  // TODO(per-fund-universe): these tests covered the old universe.allowed[].type="etf"
+  // schema. tagFundCompatibilityForTickers is now a no-op under the new schema until
+  // resolveUniverse() is integrated (see per-fund-universe feature plan).
+  it.todo("tags compatible when ticker in fund etf universe");
+  it.todo("skips tagging for funds whose universe is sector/strategy/protocol (not etf)");
+
+  it("is a no-op: does not insert any rows for any fund config", () => {
+    const stubFund: FundConfig = {
       fund: {
-        name,
-        display_name: name,
+        name: "stub-fund",
+        display_name: "Stub Fund",
         description: "",
         created: "2026-01-01",
         status: "active",
@@ -226,8 +232,11 @@ describe("tagFundCompatibilityForTickers", () => {
         custom_rules: [],
       },
       universe: {
-        allowed: [{ type: "etf", tickers }],
-        forbidden: [],
+        preset: "sp500",
+        filters: undefined,
+        include_tickers: ["AAPL"],
+        exclude_tickers: [],
+        exclude_sectors: [],
       },
       schedule: {
         timezone: "UTC",
@@ -259,34 +268,7 @@ describe("tagFundCompatibilityForTickers", () => {
         decision_framework: "",
       },
     };
-  }
-
-  it("tags compatible when ticker in fund etf universe", () => {
-    const f = fundWithEtf("my-growth", ["AAPL", "MSFT"]);
-    tagFundCompatibilityForTickers(db, [f], ["AAPL", "GOOG"], 1000);
-    const aapl = db
-      .prepare(
-        "SELECT * FROM watchlist_fund_tags WHERE ticker='AAPL' AND fund_name='my-growth'",
-      )
-      .get() as { compatible: number } | undefined;
-    expect(aapl?.compatible).toBe(1);
-    const goog = db
-      .prepare(
-        "SELECT * FROM watchlist_fund_tags WHERE ticker='GOOG' AND fund_name='my-growth'",
-      )
-      .get() as { compatible: number } | undefined;
-    expect(goog?.compatible).toBe(0);
-  });
-
-  it("skips tagging for funds whose universe is sector/strategy/protocol (not etf)", () => {
-    const f = {
-      ...fundWithEtf("sector-fund", []),
-      universe: {
-        allowed: [{ type: "sector", sectors: ["technology"] }],
-        forbidden: [],
-      },
-    } as unknown as FundConfig;
-    tagFundCompatibilityForTickers(db, [f], ["AAPL"], 1000);
+    tagFundCompatibilityForTickers(db, [stubFund], ["AAPL", "MSFT"], 1000);
     const rows = db.prepare("SELECT * FROM watchlist_fund_tags").all();
     expect(rows).toHaveLength(0);
   });

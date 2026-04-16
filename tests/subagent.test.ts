@@ -251,5 +251,14 @@ describe("buildAnalystAgents", () => {
     it("has Write in tools", () => {
       expect(agents["trade-evaluator"].tools).toContain("Write");
     });
+
+    it("trade-evaluator prompt includes Universe Discipline section", () => {
+      const agents = buildAnalystAgents("testfund");
+      const evaluator = agents["trade-evaluator"];
+      expect(evaluator).toBeDefined();
+      expect(evaluator.prompt).toContain("Universe Discipline");
+      expect(evaluator.prompt).toContain("out_of_universe");
+      expect(evaluator.prompt).toContain("UNIVERSE_DISCIPLINE:");
+    });
   });
 });

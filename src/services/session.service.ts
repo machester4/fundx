@@ -4,10 +4,38 @@ import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHist
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import { DAEMON_NEEDS_RESTART } from "../paths.js";
-import type { SessionLogV2 } from "../types.js";
+import type { SessionLogV2, UniverseResolution } from "../types.js";
+import { resolveUniverse } from "./universe.service.js";
+import { loadGlobalConfig } from "../config.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
+
+function renderUniverseBlock(resolution: UniverseResolution | null): string {
+  if (!resolution) return "";
+  const source = resolution.source.kind === "preset"
+    ? `preset:${resolution.source.preset}`
+    : `filters`;
+  const resolvedAt = new Date(resolution.resolved_at).toISOString();
+  const warning = resolution.resolved_from !== "fmp"
+    ? `\n  freshness_warning: resolved from ${resolution.resolved_from} (universe data may be outdated)`
+    : ``;
+  const excludedTickers = resolution.exclude_tickers_config.length > 0
+    ? `\n  excluded_tickers: [${resolution.exclude_tickers_config.join(", ")}]`
+    : ``;
+  const excludedSectors = resolution.exclude_sectors_config.length > 0
+    ? `\n  excluded_sectors: [${resolution.exclude_sectors_config.join(", ")}]`
+    : ``;
+  const alwaysIncluded = resolution.include_applied.length > 0
+    ? `\n  always_included: [${resolution.include_applied.join(", ")}]`
+    : ``;
+  return `<fund_universe>
+  count: ${resolution.count}
+  source: ${source}
+  resolved_from: ${resolution.resolved_from}
+  resolved_at: ${resolvedAt}${excludedTickers}${excludedSectors}${alwaysIncluded}${warning}
+</fund_universe>`;
+}
 
 /** Escape HTML entities for Telegram */
 function escapeHtml(text: string): string {
@@ -47,11 +75,22 @@ export async function runFundSession(
   const today = new Date().toISOString().split("T")[0];
   const agents = buildAnalystAgents(fundName);
 
+  let universeResolution: UniverseResolution | null = null;
+  try {
+    const gcfg = await loadGlobalConfig();
+    const apiKey = gcfg.market_data?.fmp_api_key ?? "";
+    universeResolution = await resolveUniverse(fundName, config.universe, apiKey);
+  } catch (err) {
+    console.warn(`[session] universe resolution failed for ${fundName}:`, err instanceof Error ? err.message : err);
+  }
+  const universeBlock = renderUniverseBlock(universeResolution);
+
   const prompt = [
     `You are running a ${sessionType} session for fund '${fundName}'.`,
     ``,
     `Focus: ${focus}`,
     ``,
+    ...(universeBlock ? [universeBlock, ``] : []),
     ...(options?.useDebateSkills
       ? [
           `This session should prioritize thorough analysis. Before any trading decisions,`,

@@ -1,12 +1,169 @@
-import { readFile, writeFile, readdir, rm, mkdir } from "node:fs/promises";
+import { readFile, writeFile, copyFile, rename, readdir, rm, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import yaml from "js-yaml";
 import { fundConfigSchema, type FundConfig } from "../types.js";
+import type { Universe } from "../types.js";
 import { FUNDS_DIR, fundPaths } from "../paths.js";
 import { initFundState, clearActiveSession } from "../state.js";
 import { generateFundClaudeMd } from "../template.js";
 import { loadGlobalConfig } from "../config.js";
 import { ensureFundSkillFiles, ensureFundRules, ensureFundMemory, BUILTIN_SKILLS } from "../skills.js";
+
+// ── Legacy Universe Migration ─────────────────────────────────
+
+type LegacyAssetEntry = {
+  type?: string;
+  tickers?: string[];
+  sectors?: string[];
+  strategies?: string[];
+  protocols?: string[];
+};
+type LegacyUniverse = { allowed?: LegacyAssetEntry[]; forbidden?: LegacyAssetEntry[] };
+
+export function isLegacyUniverse(u: unknown): boolean {
+  if (typeof u !== "object" || u === null) return false;
+  return "allowed" in u || "forbidden" in u;
+}
+
+export interface MigratedUniverse {
+  preset: "sp500";
+  include_tickers: string[];
+  exclude_tickers: string[];
+  exclude_sectors: string[];
+}
+
+export function migrateUniverseFromLegacy(legacy: LegacyUniverse): MigratedUniverse {
+  const include = new Set<string>();
+  const excludeT = new Set<string>();
+  const excludeS = new Set<string>();
+  for (const e of legacy.allowed ?? []) {
+    for (const t of e.tickers ?? []) include.add(t.toUpperCase());
+    // allowed.sectors semantics were ambiguous — dropped silently
+  }
+  for (const e of legacy.forbidden ?? []) {
+    for (const t of e.tickers ?? []) excludeT.add(t.toUpperCase());
+    for (const s of e.sectors ?? []) excludeS.add(s);
+  }
+  return {
+    preset: "sp500",
+    include_tickers: [...include].sort(),
+    exclude_tickers: [...excludeT].sort(),
+    exclude_sectors: [...excludeS].sort(),
+  };
+}
+
+async function maybeMigrateUniverseFile(
+  configPath: string,
+): Promise<{ migrated: boolean; warnings: string[] }> {
+  const raw = await readFile(configPath, "utf-8");
+  const parsed = yaml.load(raw) as Record<string, unknown>;
+  if (!parsed || typeof parsed !== "object") return { migrated: false, warnings: [] };
+  if (!isLegacyUniverse((parsed as Record<string, unknown>).universe))
+    return { migrated: false, warnings: [] };
+
+  await copyFile(configPath, `${configPath}.bak`);
+  const legacy = (parsed as Record<string, unknown>).universe as LegacyUniverse;
+  const warnings: string[] = [];
+
+  const hasDroppedFields =
+    (legacy.allowed ?? []).some(
+      (e) => (e.strategies?.length ?? 0) + (e.protocols?.length ?? 0) > 0,
+    ) ||
+    (legacy.forbidden ?? []).some(
+      (e) => (e.strategies?.length ?? 0) + (e.protocols?.length ?? 0) > 0,
+    );
+  if (hasDroppedFields) {
+    warnings.push(
+      "Dropped unsupported fields (strategies, protocols) — these were not enforced in the old schema either.",
+    );
+  }
+  const hasAllowedSectors = (legacy.allowed ?? []).some((e) => (e.sectors?.length ?? 0) > 0);
+  if (hasAllowedSectors) {
+    warnings.push(
+      "Old 'allowed sectors' dropped (ambiguous semantics). Review your new universe block and add a `filters.sector` block if you want to restrict to specific sectors.",
+    );
+  }
+  const hasNonEtfAllowed = (legacy.allowed ?? []).some(
+    (e) => e.type && e.type !== "etf" && e.type !== "stock",
+  );
+  if (hasNonEtfAllowed) {
+    warnings.push("Allowed entries with non-stock/etf types dropped. Only tickers preserved.");
+  }
+
+  (parsed as Record<string, unknown>).universe = migrateUniverseFromLegacy(legacy);
+  const tmp = `${configPath}.tmp`;
+  await writeFile(tmp, yaml.dump(parsed, { lineWidth: 120 }), "utf-8");
+  await rename(tmp, configPath);
+
+  return { migrated: true, warnings };
+}
+
+// ── Wizard Universe Helpers ───────────────────────────────────
+
+export function resolveWizardUniverseChoice(
+  choice: string,
+  includeTickers: string[] = [],
+): Universe {
+  switch (choice) {
+    case "sp500":
+    case "nasdaq100":
+    case "dow30":
+      return {
+        preset: choice as "sp500" | "nasdaq100" | "dow30",
+        include_tickers: includeTickers,
+        exclude_tickers: [],
+        exclude_sectors: [],
+      };
+    case "tmpl-large":
+      return {
+        filters: {
+          market_cap_min: 10_000_000_000,
+          exchange: ["NYSE", "NASDAQ"],
+          country: "US",
+          is_actively_trading: true,
+          limit: 500,
+        },
+        include_tickers: includeTickers,
+        exclude_tickers: [],
+        exclude_sectors: [],
+      };
+    case "tmpl-mid":
+      return {
+        filters: {
+          market_cap_min: 2_000_000_000,
+          market_cap_max: 10_000_000_000,
+          exchange: ["NYSE", "NASDAQ"],
+          country: "US",
+          is_actively_trading: true,
+          limit: 500,
+        },
+        include_tickers: includeTickers,
+        exclude_tickers: [],
+        exclude_sectors: [],
+      };
+    case "custom":
+    default:
+      return {
+        filters: { is_actively_trading: true, limit: 500 },
+        include_tickers: includeTickers,
+        exclude_tickers: [],
+        exclude_sectors: [],
+      };
+  }
+}
+
+export function normalizeWizardUniverse(params: {
+  universeChoice?: string;
+  tickers?: string;
+}): Universe {
+  const tickers = (params.tickers ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+    .map((t) => t.toUpperCase());
+  const choice = params.universeChoice ?? "sp500";
+  return resolveWizardUniverseChoice(choice, tickers);
+}
 
 // ── Fund CRUD ──────────────────────────────────────────────────
 
@@ -73,6 +230,7 @@ export interface CreateFundParams {
   objective: FundConfig["objective"];
   riskProfile: string;
   tickers: string;
+  universeChoice?: string;
 }
 
 /** Create a new fund from structured params (no prompts) */
@@ -94,11 +252,7 @@ export async function createFund(params: CreateFundParams): Promise<FundConfig> 
       profile: params.riskProfile,
       ...RISK_DEFAULTS[params.riskProfile as keyof typeof RISK_DEFAULTS],
     },
-    universe: {
-      allowed: params.tickers
-        ? [{ type: "etf", tickers: params.tickers.split(",").map((t) => t.trim()) }]
-        : [],
-    },
+    universe: normalizeWizardUniverse(params),
     schedule: {
       sessions: {
         pre_market: {
@@ -205,14 +359,20 @@ export async function loadAllFundConfigs(): Promise<FundConfig[]> {
 export interface UpgradeResult {
   fundName: string;
   skillCount: number;
+  universeMigrated: boolean;
+  warnings: string[];
 }
 
 /** Upgrade a fund: regenerate CLAUDE.md and rewrite all skills from latest code */
 export async function upgradeFund(fundName: string): Promise<UpgradeResult> {
-  const config = await loadFundConfig(fundName);
   const paths = fundPaths(fundName);
 
-  // Regenerate CLAUDE.md from current config
+  // Migrate universe shape BEFORE loading (loadFundConfig would fail on legacy)
+  const { migrated, warnings } = await maybeMigrateUniverseFile(paths.config);
+
+  const config = await loadFundConfig(fundName);
+
+  // Regenerate CLAUDE.md from current (potentially migrated) config
   await generateFundClaudeMd(config);
 
   // Wipe and rewrite all skills with latest builtin content
@@ -226,5 +386,5 @@ export async function upgradeFund(fundName: string): Promise<UpgradeResult> {
   // Clear stale session so next chat starts fresh with updated instructions
   await clearActiveSession(fundName);
 
-  return { fundName, skillCount: BUILTIN_SKILLS.length };
+  return { fundName, skillCount: BUILTIN_SKILLS.length, universeMigrated: migrated, warnings };
 }

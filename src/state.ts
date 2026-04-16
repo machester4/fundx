@@ -25,7 +25,7 @@ import {
 import { fundPaths } from "./paths.js";
 
 /** Write JSON atomically: write to .tmp then rename */
-async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
+export async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   const tmp = filePath + ".tmp";
   await writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");

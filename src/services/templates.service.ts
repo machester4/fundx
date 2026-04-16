@@ -264,7 +264,7 @@ export async function createFromBuiltinTemplate(
     capital: { initial: initialCapital, currency: "USD" },
     objective: template.objective,
     risk: template.risk,
-    universe: { allowed: [], forbidden: [] },
+    universe: { preset: "sp500", include_tickers: [], exclude_tickers: [], exclude_sectors: [] },
     schedule: {
       sessions: {
         pre_market: {
