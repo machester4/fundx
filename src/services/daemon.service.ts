@@ -930,6 +930,43 @@ export async function startDaemon(): Promise<void> {
     }
   });
 
+  // Universe cache refresh — 04:00 UTC daily (well before pre-market sessions)
+  cron.schedule("0 4 * * *", async () => {
+    try {
+      const config = await loadGlobalConfig();
+      const apiKey = config.market_data?.fmp_api_key ?? "";
+      if (!apiKey) {
+        await log("[universe] no FMP API key configured — skipping daily refresh");
+        return;
+      }
+      const fundConfigs = await loadAllFundConfigs();
+      const activeConfigs = fundConfigs.filter((c) => c.fund.status === "active");
+      if (activeConfigs.length === 0) {
+        await log("[universe] no active funds — skipping daily refresh");
+        return;
+      }
+      let refreshed = 0;
+      let failed = 0;
+      for (const cfg of activeConfigs) {
+        try {
+          const resolution = await resolveUniverse(cfg.fund.name, cfg.universe, apiKey, { force: true });
+          await log(
+            `[universe] ${cfg.fund.name} refreshed: count=${resolution.count} ` +
+              `source=${resolution.source.kind === "preset" ? resolution.source.preset : "filters"} ` +
+              `from=${resolution.resolved_from}`,
+          );
+          refreshed++;
+        } catch (err) {
+          await log(`[universe] ${cfg.fund.name} refresh failed: ${err instanceof Error ? err.message : err}`);
+          failed++;
+        }
+      }
+      await log(`[universe] daily refresh complete: ${refreshed} ok, ${failed} failed`);
+    } catch (err) {
+      trackError("_universe", "daily-refresh", err);
+    }
+  });
+
   // Daily screening — 22:00 Mon–Fri (post US market close)
   cron.schedule("0 22 * * 1-5", async () => {
     try {

@@ -247,6 +247,17 @@ update_universe({ exclude_tickers: ["TSLA"] }) without first reading the current
 <example type="bad">
 Editing fund_config.yaml directly with Write/Edit tools — bypasses validation and won't regenerate CLAUDE.md.
 </example>
+
+### Preview before committing (dry_run)
+
+When the user asks for a drastic change (switching preset, excluding many sectors), preview first:
+
+\`\`\`
+update_universe({ mode: { preset: "nasdaq100" }, dry_run: true })
+→ returns { dry_run: true, before, after, resolved: { count, resolved_from }, warnings }
+\`\`\`
+
+If \`warnings\` is empty and \`resolved.count\` looks right, re-run WITHOUT \`dry_run\` to commit. Otherwise report the preview to the user and let them decide.
 `,
   },
   {
