@@ -224,13 +224,24 @@ If the user asks to change the fund's universe (e.g., "switch to Nasdaq 100", "e
 
 **Tool semantics:**
 - \`mode.preset\` and \`mode.filters\` are mutually exclusive. Passing one switches modes.
-- \`include_tickers\`, \`exclude_tickers\`, \`exclude_sectors\` REPLACE their current lists. To ADD one ticker, first call \`list_universe\` or read the current universe via \`check_universe\`, then pass the full new list (current + added).
+- \`include_tickers\`, \`exclude_tickers\`, \`exclude_sectors\` REPLACE their current lists. To ADD one ticker, first call \`list_universe({ verbose: true })\` to read the current lists, then pass the full new list (existing + added).
 - Omitted fields stay unchanged.
+- The tool validates and resolves the new universe; check \`output.warnings\` and \`output.resolved.count\` to confirm the change is safe.
 
 <example type="good">
 User: "Exclude TSLA from my universe."
-Me: read current exclude_tickers (via check_universe or list_universe), then:
-update_universe({ exclude_tickers: [...existing, "TSLA"] })
+Me:
+1. list_universe({ verbose: true }) → returns current exclude_tickers: ["FOO"]
+2. update_universe({ exclude_tickers: ["FOO", "TSLA"] }) → validates, writes, returns warnings=[]
+</example>
+
+<example type="good">
+User: "Switch to Nasdaq 100."
+Me: update_universe({ mode: { preset: "nasdaq100" } }) → check output.resolved.count > 0 and output.warnings empty
+</example>
+
+<example type="bad">
+update_universe({ exclude_tickers: ["TSLA"] }) without first reading the current list — this REPLACES, so any existing exclusions are lost silently.
 </example>
 
 <example type="bad">

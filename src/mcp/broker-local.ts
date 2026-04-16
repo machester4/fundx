@@ -228,7 +228,7 @@ export async function handleCheckUniverse(
   };
 }
 
-export interface ListUniverseInput { sector?: string; limit?: number }
+export interface ListUniverseInput { sector?: string; limit?: number; verbose?: boolean }
 export interface ListUniverseDeps {
   resolve: () => Promise<UniverseResolution>;
   getProfile: (ticker: string) => Promise<{ sector?: string } | null>;
@@ -238,6 +238,10 @@ export interface ListUniverseOutput {
   total: number;
   resolved_at: number;
   resolved_from: string;
+  source?: { kind: "preset"; preset: string } | { kind: "filters" };
+  include_tickers?: string[];
+  exclude_tickers?: string[];
+  exclude_sectors?: string[];
 }
 
 export async function handleListUniverse(
@@ -263,12 +267,19 @@ export async function handleListUniverse(
   const total = tickers.length;
   const effectiveLimit = input.limit ?? (input.sector ? 50 : undefined);
   if (effectiveLimit && effectiveLimit > 0) tickers = tickers.slice(0, effectiveLimit);
-  return {
+  const base: ListUniverseOutput = {
     tickers,
     total,
     resolved_at: resolution.resolved_at,
     resolved_from: resolution.resolved_from,
   };
+  if (input.verbose) {
+    base.source = resolution.source;
+    base.include_tickers = [...resolution.include_applied];
+    base.exclude_tickers = [...resolution.exclude_tickers_config];
+    base.exclude_sectors = [...resolution.exclude_sectors_config];
+  }
+  return base;
 }
 
 // ── Buy-gate handler (pure, testable) ──────────────────────────
@@ -736,10 +747,11 @@ server.tool(
 
 server.tool(
   "list_universe",
-  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups with 10x concurrency; defaults limit to 50 when sector is set).",
+  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups with 10x concurrency; defaults limit to 50 when sector is set). Pass verbose: true to also return the current include/exclude config lists — required before calling update_universe to add/remove individual items.",
   {
     sector: z.string().optional().describe("Filter to tickers in this sector (e.g. 'Technology')"),
     limit: z.number().int().positive().optional().describe("Max tickers to return"),
+    verbose: z.boolean().optional().describe("When true, include current include/exclude config lists in the output (needed to modify the universe via update_universe)"),
   },
   async (args) => {
     if (!FMP_API_KEY) {

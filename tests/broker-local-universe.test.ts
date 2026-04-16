@@ -119,4 +119,24 @@ describe("handleListUniverse", () => {
     expect(r.tickers).toHaveLength(25);
     expect(getProfile).toHaveBeenCalledTimes(25);
   });
+
+  it("verbose includes current include/exclude config lists", async () => {
+    const res = mockResolution({
+      exclude_tickers_config: ["TSLA"],
+      exclude_sectors_config: ["Energy"],
+    });
+    const deps = { resolve: async () => res, getProfile: async () => null };
+    const r = await handleListUniverse({ verbose: true }, deps);
+    expect(r.exclude_tickers).toEqual(["TSLA"]);
+    expect(r.exclude_sectors).toEqual(["Energy"]);
+    expect(r.source).toEqual({ kind: "preset", preset: "sp500" });
+  });
+
+  it("non-verbose omits the extra fields", async () => {
+    const res = mockResolution({ exclude_tickers_config: ["TSLA"] });
+    const deps = { resolve: async () => res, getProfile: async () => null };
+    const r = await handleListUniverse({}, deps);
+    expect(r.exclude_tickers).toBeUndefined();
+    expect(r.source).toBeUndefined();
+  });
 });
