@@ -468,6 +468,7 @@ Universe resolution calls FMP and writes a 24h-TTL cache at `~/.fundx/funds/<nam
 ```bash
 fundx fund show-universe <name>      # inspect resolved universe
 fundx fund refresh-universe <name>   # force re-resolution
+fundx fund refresh-universe --all    # force re-resolution for all active funds
 fundx fund upgrade --name <name>     # migrate legacy universe schema + regenerate CLAUDE.md/skills
 ```
 

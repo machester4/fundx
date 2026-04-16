@@ -195,7 +195,7 @@ describe("daemon module", () => {
 
     await startDaemon();
 
-    expect(cron.schedule).toHaveBeenCalledWith("* * * * *", expect.any(Function));
+    expect(cron.schedule).toHaveBeenCalledWith("* * * * *", expect.any(Function), { timezone: "UTC" });
   });
 });
 
