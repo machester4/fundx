@@ -7,6 +7,7 @@ import { checkSpecialSessions, KNOWN_EVENTS } from "./special-sessions.service.j
 import { loadGlobalConfig } from "../config.js";
 import { getMarketDataProvider } from "./market.service.js";
 import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
+import { readCachedUniverse } from "./universe.service.js";
 import type { FundConfig, ServiceStatus, NextCronInfo } from "../types.js";
 
 export interface FundStatusData {
@@ -118,6 +119,13 @@ function getObjectiveLabel(config: FundConfig): string {
 
 // ── Dashboard Data ────────────────────────────────────────────
 
+export interface UniverseBadge {
+  source: string;
+  count: number;
+  ageHours: number;
+  staleness: "fresh" | "stale" | "fallback";
+}
+
 export interface FundExtras {
   sparklineValues: number[];
   topHoldings: Array<{ symbol: string; weightPct: number }>;
@@ -126,6 +134,22 @@ export interface FundExtras {
   nextSession: string | null;
   lastSessionAgo: string | null;
   tradesInLastSession: number;
+  universe: UniverseBadge | null;
+}
+
+export async function buildUniverseBadge(fundName: string): Promise<UniverseBadge | null> {
+  const res = await readCachedUniverse(fundName);
+  if (!res) return null;
+  const source =
+    res.source.kind === "preset" ? res.source.preset.toUpperCase() : "FILTERS";
+  const ageHours = Math.floor((Date.now() - res.resolved_at) / 3_600_000);
+  const staleness: UniverseBadge["staleness"] =
+    res.resolved_from === "fmp"
+      ? "fresh"
+      : res.resolved_from === "stale_cache"
+        ? "stale"
+        : "fallback";
+  return { source, count: res.count, ageHours, staleness };
 }
 
 export interface DashboardAlerts {
@@ -265,6 +289,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         nextSession: null,
         lastSessionAgo: null,
         tradesInLastSession: 0,
+        universe: null,
       });
       continue;
     }
@@ -336,6 +361,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       nextSession,
       lastSessionAgo,
       tradesInLastSession,
+      universe: await buildUniverseBadge(fund.name),
     });
   }
 

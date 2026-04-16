@@ -68,6 +68,25 @@ export function FundCard({ fund, extras, isSelected, width }: FundCardProps) {
         </Box>
       </Box>
 
+      {/* Line 2.5: universe badge */}
+      {extras.universe && (
+        <Text dimColor>
+          <Text
+            color={
+              extras.universe.staleness === "fresh"
+                ? "green"
+                : extras.universe.staleness === "stale"
+                  ? "yellow"
+                  : "red"
+            }
+          >
+            ●
+          </Text>
+          {" "}
+          Universe: {extras.universe.source} · {extras.universe.count} tickers · {extras.universe.ageHours}h ago
+        </Text>
+      )}
+
       {/* Line 3: holdings */}
       <Text dimColor>{holdingsWithCash}</Text>
 

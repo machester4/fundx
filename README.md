@@ -21,6 +21,7 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - [CLI Reference](#cli-reference)
 - [Architecture](#architecture)
 - [Configuration](#configuration)
+- [Per-Fund Universe](#per-fund-universe)
 - [Telegram Integration](#telegram-integration)
 - [Tech Stack](#tech-stack)
 - [Development](#development)
@@ -349,18 +350,23 @@ risk:
     - "Never hold more than 2 gold-related ETFs simultaneously"
 
 universe:
-  allowed:
-    - type: etf
-      sectors: [gold, bonds, commodities]
-    - type: stock
-      tickers: [AAPL, MSFT, GOOG]
-    - type: crypto
-      tickers: [BTC, ETH]
-  forbidden:
-    - type: stock
-      sectors: [gambling, tobacco]
-    - type: etf
-      tickers: [SQQQ, TQQQ]   # Leveraged ETFs
+  # Either a canonical index preset:
+  preset: sp500                  # sp500 | nasdaq100 | dow30
+  # OR custom FMP screener filters (mutually exclusive with preset):
+  # filters:
+  #   market_cap_min: 10_000_000_000
+  #   exchange: [NYSE, NASDAQ]
+  #   country: US
+  #   sector: [Technology, Healthcare]
+  #   is_actively_trading: true
+  #   limit: 500
+
+  # Always-in tickers (bypass universe filters, hard-included):
+  include_tickers: [TSM]
+  # Hard-block tickers (cannot be traded, no override):
+  exclude_tickers: [TSLA]
+  # Hard-block sectors (FMP canonical names like Technology, Energy, Healthcare):
+  exclude_sectors: []
 
 schedule:
   timezone: America/New_York
@@ -413,6 +419,67 @@ claude:
 ```
 
 </details>
+
+## Per-Fund Universe
+
+Each fund has a `universe` block in its `fund_config.yaml` that defines which tickers the fund trades. The universe drives screening, gates trade execution, and is exposed to the AI agent as part of its session context.
+
+### Two modes
+
+**Preset (canonical index membership):**
+```yaml
+universe:
+  preset: sp500          # sp500 | nasdaq100 | dow30
+  include_tickers: [TSM] # always-in, bypasses universe filters
+  exclude_tickers: []    # hard-block these tickers
+  exclude_sectors: []    # hard-block these FMP canonical sectors
+```
+
+**Filters (custom FMP screener query):**
+```yaml
+universe:
+  filters:
+    market_cap_min: 10_000_000_000
+    exchange: [NYSE, NASDAQ]
+    country: US
+    sector: [Technology, Healthcare]
+    is_actively_trading: true
+    limit: 500
+  include_tickers: []
+  exclude_tickers: []
+  exclude_sectors: []
+```
+
+See `src/constants/fmp-enums.ts` for the full list of valid values per field.
+
+### Gating semantics
+
+Buys go through a gate in the `place_order` tool:
+- **Excluded ticker or sector** — hard-rejected with `UNIVERSE_EXCLUDED`
+- **Out of universe (not in base, not in includes)** — soft-gated. Pass `out_of_universe_reason` (≥20 chars, time-sensitive thesis) to `place_order` to proceed. The trade is logged with `out_of_universe=true`.
+- **Sells** are never gated — you can always exit a position regardless of universe.
+
+### Resolution and caching
+
+Universe resolution calls FMP and writes a 24h-TTL cache at `~/.fundx/funds/<name>/state/universe.json`. Invalidated on config change (`config_hash` mismatch) or forced refresh. Fallback chain on FMP outage: cached → stale cache (hash must match) → static S&P 500 fallback list.
+
+### Tools (CLI)
+
+```bash
+fundx fund show-universe <name>      # inspect resolved universe
+fundx fund refresh-universe <name>   # force re-resolution
+fundx fund upgrade --name <name>     # migrate legacy universe schema + regenerate CLAUDE.md/skills
+```
+
+### Tools (MCP, for the AI agent)
+
+- `check_universe({ticker})` — can this fund trade this ticker?
+- `list_universe({sector?, limit?, verbose?})` — what's in the universe? `verbose: true` exposes current include/exclude lists (needed to modify them safely).
+- `update_universe({mode?, include_tickers?, exclude_tickers?, exclude_sectors?})` — mutate the universe. Validates with Zod, writes atomically, invalidates cache, regenerates CLAUDE.md, appends to `state/universe_audit.log`. REPLACE semantics on the list fields.
+
+### Migration from the old schema
+
+Funds created before the universe system used `universe: { allowed, forbidden }`. Running `fundx fund upgrade --name <name>` migrates to the new schema with `.bak` backup preserved.
 
 ## Telegram Integration
 
