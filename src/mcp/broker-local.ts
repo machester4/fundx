@@ -154,7 +154,7 @@ function fundNameFromEnv(): string {
 export interface CheckUniverseInput { ticker: string }
 export interface CheckUniverseDeps {
   resolve: () => Promise<UniverseResolution>;
-  checkSector: (ticker: string) => Promise<{ excluded: boolean; sector?: string }>;
+  checkSector: (ticker: string, resolution: UniverseResolution) => Promise<{ excluded: boolean; sector?: string }>;
 }
 export interface CheckUniverseOutput {
   in_universe: boolean;
@@ -199,7 +199,7 @@ export async function handleCheckUniverse(
     };
   }
   // Preset mode: check sector exclusion via profile
-  const sectorCheck = await deps.checkSector(input.ticker);
+  const sectorCheck = await deps.checkSector(input.ticker, resolution);
   if (sectorCheck.excluded) {
     return {
       in_universe: false,
@@ -243,14 +243,21 @@ export async function handleListUniverse(
   let tickers = resolution.final_tickers;
   if (input.sector) {
     const matching: string[] = [];
-    for (const t of tickers) {
-      const p = await deps.getProfile(t);
-      if (p?.sector === input.sector) matching.push(t);
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+      const batch = tickers.slice(i, i + BATCH_SIZE);
+      const profiles = await Promise.all(
+        batch.map((t) => deps.getProfile(t).then((p) => ({ t, p }))),
+      );
+      for (const { t, p } of profiles) {
+        if (p?.sector === input.sector) matching.push(t);
+      }
     }
     tickers = matching;
   }
   const total = tickers.length;
-  if (input.limit && input.limit > 0) tickers = tickers.slice(0, input.limit);
+  const effectiveLimit = input.limit ?? (input.sector ? 50 : undefined);
+  if (effectiveLimit && effectiveLimit > 0) tickers = tickers.slice(0, effectiveLimit);
   return {
     tickers,
     total,
@@ -266,7 +273,7 @@ export interface BuyGateInput {
 }
 export interface BuyGateDeps {
   resolve: () => Promise<UniverseResolution>;
-  checkSector: (ticker: string) => Promise<{ excluded: boolean; sector?: string }>;
+  checkSector: (ticker: string, resolution: UniverseResolution) => Promise<{ excluded: boolean; sector?: string }>;
 }
 export type BuyGateResult =
   | { ok: true; out_of_universe: boolean; out_of_universe_reason: string | null }
@@ -298,7 +305,7 @@ export async function handleBuyGate(
   }
 
   // Preset mode: check sector exclusion via profile
-  const sectorCheck = await deps.checkSector(t);
+  const sectorCheck = await deps.checkSector(t, resolution);
   if (sectorCheck.excluded) {
     return {
       ok: false,
@@ -452,16 +459,28 @@ server.tool(
       const fundName = fundNameFromEnv();
       const apiKey = FMP_API_KEY;
       const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
-      const checkSector = async (t: string) => {
-        const res = await resolve();
-        return checkSectorExclusion(res, t, apiKey);
-      };
+      const checkSector = (t: string, res: UniverseResolution) => checkSectorExclusion(res, t, apiKey);
       const gate = await handleBuyGate({ symbol, out_of_universe_reason }, { resolve, checkSector });
       if (!gate.ok) {
         return { content: [{ type: "text", text: JSON.stringify({ error: gate.code, message: gate.message }) }] };
       }
       outOfUniverse = gate.out_of_universe;
       outOfUniverseReason = gate.out_of_universe_reason;
+    } else {
+      // Sell: universe gate does NOT apply (always allow), but tag the journal
+      // with whether the sold ticker is currently out-of-universe (for audit).
+      if (FMP_API_KEY) {
+        try {
+          const cfg = await loadFundConfigForMcp();
+          const fundName = fundNameFromEnv();
+          const resolution = await resolveUniverse(fundName, cfg.universe, FMP_API_KEY);
+          const status = isInUniverse(resolution, symbol.toUpperCase());
+          // Only set the flag when we can confirm; leave false on uncertain.
+          outOfUniverse = !status.in_universe && !status.exclude_hard_block;
+        } catch {
+          // Swallow — journal will report outOfUniverse=false (conservative default).
+        }
+      }
     }
 
     const price = await fetchFmpPrice(symbol.toUpperCase());
@@ -585,10 +604,7 @@ server.tool(
     const fundName = fundNameFromEnv();
     const apiKey = FMP_API_KEY;
     const resolve = () => resolveUniverse(fundName, cfg.universe, apiKey);
-    const checkSector = async (t: string) => {
-      const res = await resolve();
-      return checkSectorExclusion(res, t, apiKey);
-    };
+    const checkSector = (t: string, res: UniverseResolution) => checkSectorExclusion(res, t, apiKey);
     const r = await handleCheckUniverse({ ticker: args.ticker }, { resolve, checkSector });
     return { content: [{ type: "text", text: JSON.stringify(r, null, 2) }] };
   },
@@ -596,7 +612,7 @@ server.tool(
 
 server.tool(
   "list_universe",
-  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups).",
+  "List this fund's resolved universe tickers. Optionally filter by sector (preset mode performs profile lookups with 10x concurrency; defaults limit to 50 when sector is set).",
   {
     sector: z.string().optional().describe("Filter to tickers in this sector (e.g. 'Technology')"),
     limit: z.number().int().positive().optional().describe("Max tickers to return"),

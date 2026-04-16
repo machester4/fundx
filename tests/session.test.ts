@@ -88,9 +88,13 @@ vi.mock("../src/services/fund.service.js", () => ({
   listFundNames: vi.fn(async () => ["test-fund"]),
 }));
 
-const mockReadCachedUniverse = vi.fn();
+const mockResolveUniverse = vi.fn();
 vi.mock("../src/services/universe.service.js", () => ({
-  readCachedUniverse: (...args: unknown[]) => mockReadCachedUniverse(...args),
+  resolveUniverse: (...args: unknown[]) => mockResolveUniverse(...args),
+}));
+
+vi.mock("../src/config.js", () => ({
+  loadGlobalConfig: vi.fn(async () => ({ market_data: { fmp_api_key: "test" } })),
 }));
 
 import { runFundSession } from "../src/services/session.service.js";
@@ -101,7 +105,7 @@ const mockedLoadFundConfig = vi.mocked(loadFundConfig);
 beforeEach(() => {
   vi.clearAllMocks();
   mockedLoadFundConfig.mockResolvedValue(makeFundConfig() as never);
-  mockReadCachedUniverse.mockResolvedValue(null);
+  mockResolveUniverse.mockResolvedValue(null);
   mockRunAgentQuery.mockResolvedValue({
     output: "Session complete. No trades.",
     cost_usd: 0.03,
@@ -281,7 +285,7 @@ describe("runFundSession with agents", () => {
 
 describe("runFundSession — fund_universe block", () => {
   it("includes <fund_universe> block when cached resolution exists", async () => {
-    mockReadCachedUniverse.mockResolvedValue({
+    mockResolveUniverse.mockResolvedValue({
       resolved_at: 1_744_000_000_000,
       config_hash: "abc123",
       resolved_from: "fmp",
@@ -307,7 +311,7 @@ describe("runFundSession — fund_universe block", () => {
   });
 
   it("omits <fund_universe> block when no cached resolution", async () => {
-    mockReadCachedUniverse.mockResolvedValue(null);
+    mockResolveUniverse.mockResolvedValue(null);
 
     await runFundSession("test-fund", "pre_market");
 
@@ -316,7 +320,7 @@ describe("runFundSession — fund_universe block", () => {
   });
 
   it("adds freshness_warning when resolved_from is stale_cache", async () => {
-    mockReadCachedUniverse.mockResolvedValue({
+    mockResolveUniverse.mockResolvedValue({
       resolved_at: 1_744_000_000_000,
       config_hash: "abc123",
       resolved_from: "stale_cache",
@@ -339,7 +343,7 @@ describe("runFundSession — fund_universe block", () => {
   });
 
   it("includes excluded_tickers and excluded_sectors when present", async () => {
-    mockReadCachedUniverse.mockResolvedValue({
+    mockResolveUniverse.mockResolvedValue({
       resolved_at: 1_744_000_000_000,
       config_hash: "abc123",
       resolved_from: "fmp",
