@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, stat } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -142,20 +142,35 @@ function logTrade(trade: {
   db.close();
 }
 
-// ── Fund config (cached) ──────────────────────────────────────
+// ── Fund config (cached) ─────────────────────────────────────
 // Cache scope: per-MCP-subprocess. The broker-local MCP is spawned fresh
 // at each session start, so this cache is never stale across sessions.
-// Mid-session YAML edits to fund_config.yaml are NOT picked up — restart
-// the session (or the daemon) to apply config changes.
-let cachedFundConfig: FundConfig | null = null;
+// Invalidates on:
+//   - update_universe write (sets cachedFundConfig = null)
+//   - fund_config.yaml mtime advance (external edits)
+interface CachedFundConfig {
+  value: FundConfig;
+  mtimeMs: number;
+}
+let cachedFundConfig: CachedFundConfig | null = null;
 
-async function loadFundConfigForMcp(): Promise<FundConfig> {
-  if (cachedFundConfig) return cachedFundConfig;
-  const yamlPath = join(FUND_DIR, "fund_config.yaml");
+export async function loadFundConfigForMcp(): Promise<FundConfig> {
+  // Read FUND_DIR lazily (from env) so tests can set process.env.FUND_DIR before calling.
+  const yamlPath = join(process.env.FUND_DIR!, "fund_config.yaml");
+  const stats = await stat(yamlPath);
+  if (cachedFundConfig && cachedFundConfig.mtimeMs === stats.mtimeMs) {
+    return cachedFundConfig.value;
+  }
   const raw = await readFile(yamlPath, "utf-8");
   const parsed = yaml.load(raw);
-  cachedFundConfig = fundConfigSchema.parse(parsed);
-  return cachedFundConfig;
+  const validated = fundConfigSchema.parse(parsed);
+  cachedFundConfig = { value: validated, mtimeMs: stats.mtimeMs };
+  return validated;
+}
+
+/** For tests only. */
+export function _resetFundConfigCacheForTests(): void {
+  cachedFundConfig = null;
 }
 
 function fundNameFromEnv(): string {
