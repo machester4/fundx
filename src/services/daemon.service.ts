@@ -884,14 +884,14 @@ export async function startDaemon(): Promise<void> {
     } finally {
       isProcessing = false;
     }
-  });
+  }, { timezone: "UTC" });
 
   // SWS token expiry check — daily at 09:00
   cron.schedule("0 9 * * *", () => {
     checkSwsTokenExpiry().catch(async (err) => {
       await log(`SWS token check error: ${err}`);
     });
-  });
+  }, { timezone: "UTC" });
 
   // News feed fetcher — every 5 min, reduced off-hours
   let lastNewsFetchAt = 0;
@@ -912,7 +912,7 @@ export async function startDaemon(): Promise<void> {
     } catch (err) {
       await log(`[news] Fetch error: ${err}`);
     }
-  });
+  }, { timezone: "UTC" });
 
   // Daily cleanup of old news articles and analysis files
   cron.schedule("0 0 * * *", async () => {
@@ -928,7 +928,7 @@ export async function startDaemon(): Promise<void> {
     } catch (err) {
       await log(`[analysis] Cleanup error: ${err}`);
     }
-  });
+  }, { timezone: "UTC" });
 
   // Universe cache refresh — 04:00 UTC daily (well before pre-market sessions)
   cron.schedule("0 4 * * *", async () => {
@@ -965,7 +965,7 @@ export async function startDaemon(): Promise<void> {
     } catch (err) {
       trackError("_universe", "daily-refresh", err);
     }
-  });
+  }, { timezone: "UTC" });
 
   // Daily screening — 22:00 Mon–Fri (post US market close)
   cron.schedule("0 22 * * 1-5", async () => {
@@ -1026,7 +1026,7 @@ export async function startDaemon(): Promise<void> {
     } catch (err) {
       trackError("_screening", "daily-run", err);
     }
-  });
+  }, { timezone: "UTC" });
 
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
