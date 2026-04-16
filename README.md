@@ -350,18 +350,23 @@ risk:
     - "Never hold more than 2 gold-related ETFs simultaneously"
 
 universe:
-  allowed:
-    - type: etf
-      sectors: [gold, bonds, commodities]
-    - type: stock
-      tickers: [AAPL, MSFT, GOOG]
-    - type: crypto
-      tickers: [BTC, ETH]
-  forbidden:
-    - type: stock
-      sectors: [gambling, tobacco]
-    - type: etf
-      tickers: [SQQQ, TQQQ]   # Leveraged ETFs
+  # Either a canonical index preset:
+  preset: sp500                  # sp500 | nasdaq100 | dow30
+  # OR custom FMP screener filters (mutually exclusive with preset):
+  # filters:
+  #   market_cap_min: 10_000_000_000
+  #   exchange: [NYSE, NASDAQ]
+  #   country: US
+  #   sector: [Technology, Healthcare]
+  #   is_actively_trading: true
+  #   limit: 500
+
+  # Always-in tickers (bypass universe filters, hard-included):
+  include_tickers: [TSM]
+  # Hard-block tickers (cannot be traded, no override):
+  exclude_tickers: [TSLA]
+  # Hard-block sectors (FMP canonical names like Technology, Energy, Healthcare):
+  exclude_sectors: []
 
 schedule:
   timezone: America/New_York
