@@ -273,9 +273,9 @@ export async function resolveUniverse(
     );
   }
 
-  // Fallback 1: stale cache (ignore TTL)
+  // Fallback 1: stale cache (ignore TTL, but only when config hasn't changed)
   const stale = await readCachedUniverse(fundName);
-  if (stale) {
+  if (stale && stale.config_hash === hash) {
     return { ...stale, resolved_from: "stale_cache" };
   }
 

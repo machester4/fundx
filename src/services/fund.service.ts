@@ -1,4 +1,4 @@
-import { readFile, writeFile, copyFile, readdir, rm, mkdir } from "node:fs/promises";
+import { readFile, writeFile, copyFile, rename, readdir, rm, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import yaml from "js-yaml";
 import { fundConfigSchema, type FundConfig } from "../types.js";
@@ -91,7 +91,9 @@ async function maybeMigrateUniverseFile(
   }
 
   (parsed as Record<string, unknown>).universe = migrateUniverseFromLegacy(legacy);
-  await writeFile(configPath, yaml.dump(parsed, { lineWidth: 120 }), "utf-8");
+  const tmp = `${configPath}.tmp`;
+  await writeFile(tmp, yaml.dump(parsed, { lineWidth: 120 }), "utf-8");
+  await rename(tmp, configPath);
 
   return { migrated: true, warnings };
 }
