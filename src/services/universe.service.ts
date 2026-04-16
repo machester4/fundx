@@ -3,13 +3,18 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { writeJsonAtomic } from "../state.js";
 import { fundPaths } from "../paths.js";
-import type { Universe, UniverseResolution, FmpScreenerFilters } from "../types.js";
+import type { Universe, UniverseResolution } from "../types.js";
 import { universeResolutionSchema } from "../types.js";
-import { getCompanyProfile } from "./market.service.js";
+import {
+  getCompanyProfile,
+  getSp500ConstituentsRaw,
+  getNasdaq100ConstituentsRaw,
+  getDow30ConstituentsRaw,
+  getScreenerResultsRaw,
+  type ScreenerResult,
+} from "./market.service.js";
 import { SP500_FALLBACK } from "../constants/sp500.js";
 
-const FMP_BASE = "https://financialmodelingprep.com/api/v3";
-const FMP_STABLE_BASE = "https://financialmodelingprep.com/stable";
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Stable hash of a universe config. Arrays are sorted before hashing. */
@@ -76,91 +81,23 @@ export async function readCachedUniverse(fundName: string): Promise<UniverseReso
   }
 }
 
-/** Fetch preset constituents directly from FMP. Throws on HTTP error or empty response. */
-async function fetchPresetFromFmp(preset: string, apiKey: string): Promise<string[]> {
-  let url: string;
-  if (preset === "sp500") {
-    url = `${FMP_BASE}/sp500_constituent?apikey=${apiKey}`;
-  } else if (preset === "nasdaq100") {
-    url = `${FMP_BASE}/nasdaq_constituent?apikey=${apiKey}`;
-  } else if (preset === "dow30") {
-    url = `${FMP_BASE}/dowjones_constituent?apikey=${apiKey}`;
-  } else {
-    throw new Error(`Unknown preset: ${preset}`);
-  }
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) throw new Error(`FMP ${url} returned HTTP ${resp.status}`);
-  const body = (await resp.json()) as Array<{ symbol: string }>;
-  if (!Array.isArray(body) || body.length === 0) {
-    throw new Error(`FMP preset ${preset} returned empty/invalid body`);
-  }
-  return body.map((r) => r.symbol);
-}
-
-// Translate snake_case filter keys to FMP camelCase query params
-const FMP_SCREENER_PARAM_MAP: Record<string, string> = {
-  market_cap_min: "marketCapMoreThan",
-  market_cap_max: "marketCapLowerThan",
-  price_min: "priceMoreThan",
-  price_max: "priceLowerThan",
-  beta_min: "betaMoreThan",
-  beta_max: "betaLowerThan",
-  dividend_min: "dividendMoreThan",
-  dividend_max: "dividendLowerThan",
-  volume_min: "volumeMoreThan",
-  volume_max: "volumeLowerThan",
-  industry: "industry",
-  country: "country",
-  is_etf: "isEtf",
-  is_fund: "isFund",
-  is_actively_trading: "isActivelyTrading",
-  include_all_share_classes: "includeAllShareClasses",
-  limit: "limit",
-};
-
-function buildScreenerQuery(filters: FmpScreenerFilters): string {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(filters)) {
-    if (v === undefined || v === null) continue;
-    if (Array.isArray(v)) {
-      const fmpKey = k === "sector" ? "sector" : k === "exchange" ? "exchange" : k;
-      for (const item of v) params.append(fmpKey, String(item));
-      continue;
-    }
-    const fmpKey = FMP_SCREENER_PARAM_MAP[k];
-    if (!fmpKey) continue;
-    params.append(fmpKey, String(v));
-  }
-  return params.toString().replace(/\+/g, "%20");
-}
-
-interface ScreenerRow {
-  symbol: string;
-  sector?: string;
-}
-
-/** Fetch screener results directly from FMP. Throws on HTTP error or empty response. */
-async function fetchScreenerFromFmp(filters: FmpScreenerFilters, apiKey: string): Promise<ScreenerRow[]> {
-  const query = buildScreenerQuery(filters);
-  const url = `${FMP_STABLE_BASE}/company-screener?${query}&apikey=${apiKey}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(20_000) });
-  if (!resp.ok) throw new Error(`FMP /company-screener returned HTTP ${resp.status}`);
-  const body = (await resp.json()) as ScreenerRow[];
-  if (!Array.isArray(body) || body.length === 0) {
-    throw new Error("FMP screener returned empty/invalid body");
-  }
-  return body;
+/** Fetch preset constituents from FMP via shared raw fetchers. Throws on error. */
+async function fetchPreset(preset: string, apiKey: string): Promise<string[]> {
+  if (preset === "sp500") return getSp500ConstituentsRaw(apiKey);
+  if (preset === "nasdaq100") return getNasdaq100ConstituentsRaw(apiKey);
+  if (preset === "dow30") return getDow30ConstituentsRaw(apiKey);
+  throw new Error(`Unknown preset: ${preset}`);
 }
 
 /** Normalize exclude_sectors against screener results (sector is available). */
 function applyScreenerExcludeSectors(
-  screener: ScreenerRow[],
+  screener: ScreenerResult[],
   excludeSectors: string[],
-): { kept: ScreenerRow[]; excludedSymbols: string[] } {
+): { kept: ScreenerResult[]; excludedSymbols: string[] } {
   if (excludeSectors.length === 0) {
     return { kept: screener, excludedSymbols: [] };
   }
-  const kept: ScreenerRow[] = [];
+  const kept: ScreenerResult[] = [];
   const excludedSymbols: string[] = [];
   for (const r of screener) {
     if (r.sector && excludeSectors.includes(r.sector)) {
@@ -223,7 +160,7 @@ export async function resolveUniverse(
   // Try FMP
   try {
     if (universe.preset) {
-      const base = await fetchPresetFromFmp(universe.preset, apiKey);
+      const base = await fetchPreset(universe.preset, apiKey);
       const { final, include_applied, exclude_tickers_applied } = applyIncludeExclude(base, universe);
       const resolution: UniverseResolution = {
         resolved_at: now,
@@ -245,7 +182,7 @@ export async function resolveUniverse(
 
     // Filter mode
     if (universe.filters) {
-      const screener = await fetchScreenerFromFmp(universe.filters, apiKey);
+      const screener = await getScreenerResultsRaw(universe.filters, apiKey);
       const { kept, excludedSymbols } = applyScreenerExcludeSectors(screener, universe.exclude_sectors);
       const keptSymbols = kept.map((r) => r.symbol);
       const { final, include_applied, exclude_tickers_applied } = applyIncludeExclude(keptSymbols, universe);

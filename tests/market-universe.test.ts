@@ -5,6 +5,10 @@ import {
   getScreenerResults,
   getCompanyProfile,
   _resetProfileCacheForTests,
+  getSp500ConstituentsRaw,
+  getNasdaq100ConstituentsRaw,
+  getDow30ConstituentsRaw,
+  getScreenerResultsRaw,
 } from "../src/services/market.service.js";
 
 const origFetch = globalThis.fetch;
@@ -153,5 +157,50 @@ describe("getCompanyProfile", () => {
     await getCompanyProfile("aapl", "KEY");
     await getCompanyProfile("AAPL", "KEY");
     expect(calls).toBe(1);
+  });
+});
+
+describe("getSp500ConstituentsRaw", () => {
+  it("throws on non-200", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("x", { status: 500 })) as unknown as typeof globalThis.fetch;
+    await expect(getSp500ConstituentsRaw("KEY")).rejects.toThrow(/500/);
+  });
+
+  it("returns tickers on success", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify([{ symbol: "AAPL" }]), { status: 200 })) as unknown as typeof globalThis.fetch;
+    expect(await getSp500ConstituentsRaw("KEY")).toEqual(["AAPL"]);
+  });
+
+  it("throws on empty body", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 })) as unknown as typeof globalThis.fetch;
+    await expect(getSp500ConstituentsRaw("KEY")).rejects.toThrow(/empty/i);
+  });
+});
+
+describe("getNasdaq100ConstituentsRaw", () => {
+  it("throws on non-200", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("x", { status: 503 })) as unknown as typeof globalThis.fetch;
+    await expect(getNasdaq100ConstituentsRaw("KEY")).rejects.toThrow(/503/);
+  });
+});
+
+describe("getDow30ConstituentsRaw", () => {
+  it("throws on non-200", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("x", { status: 404 })) as unknown as typeof globalThis.fetch;
+    await expect(getDow30ConstituentsRaw("KEY")).rejects.toThrow(/404/);
+  });
+});
+
+describe("getScreenerResultsRaw", () => {
+  it("throws on non-200", async () => {
+    globalThis.fetch = vi.fn(async () => new Response("x", { status: 500 })) as unknown as typeof globalThis.fetch;
+    await expect(getScreenerResultsRaw({ limit: 10 }, "KEY")).rejects.toThrow(/500/);
+  });
+
+  it("returns results on success", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify([{ symbol: "AAPL", sector: "Technology" }]), { status: 200 })) as unknown as typeof globalThis.fetch;
+    const r = await getScreenerResultsRaw({ limit: 10 }, "KEY");
+    expect(r).toHaveLength(1);
+    expect(r[0].symbol).toBe("AAPL");
   });
 });
