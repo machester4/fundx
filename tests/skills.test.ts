@@ -106,6 +106,11 @@ describe("BUILTIN_SKILLS", () => {
     expect(skill!.content).toContain("Modifying the universe");
   });
 
+  it("risk-assessment skill references verbose list_universe workflow", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.dirName === "risk-assessment");
+    expect(skill!.content).toContain("verbose: true");
+  });
+
   it("includes Trade Memory skill with R-multiple framework", () => {
     const skill = BUILTIN_SKILLS.find((s) => s.name === "Trade Memory");
     expect(skill).toBeDefined();
