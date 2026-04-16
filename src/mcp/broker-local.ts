@@ -134,7 +134,11 @@ function logTrade(trade: {
   db.close();
 }
 
-// ── Fund config (cached) ─────────────────────────────────────
+// ── Fund config (cached) ──────────────────────────────────────
+// Cache scope: per-MCP-subprocess. The broker-local MCP is spawned fresh
+// at each session start, so this cache is never stale across sessions.
+// Mid-session YAML edits to fund_config.yaml are NOT picked up — restart
+// the session (or the daemon) to apply config changes.
 let cachedFundConfig: FundConfig | null = null;
 
 async function loadFundConfigForMcp(): Promise<FundConfig> {

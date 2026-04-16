@@ -2,6 +2,7 @@ import YahooFinance from "yahoo-finance2";
 import { loadGlobalConfig } from "../config.js";
 import { queryArticles } from "./news.service.js";
 import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData, DailyBar, FmpScreenerFilters } from "../types.js";
+import { SP500_FALLBACK } from "../constants/sp500.js";
 
 const yf = new YahooFinance();
 
@@ -429,47 +430,66 @@ export async function getHistoricalDaily(
     }));
 }
 
+// ── Universe endpoints (raw + safe variants) ─────────────────
+// Raw variants throw on HTTP error or empty response — used by
+// universe.service.ts which manages its own fallback chain.
+// Non-raw variants are the safe public API for callers that want
+// silent degradation.
+
+/** Fetch S&P 500 constituents. Throws on HTTP error or empty/invalid body. */
+export async function getSp500ConstituentsRaw(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/sp500_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) throw new Error(`FMP /sp500_constituent returned ${resp.status}`);
+  const body = (await resp.json()) as Array<{ symbol: string }>;
+  if (!Array.isArray(body) || body.length === 0) throw new Error("FMP /sp500_constituent returned empty/invalid body");
+  return body.map((r) => r.symbol);
+}
+
 /**
  * Fetch the current S&P 500 constituent list from FMP.
  * Falls back to the static SP500_FALLBACK list when the API call fails
  * or returns an empty/unexpected response.
  */
 export async function getSp500Constituents(apiKey: string): Promise<string[]> {
-  const url = `${FMP_BASE}/sp500_constituent?apikey=${apiKey}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) {
-    console.warn(
-      `[market] FMP /sp500_constituent returned ${resp.status}; using 50-ticker fallback list`,
-    );
-    const { SP500_FALLBACK } = await import("../constants/sp500.js");
+  try {
+    return await getSp500ConstituentsRaw(apiKey);
+  } catch (err) {
+    console.warn(`[market] sp500 constituent fetch failed: ${err instanceof Error ? err.message : err}; using fallback list`);
     return [...SP500_FALLBACK];
   }
-  const body = (await resp.json()) as Array<{ symbol: string }>;
-  if (!Array.isArray(body) || body.length === 0) {
-    console.warn(
-      "[market] FMP /sp500_constituent returned empty/invalid body; using fallback list",
-    );
-    const { SP500_FALLBACK } = await import("../constants/sp500.js");
-    return [...SP500_FALLBACK];
-  }
-  return body.map((r) => r.symbol);
 }
 
-// ── Universe endpoints ───────────────────────────────────────
+/** Fetch Nasdaq 100 constituents. Throws on HTTP error or empty/invalid body. */
+export async function getNasdaq100ConstituentsRaw(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/nasdaq_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) throw new Error(`FMP /nasdaq_constituent returned ${resp.status}`);
+  const body = (await resp.json()) as Array<{ symbol: string }>;
+  if (!Array.isArray(body) || body.length === 0) throw new Error("FMP /nasdaq_constituent returned empty/invalid body");
+  return body.map((r) => r.symbol);
+}
 
 /**
  * Fetch the current Nasdaq 100 constituent list from FMP.
  * Returns [] on error — caller decides fallback behavior.
  */
 export async function getNasdaq100Constituents(apiKey: string): Promise<string[]> {
-  const url = `${FMP_BASE}/nasdaq_constituent?apikey=${apiKey}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) {
-    console.warn(`[market] FMP /nasdaq_constituent returned ${resp.status}`);
+  try {
+    return await getNasdaq100ConstituentsRaw(apiKey);
+  } catch (err) {
+    console.warn(`[market] FMP /nasdaq_constituent failed: ${err instanceof Error ? err.message : err}`);
     return [];
   }
+}
+
+/** Fetch Dow 30 constituents. Throws on HTTP error or empty/invalid body. */
+export async function getDow30ConstituentsRaw(apiKey: string): Promise<string[]> {
+  const url = `${FMP_BASE}/dowjones_constituent?apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!resp.ok) throw new Error(`FMP /dowjones_constituent returned ${resp.status}`);
   const body = (await resp.json()) as Array<{ symbol: string }>;
-  if (!Array.isArray(body)) return [];
+  if (!Array.isArray(body) || body.length === 0) throw new Error("FMP /dowjones_constituent returned empty/invalid body");
   return body.map((r) => r.symbol);
 }
 
@@ -478,15 +498,12 @@ export async function getNasdaq100Constituents(apiKey: string): Promise<string[]
  * Returns [] on error — caller decides fallback behavior.
  */
 export async function getDow30Constituents(apiKey: string): Promise<string[]> {
-  const url = `${FMP_BASE}/dowjones_constituent?apikey=${apiKey}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-  if (!resp.ok) {
-    console.warn(`[market] FMP /dowjones_constituent returned ${resp.status}`);
+  try {
+    return await getDow30ConstituentsRaw(apiKey);
+  } catch (err) {
+    console.warn(`[market] FMP /dowjones_constituent failed: ${err instanceof Error ? err.message : err}`);
     return [];
   }
-  const body = (await resp.json()) as Array<{ symbol: string }>;
-  if (!Array.isArray(body)) return [];
-  return body.map((r) => r.symbol);
 }
 
 // Translate snake_case filter keys to FMP camelCase query params
@@ -545,6 +562,20 @@ export interface ScreenerResult {
   isActivelyTrading?: boolean;
 }
 
+/** Call FMP /stable/company-screener. Throws on HTTP error or non-array body. */
+export async function getScreenerResultsRaw(
+  filters: FmpScreenerFilters,
+  apiKey: string,
+): Promise<ScreenerResult[]> {
+  const query = buildScreenerQuery(filters);
+  const url = `${FMP_STABLE_BASE}/company-screener?${query}&apikey=${apiKey}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  if (!resp.ok) throw new Error(`FMP /company-screener returned HTTP ${resp.status}`);
+  const body = (await resp.json()) as ScreenerResult[];
+  if (!Array.isArray(body) || body.length === 0) throw new Error("FMP screener returned empty/invalid body");
+  return body;
+}
+
 /**
  * Call FMP /stable/company-screener with the given filters.
  * Returns [] on error — caller decides fallback behavior.
@@ -553,16 +584,12 @@ export async function getScreenerResults(
   filters: FmpScreenerFilters,
   apiKey: string,
 ): Promise<ScreenerResult[]> {
-  const query = buildScreenerQuery(filters);
-  const url = `${FMP_STABLE_BASE}/company-screener?${query}&apikey=${apiKey}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(20_000) });
-  if (!resp.ok) {
-    console.warn(`[market] FMP /company-screener returned ${resp.status}`);
+  try {
+    return await getScreenerResultsRaw(filters, apiKey);
+  } catch (err) {
+    console.warn(`[market] FMP /company-screener failed: ${err instanceof Error ? err.message : err}`);
     return [];
   }
-  const body = (await resp.json()) as ScreenerResult[];
-  if (!Array.isArray(body)) return [];
-  return body;
 }
 
 // ── Company profile (with LRU cache) ─────────────────────────
