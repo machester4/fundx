@@ -45,6 +45,9 @@ export interface ChatTurnResult {
   cost_usd: number;
   num_turns: number;
   responseText: string;
+  toolHistory: Array<{ name: string; elapsed: number }>;
+  tokensIn: number;
+  tokensOut: number;
 }
 
 export interface TradeSummaryData {
@@ -464,6 +467,13 @@ export async function runChatTurn(
   let costUsd = 0;
   let numTurns = 0;
 
+  // Tool history + token accumulators (exposed on ChatTurnResult)
+  const toolHistory: Array<{ name: string; elapsed: number }> = [];
+  let activeToolName: string | null = null;
+  let activeToolStartedAt: number | null = null;
+  let capturedTokensIn = 0;
+  let capturedTokensOut = 0;
+
   callbacks?.onStreamStart?.();
   let responseBuffer = "";
   let charCount = 0;
@@ -511,6 +521,8 @@ export async function runChatTurn(
           callbacks?.onThinkingStart?.();
         } else if (event.content_block?.type === "tool_use" && event.content_block.name) {
           activeBlockType = "tool_use";
+          activeToolName = event.content_block.name;
+          activeToolStartedAt = Date.now();
           callbacks?.onToolStart?.(event.content_block.name);
         } else if (event.content_block?.type === "text") {
           // Separate consecutive text blocks with a newline (e.g. text → tool → text)
@@ -533,6 +545,14 @@ export async function runChatTurn(
         if (activeBlockType === "thinking") {
           callbacks?.onThinkingEnd?.();
         } else if (activeBlockType === "tool_use") {
+          if (activeToolName !== null && activeToolStartedAt !== null) {
+            toolHistory.push({
+              name: activeToolName,
+              elapsed: (Date.now() - activeToolStartedAt) / 1000,
+            });
+            activeToolName = null;
+            activeToolStartedAt = null;
+          }
           callbacks?.onToolEnd?.();
         }
         activeBlockType = null;
@@ -574,6 +594,8 @@ export async function runChatTurn(
           totalIn += usage.inputTokens;
           totalOut += usage.outputTokens;
         }
+        capturedTokensIn = totalIn;
+        capturedTokensOut = totalOut;
         callbacks?.onTokens?.(totalIn, totalOut);
       }
     }
@@ -586,6 +608,9 @@ export async function runChatTurn(
     cost_usd: costUsd,
     num_turns: numTurns,
     responseText: responseBuffer,
+    toolHistory,
+    tokensIn: capturedTokensIn,
+    tokensOut: capturedTokensOut,
   };
 }
 
