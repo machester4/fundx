@@ -12,6 +12,7 @@ vi.mock("node:fs", () => ({
 import {
   BUILTIN_SKILLS,
   WORKSPACE_SKILL,
+  FUND_RULES,
   getAllSkillNames,
   getSkillContent,
   ensureSkillFiles,
@@ -328,5 +329,33 @@ describe("FUND_RULES", () => {
     expect(content).toContain("session-handoff.md");
     expect(content).toContain("Reflection completed");
     expect(content).toContain("Contract evaluated");
+  });
+});
+
+describe("FUND_RULES includes data-access.md", () => {
+  it("has a data-access.md entry", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "data-access.md");
+    expect(entry).toBeDefined();
+    expect(entry!.content).toContain("# Data Access & Tool Preference");
+  });
+
+  it("data-access.md mentions the three project MCPs", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "data-access.md")!;
+    expect(entry.content).toContain("mcp__broker-local__");
+    expect(entry.content).toContain("mcp__screener__");
+    expect(entry.content).toContain("mcp__market-data__");
+  });
+
+  it("data-access.md explicitly discourages Read/Bash/Glob on state paths", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "data-access.md")!;
+    expect(entry.content).toMatch(/Read/);
+    expect(entry.content).toMatch(/Bash/);
+    expect(entry.content).toMatch(/state\//);
+  });
+
+  it("data-access.md includes bilingual opportunity triggers", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "data-access.md")!;
+    expect(entry.content).toMatch(/oportunidades/i);
+    expect(entry.content).toMatch(/what's interesting|what is interesting|opportunities/i);
   });
 });

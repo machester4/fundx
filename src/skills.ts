@@ -1001,7 +1001,7 @@ export async function ensureFundSkillFiles(fundClaudeDir: string): Promise<void>
 
 // ── Per-Fund Rules ─────────────────────────────────────────────
 
-const FUND_RULES: { fileName: string; content: string }[] = [
+export const FUND_RULES: { fileName: string; content: string }[] = [
   {
     fileName: "state-consistency.md",
     content: `# State & Config Consistency
@@ -1473,6 +1473,62 @@ Before ending any session, verify ALL of the following:
 
 If any check fails, address it before ending. Do not skip checks because "the session
 is running low on turns" — an incomplete handoff costs more than an extra turn.
+`,
+  },
+  {
+    fileName: "data-access.md",
+    content: `# Data Access & Tool Preference
+
+Your session context already includes fund config, current portfolio, objective
+tracker, recent trades, and the top watchlist candidates. Read the context
+first — if the answer is visible there, respond from context.
+
+## When the user asks about opportunities
+
+User prompts like "¿hay oportunidades?", "qué comprar", "what's interesting",
+"any new entries detected" map to the watchlist, not to free exploration.
+
+- The \`### Watchlist\` section of the context is the source of truth for active
+  candidates. Prefer its content for the first response.
+- If the user needs more than the top 5 shown, call
+  \`mcp__screener__watchlist_query\` filtered by this fund.
+- If the user explicitly asks to run a new screen, call
+  \`mcp__screener__screen_run\`.
+
+Why: the watchlist is systematically updated by the screener. Inventing tickers
+from memory bypasses universe, risk, and fund-tag guardrails — every claimed
+"opportunity" should trace back to a watchlist row or a screen you ran this
+session.
+
+## For fund state, use MCPs instead of file reads
+
+The fund keeps its state in \`~/.fundx/funds/<name>/state/*.json\` and a SQLite
+watchlist DB. Do **not** \`Read\`, \`cat\`, or \`Bash\`-inspect these paths when you
+need their contents — the MCPs expose them with fresher values and schema
+validation.
+
+| Need | Use | Not |
+|------|-----|-----|
+| Cash, balances, positions | \`mcp__broker-local__get_account\`, \`get_positions\` | \`Read state/portfolio.json\` |
+| Watchlist candidates / trajectories | \`mcp__screener__watchlist_query\`, \`watchlist_trajectory\` | \`Read state/watchlist.sqlite\` |
+| Live quotes, snapshots, sector moves | \`mcp__market-data__*\` | \`Bash curl ...\`, hardcoded prices |
+| Run a screen | \`mcp__screener__screen_run\` / \`screen_discover\` | building a screen by hand |
+
+## When Read / Bash / Glob are appropriate
+
+- Your own analysis archives in \`analysis/\`
+- Scripts under \`scripts/\`
+- Source or config files outside \`state/\` and outside the fund dir
+- The \`session-handoff.md\` when the context's data-freshness block suggests
+  you need the narrative around the latest state
+
+For anything under \`state/\` or the watchlist DB, reach for the MCP.
+
+## Data freshness
+
+The \`### Data freshness\` section tells you how stale the context is. If a value
+is more than an hour old and the user is asking about *right now*, that's a
+signal to call the MCP for fresh numbers.
 `,
   },
 ];
