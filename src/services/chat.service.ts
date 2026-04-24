@@ -483,6 +483,13 @@ export async function runChatTurn(
   // Build analyst sub-agents so the Task tool is available in chat sessions
   const agents = fundName ? buildAnalystAgents(fundName) : undefined;
 
+  // Build a clean child-process environment that strips CLAUDECODE so that the
+  // Agent SDK subprocess is not rejected as a "nested Claude Code session".
+  // This matters when `fundx eval` (or `fundx ask`) is invoked from within an
+  // existing Claude Code session where CLAUDECODE=1 is already set.
+  const childEnv = { ...process.env } as Record<string, string>;
+  delete childEnv["CLAUDECODE"];
+
   for await (const msg of query({
     prompt,
     options: {
@@ -490,6 +497,7 @@ export async function runChatTurn(
       maxTurns: 30,
       maxBudgetUsd: opts.maxBudgetUsd,
       cwd,
+      env: childEnv,
       systemPrompt: { type: "preset", preset: "claude_code" },
       settingSources: ["project"],
       mcpServers: opts.mcpServers,
