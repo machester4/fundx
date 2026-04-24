@@ -54,8 +54,10 @@ export function resolveWatchlistDbPath(): string {
   return DEFAULT_WATCHLIST_DB;
 }
 
-// Backwards-compatible lazy export. Existing callers using `WATCHLIST_DB` as a
-// const continue to work; new callers should prefer the function for test isolation.
+// Backwards-compatible export (evaluated once at module load). Existing callers
+// using `WATCHLIST_DB` as a const continue to work, but if the env var changes
+// after module import the value will not update. New callers should prefer
+// resolveWatchlistDbPath() for reliable test isolation.
 export const WATCHLIST_DB = resolveWatchlistDbPath();
 
 /** Price cache SQLite database */

@@ -13,7 +13,7 @@ import {
 } from "./price-cache.service.js";
 import { openSync, closeSync, unlinkSync, existsSync, statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { WATCHLIST_DB } from "../paths.js";
+import { resolveWatchlistDbPath } from "../paths.js";
 
 const LOOKBACK_TOTAL_DAYS = 273;
 const SKIP_RECENT_DAYS = 21;
@@ -65,7 +65,7 @@ const TOP_DECILE_FRACTION = 0.10;
 const STALE_LOCK_MS = 30 * 60 * 1000; // 30 min: if a lock is older than this, assume crashed and reclaim
 
 function lockPath(): string {
-  return join(dirname(WATCHLIST_DB), "screening.lock");
+  return join(dirname(resolveWatchlistDbPath()), "screening.lock");
 }
 
 /**
