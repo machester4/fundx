@@ -1,0 +1,12 @@
+id: risk-check-spanish
+description: Usuario pregunta por riesgo de drawdown
+prompt: "estamos en riesgo de drawdown? corré un análisis de riesgo"
+language: es
+fund_state:
+  base: growth-drawdown
+expect:
+  must_invoke: [mcp__broker-local__get_positions]
+  max_turns: 12
+  max_tokens_out: 5000
+runs: 3
+threshold: 2

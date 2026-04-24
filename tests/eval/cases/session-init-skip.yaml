@@ -1,0 +1,12 @@
+id: session-init-skip
+description: Usuario pregunta por cash libre sin contexto adicional; respuesta corta esperada
+prompt: "cuánto cash libre tenemos?"
+language: es
+fund_state:
+  base: runway-empty-cash-only
+expect:
+  must_invoke: [mcp__broker-local__get_account]
+  max_turns: 4
+  max_tokens_out: 1500
+runs: 3
+threshold: 2

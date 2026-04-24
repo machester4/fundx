@@ -1,0 +1,12 @@
+id: sub-agent-invocation
+description: Usuario pide evaluar un trade; agente debe delegar al sub-agent vía Task tool
+prompt: "evaluá NVDA como posible trade — es buena idea?"
+language: es
+fund_state:
+  base: runway-with-candidates
+expect:
+  must_invoke: [Task]
+  max_turns: 15
+  max_tokens_out: 6000
+runs: 3
+threshold: 2

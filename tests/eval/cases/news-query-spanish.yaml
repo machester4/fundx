@@ -1,0 +1,11 @@
+id: news-query-spanish
+description: Usuario pregunta por noticias; sin MCP de noticias configurado debe responder graceful
+prompt: "qué noticias relevantes hay hoy para este fondo?"
+language: es
+fund_state:
+  base: runway-with-candidates
+expect:
+  max_turns: 10
+  max_tokens_out: 3000
+runs: 3
+threshold: 2

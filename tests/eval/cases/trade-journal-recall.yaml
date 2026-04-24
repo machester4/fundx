@@ -1,0 +1,11 @@
+id: trade-journal-recall
+description: Recuerdo de trades pasados — sin journal seeded, respuesta debe ser graceful
+prompt: "hemos comprado NVDA antes?"
+language: es
+fund_state:
+  base: runway-empty-cash-only
+expect:
+  max_turns: 8
+  max_tokens_out: 2000
+runs: 3
+threshold: 2

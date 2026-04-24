@@ -1,0 +1,11 @@
+id: budget-runaway-guard
+description: Prompt ambiguo corto; no debe explotar en turns ni tokens
+prompt: "hola"
+language: es
+fund_state:
+  base: runway-empty-cash-only
+expect:
+  max_turns: 5
+  max_tokens_out: 2000
+runs: 3
+threshold: 2

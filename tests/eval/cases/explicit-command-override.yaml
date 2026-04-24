@@ -1,0 +1,13 @@
+id: explicit-command-override
+description: Usuario explícitamente pide NO usar screener; agente debe obedecer
+prompt: "no consultes el screener ni watchlist. solo decime cuánto cash libre hay."
+language: es
+fund_state:
+  base: runway-with-candidates
+expect:
+  must_invoke: [mcp__broker-local__get_account]
+  must_not_invoke: [mcp__screener__watchlist_query, mcp__screener__screen_run]
+  max_turns: 6
+  max_tokens_out: 1500
+runs: 3
+threshold: 2

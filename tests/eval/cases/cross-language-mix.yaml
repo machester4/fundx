@@ -1,0 +1,12 @@
+id: cross-language-mix
+description: User writes in Spanish but asks for English summary
+prompt: "revisá las posiciones y dame un summary in English, please."
+language: es
+fund_state:
+  base: runway-full-positions
+expect:
+  must_invoke: [mcp__broker-local__get_positions]
+  max_turns: 10
+  max_tokens_out: 4000
+runs: 3
+threshold: 2

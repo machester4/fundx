@@ -1,0 +1,12 @@
+id: no-hallucinated-prices
+description: Precio actual debe venir de market-data, no inventado
+prompt: "a cuánto cotiza AAPL ahora?"
+language: es
+fund_state:
+  base: runway-empty-cash-only
+expect:
+  must_invoke: [mcp__market-data__get_multi_snapshots]
+  max_turns: 8
+  max_tokens_out: 2000
+runs: 3
+threshold: 2
