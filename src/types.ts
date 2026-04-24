@@ -843,3 +843,111 @@ export interface DiscoverResult {
   duration_ms: number;
   results: DiscoverResultEntry[];
 }
+
+// ── Eval harness schemas ──────────────────────────────────────────
+
+export const evalFundStateSchema = z.object({
+  base: z.string().optional(),
+  fund_config: z.object({
+    objective: z.enum(["runway", "growth", "accumulation", "income", "custom"]).optional(),
+    risk_profile: z.enum(["conservative", "moderate", "aggressive"]).optional(),
+    initial_capital: z.number().positive().optional(),
+  }).default({}),
+  portfolio: z.object({
+    cash: z.number().nonnegative(),
+    positions: z.array(z.object({
+      symbol: z.string(),
+      shares: z.number().positive(),
+      avg_cost: z.number().positive(),
+      current_price: z.number().positive(),
+      entry_reason: z.string().default("seeded for eval"),
+    })).default([]),
+  }),
+  tracker: z.object({
+    progress_pct: z.number().default(0),
+    status: z.enum(["on_track", "at_risk", "behind"]).default("on_track"),
+  }).default({}),
+  watchlist: z.array(z.object({
+    ticker: z.string(),
+    status: z.enum(["candidate", "watching", "fading", "rejected"]),
+    peak_score: z.number().nullable().default(null),
+    screens: z.array(z.string()).default(["momentum-12-1"]),
+    first_surfaced_days_ago: z.number().int().nonnegative().default(7),
+  })).default([]),
+});
+export type EvalFundState = z.infer<typeof evalFundStateSchema>;
+
+export const evalAssertionsSchema = z.object({
+  must_invoke: z.array(z.string()).default([]),
+  must_not_invoke: z.array(z.string()).default([]),
+  max_turns: z.number().int().positive().optional(),
+  max_tokens_out: z.number().int().positive().optional(),
+});
+export type EvalAssertions = z.infer<typeof evalAssertionsSchema>;
+
+export const evalCaseSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/, "id must be lowercase kebab-case"),
+  description: z.string(),
+  prompt: z.string().min(1),
+  language: z.enum(["es", "en"]).default("es"),
+  fund_state: evalFundStateSchema,
+  expect: evalAssertionsSchema,
+  runs: z.number().int().min(1).max(10).default(3),
+  threshold: z.number().int().min(1).default(2),
+}).refine((c) => c.threshold <= c.runs, { message: "threshold must be ≤ runs" });
+export type EvalCase = z.infer<typeof evalCaseSchema>;
+
+export const evalFailureSchema = z.object({
+  type: z.enum(["must_invoke", "must_not_invoke", "max_turns", "max_tokens_out", "run_errored"]),
+  detail: z.string(),
+  expected: z.string(),
+  actual: z.string(),
+});
+export type EvalFailure = z.infer<typeof evalFailureSchema>;
+
+export const evalRunCaptureSchema = z.object({
+  run_index: z.number().int().positive(),
+  passed: z.boolean(),
+  tool_history: z.array(z.object({
+    name: z.string(),
+    elapsed: z.number(),
+  })),
+  tokens_in: z.number().int().nonnegative(),
+  tokens_out: z.number().int().nonnegative(),
+  num_turns: z.number().int().nonnegative(),
+  duration_ms: z.number().int().nonnegative(),
+  cost_usd: z.number().nonnegative(),
+  final_response: z.string(),
+  error: z.string().nullable(),
+  failures: z.array(evalFailureSchema),
+});
+export type EvalRunCapture = z.infer<typeof evalRunCaptureSchema>;
+
+export const evalCaseResultSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  passed: z.boolean(),
+  passing_runs: z.number().int().nonnegative(),
+  total_runs: z.number().int().positive(),
+  threshold: z.number().int().positive(),
+  runs: z.array(evalRunCaptureSchema),
+  total_duration_ms: z.number().int().nonnegative(),
+  total_cost_usd: z.number().nonnegative(),
+});
+export type EvalCaseResult = z.infer<typeof evalCaseResultSchema>;
+
+export const evalReportSchema = z.object({
+  schema_version: z.literal(1),
+  timestamp: z.string(),
+  model: z.string(),
+  total_cost_usd: z.number().nonnegative(),
+  total_duration_ms: z.number().int().nonnegative(),
+  summary: z.object({
+    cases_passed: z.number().int().nonnegative(),
+    cases_failed: z.number().int().nonnegative(),
+    runs_passed: z.number().int().nonnegative(),
+    runs_failed: z.number().int().nonnegative(),
+  }),
+  cases: z.array(evalCaseResultSchema),
+});
+export type EvalReport = z.infer<typeof evalReportSchema>;
