@@ -140,3 +140,7 @@ vite.config.ts.timestamp-*
 
 # Per-fund broker credentials
 credentials.yaml
+
+# Eval harness local reports (artifacts uploaded in CI)
+reports/
+!reports/*-baseline.json

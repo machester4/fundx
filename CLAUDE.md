@@ -435,6 +435,23 @@ pnpm typecheck            # Type check (tsc --noEmit)
 - Mock `fs` operations and external APIs — never hit real broker/market APIs in tests
 - CLI integration tests should test command handler functions directly
 
+### Prompt eval harness
+
+The chat-surface prompt eval suite lives in `tests/eval/` + `src/services/eval/`.
+Run locally:
+
+```bash
+pnpm dev -- eval                                       # full suite (MVP + backlog)
+pnpm dev -- eval --filter mvp-                         # MVP suite only (CI default)
+pnpm dev -- eval --case mvp-opportunity-spanish --runs 1   # tight dev loop
+```
+
+Every modification to skills, rules, `buildChatContext`, `subagent.ts`, or fund
+templates **should** be followed by a run of the MVP suite to check for
+regressions. Nightly CI runs MVP at 02:00 UTC and opens `eval-failure`-labeled
+issues on failure. See `docs/superpowers/specs/2026-04-23-eval-infra-design.md`
+for harness design; add a new case by dropping a YAML in `tests/eval/cases/`.
+
 ## Important Notes for AI Assistants
 
 - The README.md is the authoritative design document — refer to it for detailed schemas, CLI flow examples, and architecture diagrams
