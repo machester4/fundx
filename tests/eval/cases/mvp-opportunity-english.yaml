@@ -1,13 +1,12 @@
 id: mvp-opportunity-english
-description: User asks for opportunities in English; expect screener/watchlist query
+description: User asks for opportunities in English; watchlist visible in context — should respond fast without Read/Glob/Bash
 prompt: "Any opportunities for new entries you've detected?"
 language: en
 fund_state:
   base: runway-with-candidates
 expect:
-  must_invoke: [mcp__screener__watchlist_query]
-  must_not_invoke: []
-  max_turns: 10
-  max_tokens_out: 5000
+  must_not_invoke: [Read, Glob, Bash]
+  max_turns: 5
+  max_tokens_out: 3000
 runs: 3
 threshold: 2
