@@ -1,0 +1,70 @@
+name: eval-nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # 02:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which suite to run"
+        type: choice
+        options: [mvp, full]
+        default: mvp
+      model:
+        description: "Model to use"
+        type: string
+        default: claude-sonnet-4-6
+
+concurrency:
+  group: eval-nightly
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run eval suite
+        id: eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          EVAL_SUITE: ${{ github.event.inputs.suite || 'mvp' }}
+          EVAL_MODEL: ${{ github.event.inputs.model || 'claude-sonnet-4-6' }}
+        run: |
+          mkdir -p reports
+          ts=$(date -u +%Y%m%d-%H%M%S)
+          report="reports/eval-${ts}.json"
+          if [ "$EVAL_SUITE" = "full" ]; then
+            filter_arg=""
+          else
+            filter_arg="--filter mvp-"
+          fi
+          node dist/index.js eval --json "$report" --model "$EVAL_MODEL" $filter_arg
+      - name: Upload JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ github.run_id }}
+          path: reports/*.json
+          retention-days: 90
+      - name: Open/update issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node dist/scripts/eval-open-issue.js reports/*.json

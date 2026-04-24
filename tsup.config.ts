@@ -24,4 +24,12 @@ export default defineConfig([
     sourcemap: true,
     banner: { js: "#!/usr/bin/env node" },
   },
+  {
+    entry: ["scripts/eval-open-issue.ts"],
+    format: ["esm"],
+    target: "node20",
+    outDir: "dist/scripts",
+    sourcemap: true,
+    banner: { js: "#!/usr/bin/env node" },
+  },
 ]);
