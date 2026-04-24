@@ -23,6 +23,23 @@ import { buildAnalystAgents } from "../subagent.js";
 import { fundPaths, WORKSPACE, DAEMON_LOG, MCP_SERVERS, MCP_COMMAND } from "../paths.js";
 import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
+import { openWatchlistDb, queryWatchlist } from "./watchlist.service.js";
+
+// ── Time Helpers ─────────────────────────────────────────────
+
+/** Format a timestamp as a relative "N<unit> ago" string.
+ *
+ * Accepts either ISO string or epoch milliseconds. Clamps future timestamps
+ * to "0s ago" so clock skew does not produce negative deltas.
+ */
+export function relTime(isoOrEpoch: string | number): string {
+  const ts = typeof isoOrEpoch === "string" ? new Date(isoOrEpoch).getTime() : isoOrEpoch;
+  const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (deltaSec < 60) return `${deltaSec}s ago`;
+  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
+  return `${Math.floor(deltaSec / 86400)}d ago`;
+}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -332,6 +349,84 @@ export async function buildChatContext(fundName: string | null): Promise<string>
     sections.push("");
   } catch {
     sections.push("### Objective: unavailable\n");
+  }
+
+  // ── Watchlist section ─────────────────────────────────────────────
+  let watchlistMostRecent: number | null = null;
+  try {
+    const db = openWatchlistDb();
+    try {
+      const entries = queryWatchlist(db, {
+        status: ["candidate", "watching"],
+        limit: 100,
+      });
+
+      if (entries.length === 0) {
+        sections.push("### Watchlist");
+        sections.push("empty — run `screen_run` to populate");
+        sections.push("");
+      } else {
+        const sorted = [...entries].sort((a, b) => {
+          const scoreDiff = (b.peak_score ?? 0) - (a.peak_score ?? 0);
+          if (scoreDiff !== 0) return scoreDiff;
+          const timeDiff = b.last_evaluated_at - a.last_evaluated_at;
+          if (timeDiff !== 0) return timeDiff;
+          return a.ticker.localeCompare(b.ticker);
+        });
+        const top = sorted.slice(0, 5);
+        watchlistMostRecent = Math.max(...entries.map((e) => e.last_evaluated_at));
+
+        const header =
+          entries.length > 5
+            ? `### Watchlist — top 5 of ${entries.length} (by peak_score)`
+            : `### Watchlist (by peak_score)`;
+        sections.push(header);
+        for (const e of top) {
+          const days = Math.floor((Date.now() - e.first_surfaced_at) / 86400000);
+          const score = e.peak_score !== null ? e.peak_score.toFixed(2) : "—";
+          const screens = e.current_screens.join(",");
+          sections.push(
+            `  - ${e.ticker.padEnd(5)} [${e.status}]  score=${score}  ${days}d on list  [${screens}]`,
+          );
+        }
+        if (entries.length > 5) {
+          sections.push(`  (${entries.length - 5} more candidates available via screener.watchlist_query)`);
+        }
+        sections.push("");
+      }
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    sections.push("### Watchlist: unavailable");
+    sections.push(`(${(err as Error).message})`);
+    sections.push("");
+  }
+
+  // ── Data freshness section ────────────────────────────────────────
+  const freshness: string[] = [];
+  try {
+    const port = await readPortfolio(fundName);
+    freshness.push(`portfolio: updated ${relTime(port.last_updated)}`);
+  } catch { /* skip */ }
+  try {
+    const trackerPath = fundPaths(fundName).state.tracker;
+    const trackerStat = await stat(trackerPath);
+    freshness.push(`tracker: updated ${relTime(trackerStat.mtimeMs)}`);
+  } catch { /* skip */ }
+  if (watchlistMostRecent !== null) {
+    freshness.push(`watchlist: evaluated ${relTime(watchlistMostRecent)}`);
+  }
+  try {
+    const handoffPath = fundPaths(fundName).state.sessionHandoff;
+    const st = await stat(handoffPath);
+    freshness.push(`handoff: written ${relTime(st.mtimeMs)}`);
+  } catch { /* file missing or unreadable — skip */ }
+
+  if (freshness.length > 0) {
+    sections.push("### Data freshness");
+    for (const f of freshness) sections.push(`  - ${f}`);
+    sections.push("");
   }
 
   try {
