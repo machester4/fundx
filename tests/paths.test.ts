@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE, GLOBAL_CONFIG, FUNDS_DIR, DAEMON_PID, DAEMON_LOG, fundPaths } from "../src/paths.js";
+import { WORKSPACE, GLOBAL_CONFIG, FUNDS_DIR, DAEMON_PID, DAEMON_LOG, fundPaths, resolveWatchlistDbPath } from "../src/paths.js";
 
 describe("path constants", () => {
   const home = homedir();
@@ -24,6 +24,32 @@ describe("path constants", () => {
 
   it("DAEMON_LOG points to ~/.fundx/daemon.log", () => {
     expect(DAEMON_LOG).toBe(join(home, ".fundx", "daemon.log"));
+  });
+});
+
+describe("resolveWatchlistDbPath", () => {
+  const original = process.env.FUNDX_WATCHLIST_DB_PATH;
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.FUNDX_WATCHLIST_DB_PATH;
+    else process.env.FUNDX_WATCHLIST_DB_PATH = original;
+  });
+
+  it("returns the default path when the override is unset", () => {
+    delete process.env.FUNDX_WATCHLIST_DB_PATH;
+    const p = resolveWatchlistDbPath();
+    expect(p).toMatch(/\.fundx\/state\/watchlist\.sqlite$/);
+  });
+
+  it("returns the override path when FUNDX_WATCHLIST_DB_PATH is set", () => {
+    process.env.FUNDX_WATCHLIST_DB_PATH = "/tmp/eval-xyz/watchlist.sqlite";
+    expect(resolveWatchlistDbPath()).toBe("/tmp/eval-xyz/watchlist.sqlite");
+  });
+
+  it("ignores empty string override", () => {
+    process.env.FUNDX_WATCHLIST_DB_PATH = "";
+    const p = resolveWatchlistDbPath();
+    expect(p).toMatch(/\.fundx\/state\/watchlist\.sqlite$/);
   });
 });
 

@@ -41,8 +41,22 @@ export const NEWS_DIR = process.env.FUNDX_NEWS_DIR ?? join(WORKSPACE, "news");
  * Respects FUNDX_NEWS_SOCKET for test overrides. */
 export const NEWS_IPC_SOCKET = process.env.FUNDX_NEWS_SOCKET ?? join(WORKSPACE, "news.sock");
 
-/** Screening watchlist SQLite database */
-export const WATCHLIST_DB = join(WORKSPACE, "state", "watchlist.sqlite");
+const DEFAULT_WATCHLIST_DB = join(WORKSPACE, "state", "watchlist.sqlite");
+
+/** Returns the watchlist SQLite path.
+ *
+ * Honors `FUNDX_WATCHLIST_DB_PATH` (non-empty) for the eval harness so parallel
+ * evaluation runs can use isolated databases. Production uses the default.
+ */
+export function resolveWatchlistDbPath(): string {
+  const override = process.env.FUNDX_WATCHLIST_DB_PATH;
+  if (override && override.length > 0) return override;
+  return DEFAULT_WATCHLIST_DB;
+}
+
+// Backwards-compatible lazy export. Existing callers using `WATCHLIST_DB` as a
+// const continue to work; new callers should prefer the function for test isolation.
+export const WATCHLIST_DB = resolveWatchlistDbPath();
 
 /** Price cache SQLite database */
 export const PRICE_CACHE_DB = join(WORKSPACE, "state", "price_cache.sqlite");

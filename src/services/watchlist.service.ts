@@ -15,7 +15,7 @@ import {
   statusTransitionSchema,
 } from "../types.js";
 import { isInUniverse } from "./universe.service.js";
-import { WATCHLIST_DB } from "../paths.js";
+import { resolveWatchlistDbPath } from "../paths.js";
 
 const DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS screen_runs (
@@ -69,7 +69,7 @@ const DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_transitions_ticker ON status_transitions(ticker, transitioned_at DESC)`,
 ];
 
-export function openWatchlistDb(path: string = WATCHLIST_DB): Database.Database {
+export function openWatchlistDb(path: string = resolveWatchlistDbPath()): Database.Database {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
