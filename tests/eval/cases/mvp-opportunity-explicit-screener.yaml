@@ -1,0 +1,13 @@
+id: mvp-opportunity-explicit-screener
+description: Usuario pide explícitamente correr el screener; debe ejecutar screen_run
+prompt: "corré el screener para este fondo"
+language: es
+fund_state:
+  base: runway-with-candidates
+expect:
+  must_invoke: [mcp__screener__screen_run]
+  must_not_invoke: []
+  max_turns: 10
+  max_tokens_out: 5000
+runs: 3
+threshold: 2

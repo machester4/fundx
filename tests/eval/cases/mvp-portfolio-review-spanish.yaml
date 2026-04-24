@@ -1,0 +1,13 @@
+id: mvp-portfolio-review-spanish
+description: Usuario pide revisar el portfolio; debe consultar el broker para posiciones
+prompt: "revisá el portfolio y decime cómo están las posiciones"
+language: es
+fund_state:
+  base: runway-full-positions
+expect:
+  must_invoke: [mcp__broker-local__get_positions]
+  must_not_invoke: []
+  max_turns: 10
+  max_tokens_out: 5000
+runs: 3
+threshold: 2

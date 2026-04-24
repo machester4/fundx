@@ -20,3 +20,4 @@ export * from "./market.service.js";
 export * from "./sws.service.js";
 export * from "./news.service.js";
 export * from "./news-inspect.service.js";
+export * from "./eval/index.js";

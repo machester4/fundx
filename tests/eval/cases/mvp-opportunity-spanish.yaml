@@ -1,0 +1,13 @@
+id: mvp-opportunity-spanish
+description: Usuario pregunta por oportunidades nuevas en español; esperamos consulta al screener/watchlist
+prompt: "¿has detectado oportunidades para nuevas entradas?"
+language: es
+fund_state:
+  base: runway-with-candidates
+expect:
+  must_invoke: [mcp__screener__watchlist_query]
+  must_not_invoke: []
+  max_turns: 10
+  max_tokens_out: 5000
+runs: 3
+threshold: 2
