@@ -1,0 +1,13 @@
+# Fresh runway fund: cash only, no positions, no watchlist.
+id: runway-empty-cash-only
+fund_config:
+  objective: runway
+  risk_profile: moderate
+  initial_capital: 10000
+portfolio:
+  cash: 10000
+  positions: []
+tracker:
+  progress_pct: 0
+  status: on_track
+watchlist: []

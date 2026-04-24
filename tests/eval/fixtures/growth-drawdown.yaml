@@ -1,0 +1,16 @@
+# Growth fund in active drawdown. Use for "damage control" behavior cases.
+id: growth-drawdown
+fund_config:
+  objective: growth
+  risk_profile: aggressive
+  initial_capital: 20000
+portfolio:
+  cash: 1500
+  positions:
+    - { symbol: NVDA, shares: 10, avg_cost: 500, current_price: 420, entry_reason: "AI thesis" }
+    - { symbol: META, shares: 15, avg_cost: 520, current_price: 440, entry_reason: "efficiency play" }
+    - { symbol: TSLA, shares:  8, avg_cost: 280, current_price: 230, entry_reason: "rebound" }
+tracker:
+  progress_pct: -15
+  status: at_risk
+watchlist: []

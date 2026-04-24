@@ -1,0 +1,23 @@
+# Runway fund at position capacity. Use for the "skill should defer when full" case.
+id: runway-full-positions
+fund_config:
+  objective: runway
+  risk_profile: moderate
+  initial_capital: 10000
+portfolio:
+  cash: 200
+  positions:
+    - { symbol: SPY,  shares: 3, avg_cost: 500, current_price: 510, entry_reason: "index anchor" }
+    - { symbol: QQQ,  shares: 2, avg_cost: 450, current_price: 460, entry_reason: "tech anchor" }
+    - { symbol: GLD,  shares: 5, avg_cost: 200, current_price: 205, entry_reason: "hedge" }
+    - { symbol: VTI,  shares: 2, avg_cost: 250, current_price: 253, entry_reason: "broad market" }
+    - { symbol: MSFT, shares: 1, avg_cost: 420, current_price: 430, entry_reason: "anchor" }
+tracker:
+  progress_pct: 45
+  status: on_track
+watchlist:
+  - ticker: NVDA
+    status: candidate
+    peak_score: 0.9
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 5

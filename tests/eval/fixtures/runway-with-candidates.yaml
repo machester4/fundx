@@ -1,0 +1,28 @@
+# Runway fund with 3 watchlist candidates. Use for opportunity-screening cases.
+id: runway-with-candidates
+fund_config:
+  objective: runway
+  risk_profile: moderate
+  initial_capital: 10000
+portfolio:
+  cash: 10000
+  positions: []
+tracker:
+  progress_pct: 0
+  status: on_track
+watchlist:
+  - ticker: NVDA
+    status: candidate
+    peak_score: 0.87
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 14
+  - ticker: AMD
+    status: watching
+    peak_score: 0.72
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 7
+  - ticker: AVGO
+    status: candidate
+    peak_score: 0.65
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 3
