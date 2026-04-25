@@ -1371,9 +1371,20 @@ and avoids forcing translation on either side.
   },
   {
     fileName: "session-init.md",
-    content: `# Session Initialization — Mandatory Sequence
+    content: `# Session Initialization
 
-Before ANY analysis or action, complete these steps IN ORDER:
+## Applies to
+
+This sequence applies to **autonomous scheduled sessions**. The prompt prefix
+will tell you which mode you are in: \`Session mode: autonomous scheduled\`
+means follow the steps below; \`Session mode: interactive chat\` means the
+context above already contains the fund state this sequence would gather —
+skip ahead to the user's message and call MCPs only when the data-freshness
+block indicates the context is stale.
+
+## Sequence (autonomous mode)
+
+Before any analysis or action, complete these steps in order:
 
 1. **Read handoff** — Read \`state/session-handoff.md\`. Understand what the last session did,
    what it deferred, and what it recommended for this session. If missing or stale (>24h),

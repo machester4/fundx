@@ -359,3 +359,25 @@ describe("FUND_RULES includes data-access.md", () => {
     expect(entry.content).toMatch(/what's interesting|what is interesting|opportunities/i);
   });
 });
+
+describe("FUND_RULES session-init.md mode-aware revision", () => {
+  it("session-init.md has the Applies to section distinguishing chat from autonomous", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
+    expect(entry.content).toContain("## Applies to");
+    expect(entry.content).toContain("Session mode: interactive chat");
+    expect(entry.content).toContain("Session mode: autonomous scheduled");
+  });
+
+  it("session-init.md no longer uses 'Mandatory Sequence' in the title", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
+    expect(entry.content).not.toContain("Mandatory Sequence");
+    expect(entry.content).toMatch(/^# Session Initialization\s*$/m);
+  });
+
+  it("session-init.md keeps the 6 numbered steps", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
+    for (let i = 1; i <= 6; i++) {
+      expect(entry.content).toMatch(new RegExp(`^${i}\\.\\s+\\*\\*`, "m"));
+    }
+  });
+});
