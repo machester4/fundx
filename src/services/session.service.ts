@@ -7,6 +7,7 @@ import { DAEMON_NEEDS_RESTART } from "../paths.js";
 import type { SessionLogV2, UniverseResolution } from "../types.js";
 import { resolveUniverse } from "./universe.service.js";
 import { loadGlobalConfig } from "../config.js";
+import { sessionModePrefix } from "./chat.service.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
@@ -86,6 +87,8 @@ export async function runFundSession(
   const universeBlock = renderUniverseBlock(universeResolution);
 
   const prompt = [
+    sessionModePrefix("autonomous-scheduled"),
+    ``,
     `You are running a ${sessionType} session for fund '${fundName}'.`,
     ``,
     `Focus: ${focus}`,
