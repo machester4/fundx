@@ -452,6 +452,20 @@ regressions. Nightly CI runs MVP at 02:00 UTC and opens `eval-failure`-labeled
 issues on failure. See `docs/superpowers/specs/2026-04-23-eval-infra-design.md`
 for harness design; add a new case by dropping a YAML in `tests/eval/cases/`.
 
+### Migration when FUND_RULES change
+
+When a new entry is added to `FUND_RULES` in `src/skills.ts` (or an existing
+one is modified), existing funds on disk do not receive the change until you
+run:
+
+```bash
+fundx fund upgrade --all
+```
+
+This re-renders each fund's `.claude/rules/` directory from the current
+`FUND_RULES` source. New ephemeral eval funds seeded via `fundx eval` pick up
+the change automatically on the next run.
+
 ## Important Notes for AI Assistants
 
 - The README.md is the authoritative design document — refer to it for detailed schemas, CLI flow examples, and architecture diagrams
