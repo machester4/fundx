@@ -25,6 +25,21 @@ import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import type { FundConfig, Portfolio, ObjectiveTracker } from "../types.js";
 import { openWatchlistDb, queryWatchlist } from "./watchlist.service.js";
 
+// ── Session Mode Prefix ───────────────────────────────────────
+
+export type SessionMode = "interactive-chat" | "autonomous-scheduled";
+
+/** Returns the single-line mode prefix prepended to the user prompt for fresh
+ * (non-resumed) sessions. The session-init.md FUND_RULE reads this line to
+ * decide whether to apply the Orient sequence (autonomous) or skip it (chat).
+ */
+export function sessionModePrefix(mode: SessionMode): string {
+  if (mode === "interactive-chat") {
+    return "Session mode: interactive chat. The context above contains the fund state — respond to the user's message directly, calling MCPs only when you need fresher data than the context provides.";
+  }
+  return "Session mode: autonomous scheduled. Follow the session-init rule's Orient sequence (read handoff + state files + write Session Contract) before any analysis.";
+}
+
 // ── Time Helpers ─────────────────────────────────────────────
 
 /** Format a timestamp as a relative "N<unit> ago" string.
@@ -510,17 +525,14 @@ export async function runChatTurn(
     ? `${context}\n${readonlyNote}\n\n${message}`
     : fundName
     ? [
+        sessionModePrefix("interactive-chat"),
+        "",
         `You are an interactive chat session for the FundX investment fund "${fundName}".`,
         `You have access to MCP tools for market data and broker operations.`,
         `Be concise and helpful. Use specific numbers when available.`,
         readonlyNote,
         "",
         context,
-        "",
-        `This is your first interaction. The context above already contains current`,
-        `portfolio, objective, and watchlist data — use it to orient yourself before`,
-        `responding. Only read additional files (e.g. session-handoff.md) if the`,
-        `data-freshness block indicates the context is stale or you need narrative detail.`,
         "",
         "## User Message",
         message,
