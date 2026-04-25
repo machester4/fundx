@@ -1,13 +1,12 @@
 id: mvp-market-regime-spanish
-description: Usuario pregunta qué pasa en mercado; debe consultar datos de mercado
+description: "Usuario pregunta qué pasa en mercado; debe usar tools de market-data, no Read/Bash genéricos. Tool específica queda a discreción del agente (snapshots, sectors, movers, news son válidos)."
 prompt: "qué pasa hoy en mercado, hay algo relevante?"
 language: es
 fund_state:
   base: runway-empty-cash-only
 expect:
-  must_invoke: [mcp__market-data__get_multi_snapshots]
-  must_not_invoke: []
-  max_turns: 10
-  max_tokens_out: 5000
+  must_not_invoke: [Read, Glob, Bash]
+  max_turns: 8
+  max_tokens_out: 4000
 runs: 3
 threshold: 2
