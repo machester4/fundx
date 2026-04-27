@@ -191,6 +191,7 @@ describe("runFundSession", () => {
     expect(log.summary).toContain("Session complete");
     expect(log.started_at).toBeDefined();
     expect(log.ended_at).toBeDefined();
+    expect(log.budget_resolved).toEqual({ maxTurns: 40, maxUsd: 5 });
   });
 
   it("throws when session type not found in config", async () => {

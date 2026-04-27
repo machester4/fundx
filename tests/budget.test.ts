@@ -147,43 +147,43 @@ describe("resolveBudget cascade", () => {
   it("level 1 — fund per-session-type wins over everything", () => {
     const fund = baseFund();
     fund.budget = {
-      perSessionType: { "pre-market": { maxTurns: 11, maxUsd: 1 } },
+      perSessionType: { "pre_market": { maxTurns: 11, maxUsd: 1 } },
       default: { maxTurns: 22, maxUsd: 2 },
     };
     const global = baseGlobal();
     global.budget = {
-      perSessionType: { "pre-market": { maxTurns: 33, maxUsd: 3 } },
+      perSessionType: { "pre_market": { maxTurns: 33, maxUsd: 3 } },
       default: { maxTurns: 44, maxUsd: 4 },
     };
-    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 11, maxUsd: 1 });
+    expect(resolveBudget(fund, global, "pre_market")).toEqual({ maxTurns: 11, maxUsd: 1 });
   });
 
   it("level 2 — fund default wins when no fund per-session-type for that type", () => {
     const fund = baseFund();
     fund.budget = {
-      perSessionType: { "post-market": { maxTurns: 99, maxUsd: 9 } },
+      perSessionType: { "post_market": { maxTurns: 99, maxUsd: 9 } },
       default: { maxTurns: 22, maxUsd: 2 },
     };
     const global = baseGlobal();
     global.budget = { default: { maxTurns: 44, maxUsd: 4 } };
-    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 22, maxUsd: 2 });
+    expect(resolveBudget(fund, global, "pre_market")).toEqual({ maxTurns: 22, maxUsd: 2 });
   });
 
   it("level 3 — global per-session-type wins when no fund budget at all", () => {
     const fund = baseFund();
     const global = baseGlobal();
     global.budget = {
-      perSessionType: { "pre-market": { maxTurns: 33, maxUsd: 3 } },
+      perSessionType: { "pre_market": { maxTurns: 33, maxUsd: 3 } },
       default: { maxTurns: 44, maxUsd: 4 },
     };
-    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 33, maxUsd: 3 });
+    expect(resolveBudget(fund, global, "pre_market")).toEqual({ maxTurns: 33, maxUsd: 3 });
   });
 
   it("level 4 — global default wins when no per-session-type at any level", () => {
     const fund = baseFund();
     const global = baseGlobal();
     global.budget = { default: { maxTurns: 44, maxUsd: 4 } };
-    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 44, maxUsd: 4 });
+    expect(resolveBudget(fund, global, "pre_market")).toEqual({ maxTurns: 44, maxUsd: 4 });
   });
 
   it("level 5 — known session-type default when no config at all", () => {
