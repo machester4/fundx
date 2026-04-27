@@ -129,4 +129,29 @@ describe("runEvalCase", () => {
     expect(runChatTurn).not.toHaveBeenCalled();
     expect(result.passed).toBe(true);
   });
+
+  it("throws a clear error when surface is 'ask' but runAsk is missing from deps", async () => {
+    const seed = vi.fn();
+    const runChatTurn = vi.fn();
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    await expect(
+      runEvalCase(
+        makeCase({ surface: "ask" }),
+        {
+          model: "claude-sonnet-4-6",
+          timeoutMs: 60000,
+          seed,
+          runChatTurn,
+          // runAsk omitted intentionally
+          buildFundContext,
+          buildChatMcpServers,
+        },
+      ),
+    ).rejects.toThrow(/surface "ask" but RunnerDeps\.runAsk was not provided/);
+
+    // seed was never called — the validation runs before any side effect
+    expect(seed).not.toHaveBeenCalled();
+  });
 });

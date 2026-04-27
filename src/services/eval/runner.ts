@@ -38,6 +38,11 @@ export interface RunnerDeps {
 }
 
 export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<EvalCaseResult> {
+  if (caseDef.surface === "ask" && !deps.runAsk) {
+    throw new Error(
+      `Case "${caseDef.id}" has surface "ask" but RunnerDeps.runAsk was not provided`,
+    );
+  }
   const startedAt = Date.now();
   const handle = await deps.seed(caseDef.fund_state);
   const runs: EvalRunCapture[] = [];
