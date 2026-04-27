@@ -16,7 +16,7 @@ FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform
 - **Session**: A Claude Code invocation scoped to a single fund. Sessions run on a schedule (pre-market, mid-session, post-market) or on-demand via CLI/Telegram.
 - **Daemon/Scheduler**: Background process that checks schedules and launches Claude Code sessions for each active fund.
 - **Telegram Gateway**: Always-on bot for notifications (trade alerts, digests) and bidirectional interaction (user questions wake Claude).
-- **MCP Servers**: Local paper broker (`broker-local`), market data (FMP/Yahoo Finance), news/sentiment, and Telegram notifications.
+- **MCP Servers**: Local paper broker (`broker-local`), market data (FMP/Yahoo Finance), screener + watchlist (`screener`), Simply Wall St (`sws`), and Telegram notifications (`telegram-notify`).
 
 ### High-Level Flow
 
@@ -124,11 +124,12 @@ src/
     fund.service.ts     # Fund CRUD, config load/save, list, validate, create
     init.service.ts     # Workspace initialization
     status.service.ts   # Dashboard data aggregation
-    session.service.ts  # Session runner
+    session.service.ts  # Session runner — buildAutonomousPrompt + runFundSession
     daemon.service.ts   # Daemon start/stop, cron scheduling
+    supervisor.service.ts    # Daemon supervisor / watchdog
     gateway.service.ts  # Telegram gateway management
-    ask.service.ts      # Question answering + cross-fund analysis
-    chat.service.ts     # Chat REPL — context building, streaming, workspace mode (null fund → fund creation flow)
+    ask.service.ts      # Question answering + cross-fund analysis (uses unified buildFundContext)
+    chat.service.ts     # Chat REPL — context building, streaming, sessionModePrefix, buildFundContext, relTime
     templates.service.ts     # Fund templates (export/import/builtin/clone)
     special-sessions.service.ts  # Event-triggered sessions (FOMC, OpEx, etc.)
     chart.service.ts    # Performance chart data (allocation, P&L, sparklines)
@@ -140,6 +141,23 @@ src/
     trades.service.ts   # Trade history queries
     performance.service.ts   # Performance metrics aggregation
     market.service.ts   # Market data (FMP primary, Yahoo Finance fallback)
+    universe.service.ts      # Per-fund universe resolution (preset/filters/tickers)
+    screening.service.ts     # Screener orchestration + transition logic
+    watchlist.service.ts     # Watchlist SQLite CRUD + queryWatchlist (used by chat context + screener MCP)
+    price-cache.service.ts   # FMP price cache for offline / replay
+    news.service.ts          # RSS news ingestion + zvec semantic store
+    news-inspect.service.ts  # CLI inspector for news cache state
+    news-ipc-client.ts       # IPC client to query daemon-owned news store
+    news-ipc.service.ts      # IPC server hosted by the daemon
+    sws.service.ts           # Simply Wall St API client
+    eval/                    # Prompt eval harness (sub-projects 1-5.1)
+      index.ts               # Barrel re-export
+      loader.ts              # YAML case loading + fixture resolution + filter
+      seed.ts                # Ephemeral fund seeding for eval cases
+      assertions.ts          # Pure evaluator (evaluateRun + evaluateCase)
+      report.ts              # Terminal-color report + JSON writer
+      runner.ts              # Orchestration: seed → K runs → cleanup; surface=chat|ask branching
+      open-issue.ts          # Pure buildIssueSpecs from EvalReport (used by CI helper script)
   commands/             # Pastel commands (React/Ink components, file-based routing)
     index.tsx           # Default command (fullscreen TUI dashboard + chat REPL)
     init.tsx            # fundx init
@@ -200,9 +218,13 @@ src/
   context/              # React contexts
     AppContext.tsx       # Global config, error handling
   mcp/
-    broker-local.ts     # MCP server: local paper broker (FMP prices, portfolio.json state)
-    market-data.ts      # MCP server: market data provider (FMP + Yahoo Finance)
-    telegram-notify.ts  # MCP server: Telegram notifications for Claude sessions
+    broker-local.ts            # MCP server: local paper broker (FMP prices, portfolio.json state)
+    broker-local-notify.ts     # Helper: broker-local Telegram notifications
+    broker-local-universe.ts   # Helper: broker-local universe-gating handlers
+    market-data.ts             # MCP server: market data provider (FMP + Yahoo Finance, in-process to share zvec lock)
+    screener.ts                # MCP server: screener (screen_run, screen_discover, watchlist_query/trajectory/tag)
+    sws.ts                     # MCP server: Simply Wall St (sws_screener, sws_list_screeners, etc.)
+    telegram-notify.ts         # MCP server: Telegram notifications for Claude sessions
 ```
 
 **Design pattern:** Strict separation of concerns — services contain pure business logic (no UI deps), commands are thin React/Ink components that call services and render results. Pastel provides file-based routing: folder nesting = subcommands.
@@ -269,11 +291,29 @@ best practices and investment domain research.
 - Session prompts require Orient phase (read state files) before any analysis
 - Prefer structured output formats for data that can be validated programmatically
 
+### Session Modes
+The agent runs in one of three modes, declared by a single-line prefix at the top of the user prompt:
+
+- `Session mode: interactive chat` — multi-turn user-driven chat REPL
+- `Session mode: interactive ask` — read-only one-shot questions (`fundx ask`)
+- `Session mode: autonomous scheduled` — cron-driven cycles via the daemon
+
+Implemented as a pure helper `sessionModePrefix(mode)` exported from `src/services/chat.service.ts`. Callers (`chat.service.ts`, `ask.service.ts`, `session.service.ts`) prepend the prefix to their first-turn prompt. Resumed sessions skip the prefix because mode is established on turn 1.
+
+Rules can be mode-aware via an `## Applies to` section that references the prefix string. `session-init.md` is the canonical example: its Orient sequence applies only to autonomous mode; chat and ask skip the steps because the context already carries the fund state.
+
+When adding a new mode (or extending an existing one):
+1. Add the value to the `SessionMode` type union in `chat.service.ts`
+2. Extend `sessionModePrefix(mode)` with the new branch
+3. Update `session-init.md`'s `## Applies to` paragraph to mention the new mode
+4. Add a unit test in `tests/session-mode-prefix.test.ts` for the new branch
+5. Add a content assertion in `tests/skills.test.ts` that `session-init.md` references the new mode
+
 ### Prompt Testing
 - After modifying any skill, rule, or template in `src/skills.ts` or `src/template.ts`:
   1. Run `pnpm build` to compile
   2. Run `fundx fund upgrade --all` to propagate changes to existing funds
-  3. Run a test session in paper mode to verify behavior
+  3. Run `pnpm dev -- eval --filter mvp-` to run the MVP eval suite (8 cases) — see "Prompt eval harness" below
 - Check for overtriggering: skills should activate when relevant, not on every session
 
 ### Skills and Rules Pattern
@@ -445,14 +485,31 @@ pnpm typecheck            # Type check (tsc --noEmit)
 
 ### Prompt eval harness
 
-The chat-surface prompt eval suite lives in `tests/eval/` + `src/services/eval/`.
+The prompt eval suite lives in `tests/eval/` + `src/services/eval/`. It evaluates the
+chat REPL and the `ask` command against canonical YAML cases. Each case seeds an
+ephemeral fund (`fundx-eval-<ulid>`), runs the prompt K times (default K=3) with the
+SDK, and asserts on `tool_history`, turn count, and token budget. Cases declare a
+`surface: "chat" | "ask"` field that selects which caller the runner invokes.
+
 Run locally:
 
 ```bash
-pnpm dev -- eval                                       # full suite (MVP + backlog)
-pnpm dev -- eval --filter mvp-                         # MVP suite only (CI default)
-pnpm dev -- eval --case mvp-opportunity-spanish --runs 1   # tight dev loop
+pnpm dev -- eval                                       # full suite (MVP + backlog, ~$2.50)
+pnpm dev -- eval --filter mvp-                         # MVP suite only (8 cases, ~$1.70, CI default)
+pnpm dev -- eval --case mvp-opportunity-spanish --runs 1   # tight dev loop (~$0.02)
 ```
+
+Most assertions are **outcome-based**: `must_not_invoke: [Read, Glob, Bash]` + a
+`max_turns` budget. Mechanism-based assertions (`must_invoke: [<tool>]`) are reserved
+for cases where the user explicitly names the action (e.g., "corré el screener" → must
+invoke `mcp__screener__screen_run`).
+
+Nightly CI (`/.github/workflows/eval-nightly.yml`) runs the MVP suite at 02:00 UTC, uploads
+the JSON report as a 90-day artifact, and on failure opens (or comments on) deduped
+GitHub issues via `scripts/eval-open-issue.ts`.
+
+Adding a case = drop a YAML in `tests/eval/cases/`. Adding a fixture = drop a YAML in
+`tests/eval/fixtures/` and reference it via `fund_state.base: <fixture-id>` in cases.
 
 Every modification to skills, rules, `buildChatContext`, `subagent.ts`, or fund
 templates **should** be followed by a run of the MVP suite to check for

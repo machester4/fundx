@@ -155,6 +155,19 @@ fundx gateway start                 Start Telegram bot standalone
 fundx gateway test                  Send test message
 ```
 
+### Development
+
+```
+fundx eval                          Run the full prompt eval suite (MVP + backlog, ~$2.50)
+fundx eval --filter mvp-            Run MVP cases only (8 cases, ~$1.70 — what nightly CI runs)
+fundx eval --case <id> --runs 1     Run a single case once (~$0.02 dev loop)
+fundx eval --json <path>            Write the JSON report to disk
+```
+
+The eval harness exercises the chat and ask surfaces against canonical YAML cases under
+`tests/eval/cases/`. Used as a regression gate when modifying skills, rules, or prompt
+construction. See [CLAUDE.md](CLAUDE.md#prompt-eval-harness) for details.
+
 ## Architecture
 
 ```mermaid
@@ -180,8 +193,10 @@ graph TB
 
     subgraph MCP["MCP Servers"]
         MCP1["broker-local\npaper trade execution · positions"]
-        MCP2["market-data\nprices · OHLCV · quotes"]
-        MCP3["telegram-notify\nalerts · digests · milestones"]
+        MCP2["market-data\nprices · OHLCV · quotes · sectors · news"]
+        MCP3["screener\nscreen_run · watchlist_query · trajectory"]
+        MCP4["sws\nSimply Wall St investing screeners"]
+        MCP5["telegram-notify\nalerts · digests · milestones"]
     end
 
     subgraph State["Persistent State  ~/.fundx/funds/name/"]
@@ -550,6 +565,7 @@ pnpm typecheck            # Type check (tsc --noEmit)
 | 3 — Telegram | Gateway, notifications, bidirectional chat | Done |
 | 4 — Intelligence | Sub-agents, trade journal, embeddings | Done |
 | 5 — Advanced | Templates, Monte Carlo, reports, correlation | Done |
+| 5.5 — Quality | Per-fund universes, screener, prompt eval harness, mode-aware rules | Done |
 | 6 — Community | npm distribution, docs, plugin system | **In progress** |
 
 See [open issues](https://github.com/machester4/fundx/issues) for contribution opportunities.
