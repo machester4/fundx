@@ -4,13 +4,52 @@ import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHist
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import { DAEMON_NEEDS_RESTART } from "../paths.js";
-import type { SessionLogV2, UniverseResolution } from "../types.js";
+import type { Budget, FundConfig, GlobalConfig, SessionLogV2, UniverseResolution } from "../types.js";
 import { resolveUniverse } from "./universe.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { sessionModePrefix } from "./chat.service.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
+
+/** Hardcoded per-session-type defaults — last layer of the budget cascade
+ *  before the global FALLBACK_DEFAULT. Conservative on the high side so a
+ *  default-only deployment doesn't trip caps in normal operation. */
+const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
+  "pre-market": { maxTurns: 40, maxUsd: 5 },
+  "mid-session": { maxTurns: 25, maxUsd: 3 },
+  "post-market": { maxTurns: 60, maxUsd: 7 },
+  "on-demand": { maxTurns: 30, maxUsd: 4 },
+  "special": { maxTurns: 50, maxUsd: 6 },
+};
+
+/** Used when the session_type is not present in DEFAULTS_BY_SESSION_TYPE
+ *  (e.g. a custom session type). Generous middle-of-the-road. */
+const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
+
+/** Resolve the budget for a session through a 6-level cascade.
+ *  Most-specific override wins:
+ *    1. fund.budget.perSessionType[sessionType]
+ *    2. fund.budget.default
+ *    3. global.budget.perSessionType[sessionType]
+ *    4. global.budget.default
+ *    5. DEFAULTS_BY_SESSION_TYPE[sessionType]
+ *    6. FALLBACK_DEFAULT
+ *  Pure function — no I/O. Tested in tests/budget.test.ts. */
+export function resolveBudget(
+  fund: FundConfig,
+  global: GlobalConfig,
+  sessionType: string,
+): Budget {
+  return (
+    fund.budget?.perSessionType?.[sessionType] ??
+    fund.budget?.default ??
+    global.budget?.perSessionType?.[sessionType] ??
+    global.budget?.default ??
+    DEFAULTS_BY_SESSION_TYPE[sessionType] ??
+    FALLBACK_DEFAULT
+  );
+}
 
 export interface BuildAutonomousPromptInput {
   fundName: string;

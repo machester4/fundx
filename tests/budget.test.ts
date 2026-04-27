@@ -117,3 +117,89 @@ describe("sessionLogV2Schema with budget_resolved", () => {
     expect(out.budget_resolved).toEqual({ maxTurns: 40, maxUsd: 5 });
   });
 });
+
+import { resolveBudget } from "../src/services/session.service.js";
+import type { FundConfig, GlobalConfig } from "../src/types.js";
+
+const baseFund = (): FundConfig => ({
+  fund: { name: "f", display_name: "F", description: "", created: "2026-04-27", status: "active" },
+  capital: { initial: 1000, currency: "USD" },
+  objective: { type: "growth", target_multiple: 2 } as FundConfig["objective"],
+  risk: { profile: "moderate", max_position_pct: 25, max_drawdown_pct: 25 } as FundConfig["risk"],
+  universe: { preset: "sp500" } as FundConfig["universe"],
+  schedule: { sessions: {} },
+  broker: { mode: "paper" },
+  notifications: {
+    telegram: { enabled: false, trade_alerts: true, stop_loss_alerts: true, daily_digest: true, weekly_digest: true, milestone_alerts: true, drawdown_alerts: true },
+    quiet_hours: { enabled: true, start: "23:00", end: "07:00", allow_critical: true },
+  },
+  claude: { model: "sonnet", personality: "", decision_framework: "" },
+});
+
+const baseGlobal = (): GlobalConfig => ({
+  default_model: "sonnet",
+  timezone: "UTC",
+  broker: {},
+  telegram: { enabled: false },
+  market_data: { provider: "fmp" },
+});
+
+describe("resolveBudget cascade", () => {
+  it("level 1 — fund per-session-type wins over everything", () => {
+    const fund = baseFund();
+    fund.budget = {
+      perSessionType: { "pre-market": { maxTurns: 11, maxUsd: 1 } },
+      default: { maxTurns: 22, maxUsd: 2 },
+    };
+    const global = baseGlobal();
+    global.budget = {
+      perSessionType: { "pre-market": { maxTurns: 33, maxUsd: 3 } },
+      default: { maxTurns: 44, maxUsd: 4 },
+    };
+    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 11, maxUsd: 1 });
+  });
+
+  it("level 2 — fund default wins when no fund per-session-type for that type", () => {
+    const fund = baseFund();
+    fund.budget = {
+      perSessionType: { "post-market": { maxTurns: 99, maxUsd: 9 } },
+      default: { maxTurns: 22, maxUsd: 2 },
+    };
+    const global = baseGlobal();
+    global.budget = { default: { maxTurns: 44, maxUsd: 4 } };
+    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 22, maxUsd: 2 });
+  });
+
+  it("level 3 — global per-session-type wins when no fund budget at all", () => {
+    const fund = baseFund();
+    const global = baseGlobal();
+    global.budget = {
+      perSessionType: { "pre-market": { maxTurns: 33, maxUsd: 3 } },
+      default: { maxTurns: 44, maxUsd: 4 },
+    };
+    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 33, maxUsd: 3 });
+  });
+
+  it("level 4 — global default wins when no per-session-type at any level", () => {
+    const fund = baseFund();
+    const global = baseGlobal();
+    global.budget = { default: { maxTurns: 44, maxUsd: 4 } };
+    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 44, maxUsd: 4 });
+  });
+
+  it("level 5 — known session-type default when no config at all", () => {
+    const fund = baseFund();
+    const global = baseGlobal();
+    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 40, maxUsd: 5 });
+    expect(resolveBudget(fund, global, "mid-session")).toEqual({ maxTurns: 25, maxUsd: 3 });
+    expect(resolveBudget(fund, global, "post-market")).toEqual({ maxTurns: 60, maxUsd: 7 });
+    expect(resolveBudget(fund, global, "on-demand")).toEqual({ maxTurns: 30, maxUsd: 4 });
+    expect(resolveBudget(fund, global, "special")).toEqual({ maxTurns: 50, maxUsd: 6 });
+  });
+
+  it("level 6 — fallback default for unknown session type", () => {
+    const fund = baseFund();
+    const global = baseGlobal();
+    expect(resolveBudget(fund, global, "made-up-type")).toEqual({ maxTurns: 50, maxUsd: 5 });
+  });
+});
