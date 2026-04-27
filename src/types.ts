@@ -156,6 +156,24 @@ export const scheduleSchema = z.object({
   special_sessions: z.array(specialSessionSchema).default([]),
 });
 
+// ── Budget Schema ──────────────────────────────────────────────
+
+export const budgetSchema = z.object({
+  maxTurns: z.number().int().positive(),
+  maxUsd: z.number().positive(),
+});
+
+export type Budget = z.infer<typeof budgetSchema>;
+
+export const fundBudgetConfigSchema = z
+  .object({
+    default: budgetSchema.optional(),
+    perSessionType: z.record(z.string(), budgetSchema).optional(),
+  })
+  .optional();
+
+export type FundBudgetConfig = z.infer<typeof fundBudgetConfigSchema>;
+
 // ── Fund Config Schema ─────────────────────────────────────────
 
 export const fundConfigSchema = z.object({
@@ -207,6 +225,7 @@ export const fundConfigSchema = z.object({
       decision_framework: z.string().default(""),
     })
     .default({}),
+  budget: fundBudgetConfigSchema,
 });
 
 export type FundConfig = z.infer<typeof fundConfigSchema>;
@@ -285,6 +304,7 @@ export const globalConfigSchema = z.object({
     })
     .optional(),
   news: newsConfigSchema.optional(),
+  budget: fundBudgetConfigSchema,
 });
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
@@ -591,6 +611,7 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
   status: z
     .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout"])
     .optional(),
+  budget_resolved: budgetSchema.optional(),
 });
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;
