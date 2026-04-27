@@ -28,7 +28,7 @@ export interface RunnerDeps {
     context: string,
     opts: { model: string; readonly: boolean; mcpServers: ChatMcpServers; maxBudgetUsd?: number },
   ) => Promise<RunChatTurnResult>;
-  buildChatContext: (fundName: string) => Promise<string>;
+  buildFundContext: (fundName: string) => Promise<string>;
   buildChatMcpServers: (fundName: string) => Promise<ChatMcpServers>;
 }
 
@@ -39,7 +39,7 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
 
   try {
     const mcpServers = await deps.buildChatMcpServers(handle.fundName);
-    const context = await deps.buildChatContext(handle.fundName);
+    const context = await deps.buildFundContext(handle.fundName);
 
     for (let i = 0; i < caseDef.runs; i++) {
       const capture = await runOnce(i + 1, caseDef, context, mcpServers, handle.fundName, deps);

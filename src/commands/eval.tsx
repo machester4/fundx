@@ -13,7 +13,7 @@ import {
 } from "../services/eval/index.js";
 import {
   runChatTurn,
-  buildChatContext,
+  buildFundContext,
   buildChatMcpServers,
 } from "../services/chat.service.js";
 import type { EvalCaseResult } from "../types.js";
@@ -124,7 +124,7 @@ export default function EvalCommand({ options: opts }: Props) {
                   toolHistory: out.toolHistory,
                 };
               },
-              buildChatContext: (fundName) => buildChatContext(fundName),
+              buildFundContext: (fundName) => buildFundContext(fundName),
               buildChatMcpServers: (fundName) => buildChatMcpServers(fundName),
             });
             results.push(result);

@@ -37,7 +37,7 @@ describe("runEvalCase", () => {
       tokensOut: 50,
       toolHistory: [{ name: "foo", elapsed: 0.5 }],
     });
-    const buildChatContext = vi.fn().mockResolvedValue("ctx");
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
     const buildChatMcpServers = vi.fn().mockResolvedValue({});
 
     const result = await runEvalCase(makeCase(), {
@@ -45,7 +45,7 @@ describe("runEvalCase", () => {
       timeoutMs: 60000,
       seed,
       runChatTurn,
-      buildChatContext,
+      buildFundContext,
       buildChatMcpServers,
     });
 
@@ -60,13 +60,13 @@ describe("runEvalCase", () => {
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const seed = vi.fn().mockResolvedValue({ fundName: "fundx-eval-x", watchlistDbPath: "/tmp/x", cleanup });
     const runChatTurn = vi.fn().mockRejectedValue(new Error("boom"));
-    const buildChatContext = vi.fn().mockResolvedValue("ctx");
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
     const buildChatMcpServers = vi.fn().mockResolvedValue({});
 
     const result = await runEvalCase(makeCase(), {
       model: "claude-sonnet-4-6",
       timeoutMs: 60000,
-      seed, runChatTurn, buildChatContext, buildChatMcpServers,
+      seed, runChatTurn, buildFundContext, buildChatMcpServers,
     });
 
     expect(cleanup).toHaveBeenCalled();
@@ -79,13 +79,13 @@ describe("runEvalCase", () => {
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const seed = vi.fn().mockResolvedValue({ fundName: "fundx-eval-x", watchlistDbPath: "/tmp/x", cleanup });
     const runChatTurn = vi.fn().mockImplementation(() => new Promise(() => { /* never resolves */ }));
-    const buildChatContext = vi.fn().mockResolvedValue("ctx");
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
     const buildChatMcpServers = vi.fn().mockResolvedValue({});
 
     const result = await runEvalCase(makeCase({ runs: 2, threshold: 1 }), {
       model: "claude-sonnet-4-6",
       timeoutMs: 50,
-      seed, runChatTurn, buildChatContext, buildChatMcpServers,
+      seed, runChatTurn, buildFundContext, buildChatMcpServers,
     });
 
     expect(result.passed).toBe(false);

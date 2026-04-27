@@ -24,7 +24,7 @@ function prettyModelName(model: string): string {
 import {
   resolveChatModel,
   buildChatMcpServers,
-  buildChatContext,
+  buildFundContext,
   buildCompactContext,
   loadChatWelcomeData,
   persistChatSession,
@@ -170,7 +170,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
       const context = turnCount === 0 && fundName
         ? ""
         : turnCount === 0
-        ? await buildChatContext(fundName)
+        ? await buildFundContext(fundName)
         : await buildCompactContext(fundName);
 
       const result = await streaming.send(fundName, sessionId, message, context, {

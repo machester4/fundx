@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { buildChatContext } from "../src/services/chat.service.js";
+import { buildFundContext } from "../src/services/chat.service.js";
 import { seedEvalFund, type SeedEvalFundHandle } from "../src/services/eval/seed.js";
 
 // ── relTime helper (exported from chat.service.ts) ─────────────────
@@ -38,8 +38,8 @@ describe("relTime", () => {
   });
 });
 
-// ── buildChatContext new sections ──────────────────────────────────
-describe("buildChatContext — watchlist section", () => {
+// ── buildFundContext new sections ──────────────────────────────────
+describe("buildFundContext — watchlist section", () => {
   let handle: SeedEvalFundHandle | null = null;
   afterEach(async () => {
     if (handle) { await handle.cleanup(); handle = null; }
@@ -52,7 +52,7 @@ describe("buildChatContext — watchlist section", () => {
       tracker: { progress_pct: 0, status: "on_track" },
       watchlist: [],
     });
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).toContain("### Watchlist");
     expect(ctx).toMatch(/empty — run `screen_run` to populate/);
   });
@@ -68,7 +68,7 @@ describe("buildChatContext — watchlist section", () => {
         { ticker: "AVGO", status: "candidate", peak_score: 0.6, screens: ["momentum-12-1"], first_surfaced_days_ago: 2 },
       ],
     });
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).toContain("### Watchlist (by peak_score)");
     expect(ctx).not.toContain("top 5 of");
     expect(ctx).toContain("NVDA");
@@ -96,7 +96,7 @@ describe("buildChatContext — watchlist section", () => {
       tracker: { progress_pct: 0, status: "on_track" },
       watchlist,
     });
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).toContain("### Watchlist — top 5 of 8 (by peak_score)");
     expect(ctx).toContain("(3 more candidates available via screener.watchlist_query)");
     // First ticker T00 should appear, last ticker T07 should NOT appear in top 5
@@ -105,7 +105,7 @@ describe("buildChatContext — watchlist section", () => {
   });
 });
 
-describe("buildChatContext — data freshness section", () => {
+describe("buildFundContext — data freshness section", () => {
   let handle: SeedEvalFundHandle | null = null;
   afterEach(async () => {
     if (handle) { await handle.cleanup(); handle = null; }
@@ -118,7 +118,7 @@ describe("buildChatContext — data freshness section", () => {
       tracker: { progress_pct: 0, status: "on_track" },
       watchlist: [],
     });
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).toContain("### Data freshness");
     expect(ctx).toMatch(/portfolio: updated \d+[smhd] ago/);
     expect(ctx).toMatch(/tracker: updated \d+[smhd] ago/);
@@ -133,7 +133,7 @@ describe("buildChatContext — data freshness section", () => {
         { ticker: "NVDA", status: "candidate", peak_score: 0.9, screens: ["momentum-12-1"], first_surfaced_days_ago: 7 },
       ],
     });
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).toMatch(/watchlist: evaluated \d+[smhd] ago/);
   });
 
@@ -146,7 +146,7 @@ describe("buildChatContext — data freshness section", () => {
     });
     // handoff file does NOT exist by default after seeding — freshness section
     // should not mention it (no "undefined ago")
-    const ctx = await buildChatContext(handle.fundName);
+    const ctx = await buildFundContext(handle.fundName);
     expect(ctx).not.toMatch(/handoff: written undefined/);
     expect(ctx).not.toMatch(/handoff: written NaN/);
   });

@@ -318,7 +318,7 @@ export async function buildWorkspaceContext(): Promise<string> {
 }
 
 /** Build full fund context for the first turn */
-export async function buildChatContext(fundName: string | null): Promise<string> {
+export async function buildFundContext(fundName: string | null): Promise<string> {
   if (!fundName) return buildWorkspaceContext();
   const sections: string[] = [];
 
