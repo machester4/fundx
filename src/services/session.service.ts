@@ -164,6 +164,7 @@ export async function runFundSession(
   options?: { focus?: string; useDebateSkills?: boolean; maxTurns?: number; maxDurationMinutes?: number },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
+  const globalConfig = await loadGlobalConfig();
 
   const sessionConfig = config.schedule.sessions[sessionType];
   const focus = options?.focus ?? sessionConfig?.focus;
@@ -202,7 +203,9 @@ export async function runFundSession(
   });
 
   const model = config.claude.model || undefined;
-  const effectiveMaxTurns = options?.maxTurns ?? DEFAULT_MAX_TURNS;
+  const budget = resolveBudget(config, globalConfig, sessionType);
+  const effectiveMaxTurns = options?.maxTurns ?? budget.maxTurns;
+  const effectiveMaxBudgetUsd = budget.maxUsd;
   const effectiveDuration = options?.maxDurationMinutes
     ?? sessionConfig?.max_duration_minutes
     ?? DEFAULT_SESSION_TIMEOUT_MINUTES;
@@ -219,6 +222,7 @@ export async function runFundSession(
       prompt,
       model,
       maxTurns: effectiveMaxTurns,
+      maxBudgetUsd: effectiveMaxBudgetUsd,
       timeoutMs: timeout,
       agents,
       resumeSessionId: activeSession?.session_id,
@@ -237,6 +241,7 @@ export async function runFundSession(
         prompt,
         model,
         maxTurns: effectiveMaxTurns,
+        maxBudgetUsd: effectiveMaxBudgetUsd,
         timeoutMs: timeout,
         agents,
       });
@@ -263,6 +268,7 @@ export async function runFundSession(
     num_turns: result.num_turns,
     session_id: result.session_id,
     status: result.status,
+    budget_resolved: budget,
   };
 
   await writeSessionLog(fundName, log);
@@ -284,11 +290,24 @@ export async function runFundSession(
   const summary = rawSummary.slice(0, 800);
   const truncated = rawSummary.length > 800;
 
-  await notifySession(
-    `${statusEmoji} <b>${displayName}</b> — ${sessionType} (${durationStr})\n` +
-    `<i>${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out | ${log.num_turns} turns</i>\n\n` +
-    (summary ? `${escapeHtml(summary)}${truncated ? "..." : ""}` : "No output"),
-  );
+  if (result.status === "error_max_budget" || result.status === "error_max_turns") {
+    await notifySession(
+      buildBudgetAlert({
+        displayName: config.fund.display_name,
+        sessionType,
+        status: result.status,
+        budget,
+        numTurns: log.num_turns ?? 0,
+        costUsd: log.cost_usd ?? 0,
+      }),
+    );
+  } else {
+    await notifySession(
+      `${statusEmoji} <b>${displayName}</b> — ${sessionType} (${durationStr})\n` +
+      `<i>${tokensIn.toLocaleString()} in / ${tokensOut.toLocaleString()} out | ${log.num_turns} turns</i>\n\n` +
+      (summary ? `${escapeHtml(summary)}${truncated ? "..." : ""}` : "No output"),
+    );
+  }
 
   // Update per-session-type history for catch-up detection
   try {
