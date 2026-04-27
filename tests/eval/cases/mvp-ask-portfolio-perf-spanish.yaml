@@ -1,0 +1,13 @@
+id: mvp-ask-portfolio-perf-spanish
+description: "Usuario hace ask sobre la performance del fondo este mes; con context inyectado debe responder rápido sin Read/Glob/Bash."
+prompt: "cómo va la performance del fondo este mes? dame un resumen rápido"
+language: es
+surface: ask
+fund_state:
+  base: runway-full-positions
+expect:
+  must_not_invoke: [Read, Glob, Bash]
+  max_turns: 5
+  max_tokens_out: 3000
+runs: 3
+threshold: 2

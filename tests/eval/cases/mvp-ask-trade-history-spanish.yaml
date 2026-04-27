@@ -1,0 +1,13 @@
+id: mvp-ask-trade-history-spanish
+description: "Usuario pregunta sobre historial de trades pasados; el context incluye Trade Summary + recent trades, debe responder de ahí o vía MCPs sin Read/Glob/Bash."
+prompt: "hemos hecho trades de NVDA antes? cómo nos fue?"
+language: es
+surface: ask
+fund_state:
+  base: runway-full-positions
+expect:
+  must_not_invoke: [Read, Glob, Bash]
+  max_turns: 6
+  max_tokens_out: 3000
+runs: 3
+threshold: 2
