@@ -78,12 +78,13 @@ Phase 1b — Audit (G7) ────┴──▶ Phase 3 — Quality (G4+G5)─�
 
 | Phase | Gaps | Spec | Effort |
 |---|---|---|---:|
-| 1a — Execution budgets | G2 | [phase-1a](./2026-04-27-harness-phase-1a-budgets-design.md) | 2–3 days |
+| 1a — Execution budgets (v1: hard-kill only) | G2 | [phase-1a](./2026-04-27-harness-phase-1a-budgets-design.md) | 0.5–1 day |
 | 1b — Qualitative audit | G7 | [phase-1b](./2026-04-27-harness-phase-1b-audit-design.md) | 2.5–4 days |
 | 2 — Gate hooks | G1, G3 | [phase-2 (stub)](./2026-04-27-harness-phase-2-design.md) | 2–3 days |
 | 3 — Context quality + eval grader | G4, G5 | [phase-3 (stub)](./2026-04-27-harness-phase-3-design.md) | 3–4 days |
 | 4 — Operational observability | G6 | [phase-4 (stub)](./2026-04-27-harness-phase-4-design.md) | 2–3 days |
-| **Total** | 7 gaps | 5 specs | **11.5–17 days** |
+| 1c — 75 % soft warning (deferred from 1a) | (subset of G2) | TBD — brainstorm post-1b audit | 1.5–3 days |
+| **Total** | 7 gaps | 5 specs + 1 deferred | **11.5–18 days** |
 
 ---
 
@@ -145,3 +146,4 @@ Each phase follows the same loop:
 | Date | Status |
 |---|---|
 | 2026-04-27 | Roadmap created. Specs 1a and 1b detailed. Specs 2 / 3 / 4 are stubs. Awaiting user review before invoking `writing-plans` for Phase 1a. |
+| 2026-04-27 | Code-truth audit of `src/agent.ts` revealed the SDK already enforces `maxTurns` and `maxBudgetUsd` natively. Phase 1a scope reduced to v1 (hard-kill only, cascade resolver, log fields, distinguished Telegram alert). Effort dropped from 2–3 days to 0.5–1 day. The 75 % soft warning piece was extracted as **deferred Phase 1c** (needs streaming-input refactor of `runAgentQuery`; brainstorm after Phase 1b audit informs whether it's still needed). |
