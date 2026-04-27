@@ -16,6 +16,7 @@ import {
   buildFundContext,
   buildChatMcpServers,
 } from "../services/chat.service.js";
+import { runAskQuery } from "../services/ask.service.js";
 import type { EvalCaseResult } from "../types.js";
 
 export const description = "Run the prompt evaluation suite against the chat surface";
@@ -122,6 +123,18 @@ export default function EvalCommand({ options: opts }: Props) {
                   tokensIn: out.tokensIn,
                   tokensOut: out.tokensOut,
                   toolHistory: out.toolHistory,
+                };
+              },
+              runAsk: async (fundName, question, runOpts) => {
+                const r = await runAskQuery(question, { fund: fundName, model: runOpts.model, search: false });
+                return {
+                  sessionId: "",
+                  response: r.output,
+                  costUsd: r.costUsd,
+                  numTurns: r.numTurns,
+                  tokensIn: r.tokensIn,
+                  tokensOut: r.tokensOut,
+                  toolHistory: r.toolHistory,
                 };
               },
               buildFundContext: (fundName) => buildFundContext(fundName),

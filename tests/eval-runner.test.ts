@@ -91,4 +91,42 @@ describe("runEvalCase", () => {
     expect(result.passed).toBe(false);
     expect(result.runs.every((r) => r.error?.includes("timeout"))).toBe(true);
   });
+
+  it("dispatches to runAsk when surface is 'ask' and skips runChatTurn", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup,
+    });
+    const runChatTurn = vi.fn();
+    const runAsk = vi.fn().mockResolvedValue({
+      sessionId: "",
+      response: "ok",
+      costUsd: 0.02,
+      numTurns: 1,
+      tokensIn: 100,
+      tokensOut: 50,
+      toolHistory: [{ name: "foo", elapsed: 0.5 }],
+    });
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    const result = await runEvalCase(
+      makeCase({ surface: "ask", expect: { must_invoke: ["foo"], must_not_invoke: [] } }),
+      {
+        model: "claude-sonnet-4-6",
+        timeoutMs: 60000,
+        seed,
+        runChatTurn,
+        runAsk,
+        buildFundContext,
+        buildChatMcpServers,
+      },
+    );
+
+    expect(runAsk).toHaveBeenCalledTimes(3);
+    expect(runChatTurn).not.toHaveBeenCalled();
+    expect(result.passed).toBe(true);
+  });
 });

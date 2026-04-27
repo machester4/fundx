@@ -28,6 +28,11 @@ export interface RunnerDeps {
     context: string,
     opts: { model: string; readonly: boolean; mcpServers: ChatMcpServers; maxBudgetUsd?: number },
   ) => Promise<RunChatTurnResult>;
+  runAsk?: (
+    fundName: string,
+    question: string,
+    opts: { model: string },
+  ) => Promise<RunChatTurnResult>;
   buildFundContext: (fundName: string) => Promise<string>;
   buildChatMcpServers: (fundName: string) => Promise<ChatMcpServers>;
 }
@@ -73,15 +78,20 @@ async function runOnce(
 ): Promise<EvalRunCapture> {
   const startedAt = Date.now();
   try {
-    const result = await withTimeout(
-      deps.runChatTurn(fundName, undefined, caseDef.prompt, context, {
-        model: deps.model,
-        readonly: true,
-        mcpServers,
-        maxBudgetUsd: 0.5,
-      }),
-      deps.timeoutMs,
-    );
+    const result = caseDef.surface === "ask"
+      ? await withTimeout(
+          deps.runAsk!(fundName, caseDef.prompt, { model: deps.model }),
+          deps.timeoutMs,
+        )
+      : await withTimeout(
+          deps.runChatTurn(fundName, undefined, caseDef.prompt, context, {
+            model: deps.model,
+            readonly: true,
+            mcpServers,
+            maxBudgetUsd: 0.5,
+          }),
+          deps.timeoutMs,
+        );
     return {
       run_index: runIndex,
       passed: false,

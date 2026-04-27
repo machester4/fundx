@@ -890,6 +890,7 @@ export const evalCaseSchema = z.object({
   description: z.string(),
   prompt: z.string().min(1),
   language: z.enum(["es", "en"]).default("es"),
+  surface: z.enum(["chat", "ask"]).default("chat"),
   fund_state: evalFundStateSchema,
   expect: evalAssertionsSchema,
   runs: z.number().int().min(1).max(10).default(3),
