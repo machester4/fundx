@@ -6,6 +6,8 @@ import {
   globalConfigSchema,
   sessionLogV2Schema,
 } from "../src/types.js";
+import { resolveBudget, buildBudgetAlert } from "../src/services/session.service.js";
+import type { FundConfig, GlobalConfig } from "../src/types.js";
 
 describe("budgetSchema", () => {
   it("parses a valid budget", () => {
@@ -118,9 +120,6 @@ describe("sessionLogV2Schema with budget_resolved", () => {
   });
 });
 
-import { resolveBudget } from "../src/services/session.service.js";
-import type { FundConfig, GlobalConfig } from "../src/types.js";
-
 const baseFund = (): FundConfig => ({
   fund: { name: "f", display_name: "F", description: "", created: "2026-04-27", status: "active" },
   capital: { initial: 1000, currency: "USD" },
@@ -201,5 +200,53 @@ describe("resolveBudget cascade", () => {
     const fund = baseFund();
     const global = baseGlobal();
     expect(resolveBudget(fund, global, "made-up-type")).toEqual({ maxTurns: 50, maxUsd: 5 });
+  });
+});
+
+describe("buildBudgetAlert", () => {
+  it("formats an error_max_budget alert with all fields", () => {
+    const out = buildBudgetAlert({
+      displayName: "My Fund",
+      sessionType: "pre-market",
+      status: "error_max_budget",
+      budget: { maxTurns: 40, maxUsd: 5 },
+      numTurns: 22,
+      costUsd: 5.03,
+    });
+    expect(out).toContain("My Fund");
+    expect(out).toContain("pre-market");
+    expect(out).toContain("stopped at budget");
+    expect(out).toContain("40 turns");
+    expect(out).toContain("$5");
+    expect(out).toContain("22 turns");
+    expect(out).toContain("$5.03");
+    expect(out).toContain("error_max_budget");
+  });
+
+  it("formats an error_max_turns alert", () => {
+    const out = buildBudgetAlert({
+      displayName: "My Fund",
+      sessionType: "post-market",
+      status: "error_max_turns",
+      budget: { maxTurns: 60, maxUsd: 7 },
+      numTurns: 60,
+      costUsd: 4.21,
+    });
+    expect(out).toContain("error_max_turns");
+    expect(out).toContain("60 turns");
+    expect(out).toContain("$7");
+  });
+
+  it("escapes HTML-special characters in displayName", () => {
+    const out = buildBudgetAlert({
+      displayName: "Fund & <Co>",
+      sessionType: "pre-market",
+      status: "error_max_budget",
+      budget: { maxTurns: 40, maxUsd: 5 },
+      numTurns: 22,
+      costUsd: 5.0,
+    });
+    expect(out).toContain("Fund &amp; &lt;Co&gt;");
+    expect(out).not.toContain("Fund & <Co>");
   });
 });

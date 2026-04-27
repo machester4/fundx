@@ -127,6 +127,28 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+export interface BuildBudgetAlertInput {
+  displayName: string;
+  sessionType: string;
+  status: "error_max_budget" | "error_max_turns";
+  budget: Budget;
+  numTurns: number;
+  costUsd: number;
+}
+
+/** Format a Telegram alert (HTML parse-mode) for a session that the SDK
+ *  hard-killed on a budget cap. Returns the message body — caller passes
+ *  it to notifySession(). Pure function, tested in tests/budget.test.ts. */
+export function buildBudgetAlert(input: BuildBudgetAlertInput): string {
+  const safeName = escapeHtml(input.displayName);
+  return [
+    `🛑 <b>${safeName}</b> — ${input.sessionType} stopped at budget`,
+    `Limit: ${input.budget.maxTurns} turns / $${input.budget.maxUsd}`,
+    `Used: ${input.numTurns} turns / $${input.costUsd.toFixed(2)}`,
+    `Reason: <code>${input.status}</code>`,
+  ].join("\n");
+}
+
 /** Send a Telegram notification (best-effort, never throws) */
 async function notifySession(message: string): Promise<void> {
   try {
