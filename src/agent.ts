@@ -223,6 +223,13 @@ export async function runAgentQuery(
   let activeToolName: string | null = null;
   let activeToolStartedAt: number | null = null;
 
+  // Build a clean child-process environment that strips CLAUDECODE so that the
+  // Agent SDK subprocess is not rejected as a "nested Claude Code session".
+  // This matters when runAgentQuery is invoked from within an existing Claude
+  // Code session (e.g. `fundx eval` or `fundx ask`) where CLAUDECODE=1 is set.
+  const childEnv = { ...process.env } as Record<string, string>;
+  delete childEnv["CLAUDECODE"];
+
   try {
     for await (const message of query({
       prompt: options.prompt,
@@ -232,6 +239,7 @@ export async function runAgentQuery(
         maxBudgetUsd:
           options.maxBudgetUsd ?? globalConfig.max_budget_usd ?? undefined,
         cwd: paths.root,
+        env: childEnv,
         systemPrompt: { type: "preset", preset: "claude_code" },
         settingSources: ["project"],
         mcpServers,
