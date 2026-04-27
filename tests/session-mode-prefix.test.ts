@@ -20,4 +20,12 @@ describe("sessionModePrefix", () => {
     expect(sessionModePrefix("interactive-chat")).not.toContain("\n");
     expect(sessionModePrefix("autonomous-scheduled")).not.toContain("\n");
   });
+
+  it("returns the ask-mode line for interactive-ask", () => {
+    const out = sessionModePrefix("interactive-ask");
+    expect(out).toMatch(/^Session mode: interactive ask\b/);
+    expect(out).toContain("Read-only one-shot question");
+    expect(out).toContain("Do not execute trades");
+    expect(out).not.toContain("\n");
+  });
 });

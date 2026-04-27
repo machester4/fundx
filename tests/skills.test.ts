@@ -380,4 +380,11 @@ describe("FUND_RULES session-init.md mode-aware revision", () => {
       expect(entry.content).toMatch(new RegExp(`^${i}\\.\\s+\\*\\*`, "m"));
     }
   });
+
+  it("session-init.md Applies to mentions all three modes", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
+    expect(entry.content).toContain("Session mode: interactive chat");
+    expect(entry.content).toContain("Session mode: interactive ask");
+    expect(entry.content).toContain("Session mode: autonomous scheduled");
+  });
 });

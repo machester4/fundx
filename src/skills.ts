@@ -1377,7 +1377,8 @@ and avoids forcing translation on either side.
 
 This sequence applies to **autonomous scheduled sessions**. The prompt prefix
 will tell you which mode you are in: \`Session mode: autonomous scheduled\`
-means follow the steps below; \`Session mode: interactive chat\` means the
+means follow the steps below; \`Session mode: interactive chat\` or
+\`Session mode: interactive ask\` means the
 context above already contains the fund state this sequence would gather —
 skip ahead to the user's message and call MCPs only when the data-freshness
 block indicates the context is stale.

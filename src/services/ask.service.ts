@@ -89,8 +89,9 @@ export async function runAskQuery(
   const context = contextParts.join("\n\n---\n\n");
 
   const prompt = [
+    sessionModePrefix("interactive-ask"),
+    ``,
     `You are answering a question about ${isCrossFund ? "multiple funds" : `the fund '${targetFunds[0]}'`}.`,
-    `This is a read-only query — do NOT execute any trades or modify state files.`,
     ``,
     `## Question`,
     question,

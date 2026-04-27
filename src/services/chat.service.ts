@@ -27,7 +27,7 @@ import { openWatchlistDb, queryWatchlist } from "./watchlist.service.js";
 
 // ── Session Mode Prefix ───────────────────────────────────────
 
-export type SessionMode = "interactive-chat" | "autonomous-scheduled";
+export type SessionMode = "interactive-chat" | "interactive-ask" | "autonomous-scheduled";
 
 /** Returns the single-line mode prefix prepended to the user prompt for fresh
  * (non-resumed) sessions. The session-init.md FUND_RULE reads this line to
@@ -36,6 +36,9 @@ export type SessionMode = "interactive-chat" | "autonomous-scheduled";
 export function sessionModePrefix(mode: SessionMode): string {
   if (mode === "interactive-chat") {
     return "Session mode: interactive chat. The context above contains the fund state — respond to the user's message directly, calling MCPs only when you need fresher data than the context provides.";
+  }
+  if (mode === "interactive-ask") {
+    return "Session mode: interactive ask. Read-only one-shot question. The context above contains the fund state — answer from context, calling MCPs only for fresher data. Do not execute trades or modify state files.";
   }
   return "Session mode: autonomous scheduled. Follow the session-init rule's Orient sequence (read handoff + state files + write Session Contract) before any analysis.";
 }
