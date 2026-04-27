@@ -588,3 +588,31 @@ export async function tagFundCompatibilityForTickers(
   });
   tx();
 }
+
+/** Direct-insert helper for `watchlist_fund_tags`: marks each ticker as
+ * compatible=1 with the given fund. Bypasses `tagFundCompatibilityForTickers`'s
+ * universe-resolution / sector-exclusion logic.
+ *
+ * Use case: seeding ephemeral funds for the eval harness, where the fund tags
+ * are known a priori (every seeded ticker should be visible to the seeded fund).
+ * Production code paths should still go through `tagFundCompatibilityForTickers`.
+ */
+export function tagWatchlistForFundDirect(
+  db: Database.Database,
+  fundName: string,
+  tickers: string[],
+  now: number,
+): void {
+  if (tickers.length === 0) return;
+  const stmt = db.prepare(
+    `INSERT INTO watchlist_fund_tags (ticker, fund_name, compatible, tagged_at)
+     VALUES (?, ?, 1, ?)
+     ON CONFLICT(ticker, fund_name) DO UPDATE SET
+       compatible = 1,
+       tagged_at = excluded.tagged_at`,
+  );
+  const tx = db.transaction(() => {
+    for (const t of tickers) stmt.run(t, fundName, now);
+  });
+  tx();
+}

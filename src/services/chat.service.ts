@@ -370,11 +370,16 @@ export async function buildFundContext(fundName: string | null): Promise<string>
   }
 
   // ── Watchlist section ─────────────────────────────────────────────
+  // Filter by `fund: fundName` so multi-fund workspaces don't see candidates
+  // from other funds' screener runs. The `watchlist_fund_tags` table is
+  // populated by `tagFundCompatibilityForTickers` (production) or
+  // `tagWatchlistForFundDirect` (eval seeder).
   let watchlistMostRecent: number | null = null;
   try {
     const db = openWatchlistDb();
     try {
       const entries = queryWatchlist(db, {
+        fund: fundName,
         status: ["candidate", "watching"],
         limit: 100,
       });

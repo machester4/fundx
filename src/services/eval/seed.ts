@@ -12,6 +12,7 @@ import {
   openWatchlistDb,
   insertScreenRun,
   insertScore,
+  tagWatchlistForFundDirect,
   applyTransitionsForRun,
 } from "../watchlist.service.js";
 import { loadFundConfig } from "../fund.service.js";
@@ -66,7 +67,7 @@ export async function seedEvalFund(
     await generateFundClaudeMd(config);
     await ensureFundSkillFiles(paths.claudeDir);
     await ensureFundRules(paths.claudeDir);
-    await seedWatchlist(watchlistDbPath, state);
+    await seedWatchlist(watchlistDbPath, state, fundName);
   } catch (err) {
     await cleanup();
     throw err;
@@ -172,7 +173,7 @@ async function seedTracker(path: string, state: EvalFundState, config: FundConfi
   await writeJsonAtomic(path, doc);
 }
 
-async function seedWatchlist(dbPath: string, state: EvalFundState): Promise<void> {
+async function seedWatchlist(dbPath: string, state: EvalFundState, fundName: string): Promise<void> {
   if (state.watchlist.length === 0) return;
 
   await mkdir(dirname(dbPath), { recursive: true });
@@ -207,6 +208,10 @@ async function seedWatchlist(dbPath: string, state: EvalFundState): Promise<void
       });
       applyTransitionsForRun(db, runId, now);
     }
+    // Tag every seeded ticker as compatible with the seeded fund so the
+    // production fund-scoped watchlist filter (added to buildFundContext) returns
+    // the seeded entries during evaluation.
+    tagWatchlistForFundDirect(db, fundName, state.watchlist.map((e) => e.ticker), now);
   } finally {
     db.close();
   }
