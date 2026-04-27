@@ -123,7 +123,14 @@ export interface AskOptions {
 export async function runAskQuery(
   question: string,
   options: AskOptions,
-): Promise<{ output: string; costUsd: number; numTurns: number }> {
+): Promise<{
+  output: string;
+  costUsd: number;
+  numTurns: number;
+  toolHistory: Array<{ name: string; elapsed: number }>;
+  tokensIn: number;
+  tokensOut: number;
+}> {
   const allFunds = await listFundNames();
   if (allFunds.length === 0) {
     throw new Error("No funds found. Create one first: fundx fund create");
@@ -189,5 +196,8 @@ export async function runAskQuery(
     output: result.output,
     costUsd: result.cost_usd,
     numTurns: result.num_turns,
+    toolHistory: result.toolHistory,
+    tokensIn: result.tokens_in,
+    tokensOut: result.tokens_out,
   };
 }

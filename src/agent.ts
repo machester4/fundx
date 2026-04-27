@@ -56,6 +56,12 @@ export interface AgentQueryResult {
   status: "success" | "error_max_turns" | "error_max_budget" | "timeout" | "error";
   /** Error message if status is not "success" */
   error?: string;
+  /** Ordered list of tool invocations with elapsed time in seconds */
+  toolHistory: Array<{ name: string; elapsed: number }>;
+  /** Total input tokens across all models */
+  tokens_in: number;
+  /** Total output tokens across all models */
+  tokens_out: number;
 }
 
 // ── MCP Server Configuration ────────────────────────────────
@@ -211,6 +217,12 @@ export async function runAgentQuery(
   let status: AgentQueryResult["status"] = "success";
   let error: string | undefined;
 
+  // Tool history + token accumulators
+  const toolHistory: Array<{ name: string; elapsed: number }> = [];
+  let activeBlockType: "thinking" | "tool_use" | null = null;
+  let activeToolName: string | null = null;
+  let activeToolStartedAt: number | null = null;
+
   try {
     for await (const message of query({
       prompt: options.prompt,
@@ -232,6 +244,32 @@ export async function runAgentQuery(
     })) {
       // Forward to optional callback
       options.onMessage?.(message);
+
+      // Track tool invocations via stream events
+      if (message.type === "stream_event") {
+        const event = (message as { event?: unknown }).event as
+          | { type?: string; content_block?: { type?: string; name?: string } }
+          | undefined;
+        if (event?.type === "content_block_start" && event.content_block?.type === "tool_use" && typeof event.content_block.name === "string") {
+          activeBlockType = "tool_use";
+          activeToolName = event.content_block.name;
+          activeToolStartedAt = Date.now();
+        } else if (event?.type === "content_block_stop" && activeBlockType === "tool_use") {
+          if (activeToolName !== null && activeToolStartedAt !== null) {
+            toolHistory.push({
+              name: activeToolName,
+              elapsed: (Date.now() - activeToolStartedAt) / 1000,
+            });
+          }
+          activeBlockType = null;
+          activeToolName = null;
+          activeToolStartedAt = null;
+        } else if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
+          activeBlockType = "thinking";
+        } else if (event?.type === "content_block_stop" && activeBlockType === "thinking") {
+          activeBlockType = null;
+        }
+      }
 
       // Capture result metadata
       if (message.type === "result") {
@@ -273,6 +311,13 @@ export async function runAgentQuery(
     if (timeoutId) clearTimeout(timeoutId);
   }
 
+  let tokensIn = 0;
+  let tokensOut = 0;
+  for (const u of Object.values(modelUsage) as Array<{ inputTokens?: number; outputTokens?: number }>) {
+    tokensIn += u.inputTokens ?? 0;
+    tokensOut += u.outputTokens ?? 0;
+  }
+
   return {
     output,
     cost_usd: costUsd,
@@ -281,7 +326,10 @@ export async function runAgentQuery(
     usage: modelUsage,
     session_id: sessionId,
     status,
-    error,
+    ...(error !== undefined ? { error } : {}),
+    toolHistory,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
   };
 }
 
