@@ -33,7 +33,10 @@ export interface RunnerDeps {
     question: string,
     opts: { model: string },
   ) => Promise<RunChatTurnResult>;
-  buildFundContext: (fundName: string) => Promise<string>;
+  buildFundContext: (
+    fundName: string,
+    opts?: { watchlistDbPath?: string },
+  ) => Promise<string>;
   buildChatMcpServers: (fundName: string) => Promise<ChatMcpServers>;
 }
 
@@ -49,7 +52,13 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
 
   try {
     const mcpServers = await deps.buildChatMcpServers(handle.fundName);
-    const context = await deps.buildFundContext(handle.fundName);
+    // Pass the seeder's watchlist DB path explicitly to avoid the
+    // process.env.FUNDX_WATCHLIST_DB_PATH race when concurrency > 1: two
+    // concurrent seeds mutate the env var, so a context built after the
+    // second seed would see the first seed's DB.
+    const context = await deps.buildFundContext(handle.fundName, {
+      watchlistDbPath: handle.watchlistDbPath,
+    });
 
     for (let i = 0; i < caseDef.runs; i++) {
       const capture = await runOnce(i + 1, caseDef, context, mcpServers, handle.fundName, deps);

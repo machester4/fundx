@@ -321,7 +321,19 @@ export async function buildWorkspaceContext(): Promise<string> {
 }
 
 /** Build full fund context for the first turn */
-export async function buildFundContext(fundName: string | null): Promise<string> {
+export interface BuildFundContextOptions {
+  /** Override the watchlist DB path. Used by the eval harness to avoid the
+   * `process.env.FUNDX_WATCHLIST_DB_PATH` race when running multiple cases
+   * concurrently. Production callers omit this — the default path is resolved
+   * via `resolveWatchlistDbPath()` at call time.
+   */
+  watchlistDbPath?: string;
+}
+
+export async function buildFundContext(
+  fundName: string | null,
+  opts: BuildFundContextOptions = {},
+): Promise<string> {
   if (!fundName) return buildWorkspaceContext();
   const sections: string[] = [];
 
@@ -376,7 +388,7 @@ export async function buildFundContext(fundName: string | null): Promise<string>
   // `tagWatchlistForFundDirect` (eval seeder).
   let watchlistMostRecent: number | null = null;
   try {
-    const db = openWatchlistDb();
+    const db = opts.watchlistDbPath ? openWatchlistDb(opts.watchlistDbPath) : openWatchlistDb();
     try {
       const entries = queryWatchlist(db, {
         fund: fundName,

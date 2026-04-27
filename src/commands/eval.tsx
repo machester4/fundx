@@ -137,7 +137,7 @@ export default function EvalCommand({ options: opts }: Props) {
                   toolHistory: r.toolHistory,
                 };
               },
-              buildFundContext: (fundName) => buildFundContext(fundName),
+              buildFundContext: (fundName, opts) => buildFundContext(fundName, opts),
               buildChatMcpServers: (fundName) => buildChatMcpServers(fundName),
             });
             results.push(result);

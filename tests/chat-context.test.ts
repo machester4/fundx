@@ -151,3 +151,33 @@ describe("buildFundContext — data freshness section", () => {
     expect(ctx).not.toMatch(/handoff: written NaN/);
   });
 });
+
+describe("buildFundContext — watchlistDbPath injection", () => {
+  let handle: SeedEvalFundHandle | null = null;
+  afterEach(async () => {
+    if (handle) { await handle.cleanup(); handle = null; }
+  });
+
+  it("uses opts.watchlistDbPath when provided, ignoring the env var", async () => {
+    handle = await seedEvalFund({
+      fund_config: { objective: "runway", risk_profile: "moderate", initial_capital: 10000 },
+      portfolio: { cash: 10000, positions: [] },
+      tracker: { progress_pct: 0, status: "on_track" },
+      watchlist: [
+        { ticker: "NVDA", status: "candidate", peak_score: 0.9, screens: ["momentum-12-1"], first_surfaced_days_ago: 7 },
+      ],
+    });
+    // Simulate the concurrent-eval race: another seed mutated the env to point
+    // at a path that has no watchlist data, but the explicit injection should win.
+    const prevEnv = process.env.FUNDX_WATCHLIST_DB_PATH;
+    process.env.FUNDX_WATCHLIST_DB_PATH = "/tmp/eval-bogus-nonexistent.sqlite";
+    try {
+      const ctx = await buildFundContext(handle.fundName, { watchlistDbPath: handle.watchlistDbPath });
+      expect(ctx).toContain("NVDA");
+      expect(ctx).toContain("[candidate]");
+    } finally {
+      if (prevEnv === undefined) delete process.env.FUNDX_WATCHLIST_DB_PATH;
+      else process.env.FUNDX_WATCHLIST_DB_PATH = prevEnv;
+    }
+  });
+});
