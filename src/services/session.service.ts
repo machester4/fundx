@@ -185,7 +185,7 @@ export async function runFundSession(
 
   let universeResolution: UniverseResolution | null = null;
   try {
-    const gcfg = await loadGlobalConfig();
+    const gcfg = globalConfig;
     const apiKey = gcfg.market_data?.fmp_api_key ?? "";
     universeResolution = await resolveUniverse(fundName, config.universe, apiKey);
   } catch (err) {
@@ -291,6 +291,7 @@ export async function runFundSession(
   const truncated = rawSummary.length > 800;
 
   if (result.status === "error_max_budget" || result.status === "error_max_turns") {
+    // buildBudgetAlert escapes the display name internally — pass raw, not the pre-escaped local
     await notifySession(
       buildBudgetAlert({
         displayName: config.fund.display_name,
