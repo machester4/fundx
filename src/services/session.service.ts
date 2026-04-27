@@ -12,6 +12,51 @@ import { sessionModePrefix } from "./chat.service.js";
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
 
+export interface BuildAutonomousPromptInput {
+  fundName: string;
+  sessionType: string;
+  focus: string;
+  universeBlock?: string | null;
+  useDebateSkills?: boolean;
+  today?: string;
+}
+
+/** Pure helper: builds the prompt for an autonomous scheduled session.
+ *
+ *  The prompt prefix tells the model it's in autonomous mode (so the
+ *  session-init rule's `## Applies to` section directs it to follow the
+ *  Orient sequence). Factored out from `runFundSession`'s inline array
+ *  to make the prompt unit-testable.
+ */
+export function buildAutonomousPrompt(input: BuildAutonomousPromptInput): string {
+  const today = input.today ?? new Date().toISOString().split("T")[0];
+  const lines: string[] = [
+    sessionModePrefix("autonomous-scheduled"),
+    ``,
+    `You are running a ${input.sessionType} session for fund '${input.fundName}'.`,
+    ``,
+    `Focus: ${input.focus}`,
+    ``,
+  ];
+  if (input.universeBlock) {
+    lines.push(input.universeBlock, ``);
+  }
+  if (input.useDebateSkills) {
+    lines.push(
+      `This session should prioritize thorough analysis. Before any trading decisions,`,
+      `apply your Investment Debate and Risk Assessment skills from your CLAUDE.md.`,
+      `Use your analyst sub-agents (via the Task tool) to gather data from multiple`,
+      `perspectives before making decisions.`,
+      ``,
+    );
+  }
+  lines.push(
+    `Follow your session-init rule to orient yourself, then proceed with your Session Protocol.`,
+    `Write analysis to analysis/${today}_${input.sessionType}.md.`,
+  );
+  return lines.join("\n");
+}
+
 function renderUniverseBlock(resolution: UniverseResolution | null): string {
   if (!resolution) return "";
   const source = resolution.source.kind === "preset"
@@ -86,26 +131,14 @@ export async function runFundSession(
   }
   const universeBlock = renderUniverseBlock(universeResolution);
 
-  const prompt = [
-    sessionModePrefix("autonomous-scheduled"),
-    ``,
-    `You are running a ${sessionType} session for fund '${fundName}'.`,
-    ``,
-    `Focus: ${focus}`,
-    ``,
-    ...(universeBlock ? [universeBlock, ``] : []),
-    ...(options?.useDebateSkills
-      ? [
-          `This session should prioritize thorough analysis. Before any trading decisions,`,
-          `apply your Investment Debate and Risk Assessment skills from your CLAUDE.md.`,
-          `Use your analyst sub-agents (via the Task tool) to gather data from multiple`,
-          `perspectives before making decisions.`,
-          ``,
-        ]
-      : []),
-    `Follow your session-init rule to orient yourself, then proceed with your Session Protocol.`,
-    `Write analysis to analysis/${today}_${sessionType}.md.`,
-  ].join("\n");
+  const prompt = buildAutonomousPrompt({
+    fundName,
+    sessionType,
+    focus,
+    universeBlock,
+    useDebateSkills: options?.useDebateSkills,
+    today,
+  });
 
   const model = config.claude.model || undefined;
   const effectiveMaxTurns = options?.maxTurns ?? DEFAULT_MAX_TURNS;
