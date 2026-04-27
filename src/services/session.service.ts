@@ -16,11 +16,9 @@ const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
  *  before the global FALLBACK_DEFAULT. Conservative on the high side so a
  *  default-only deployment doesn't trip caps in normal operation. */
 const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
-  "pre-market": { maxTurns: 40, maxUsd: 5 },
-  "mid-session": { maxTurns: 25, maxUsd: 3 },
-  "post-market": { maxTurns: 60, maxUsd: 7 },
-  "on-demand": { maxTurns: 30, maxUsd: 4 },
-  "special": { maxTurns: 50, maxUsd: 6 },
+  pre_market: { maxTurns: 40, maxUsd: 5 },
+  mid_session: { maxTurns: 25, maxUsd: 3 },
+  post_market: { maxTurns: 60, maxUsd: 7 },
 };
 
 /** Used when the session_type is not present in DEFAULTS_BY_SESSION_TYPE

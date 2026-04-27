@@ -189,17 +189,17 @@ describe("resolveBudget cascade", () => {
   it("level 5 — known session-type default when no config at all", () => {
     const fund = baseFund();
     const global = baseGlobal();
-    expect(resolveBudget(fund, global, "pre-market")).toEqual({ maxTurns: 40, maxUsd: 5 });
-    expect(resolveBudget(fund, global, "mid-session")).toEqual({ maxTurns: 25, maxUsd: 3 });
-    expect(resolveBudget(fund, global, "post-market")).toEqual({ maxTurns: 60, maxUsd: 7 });
-    expect(resolveBudget(fund, global, "on-demand")).toEqual({ maxTurns: 30, maxUsd: 4 });
-    expect(resolveBudget(fund, global, "special")).toEqual({ maxTurns: 50, maxUsd: 6 });
+    expect(resolveBudget(fund, global, "pre_market")).toEqual({ maxTurns: 40, maxUsd: 5 });
+    expect(resolveBudget(fund, global, "mid_session")).toEqual({ maxTurns: 25, maxUsd: 3 });
+    expect(resolveBudget(fund, global, "post_market")).toEqual({ maxTurns: 60, maxUsd: 7 });
   });
 
   it("level 6 — fallback default for unknown session type", () => {
     const fund = baseFund();
     const global = baseGlobal();
     expect(resolveBudget(fund, global, "made-up-type")).toEqual({ maxTurns: 50, maxUsd: 5 });
+    expect(resolveBudget(fund, global, "catchup_pre_market")).toEqual({ maxTurns: 50, maxUsd: 5 });
+    expect(resolveBudget(fund, global, "special_fomc")).toEqual({ maxTurns: 50, maxUsd: 5 });
   });
 });
 

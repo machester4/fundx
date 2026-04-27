@@ -91,11 +91,11 @@ Pure function — no I/O. Unit-testable in isolation.
 
 | `session_type` | maxTurns | maxUsd |
 |---|---:|---:|
-| `pre-market` | 40 | $5 |
-| `mid-session` | 25 | $3 |
-| `post-market` | 60 | $7 |
-| `on-demand` | 30 | $4 |
-| `special` | 50 | $6 |
+| `pre_market` | 40 | $5 |
+| `mid_session` | 25 | $3 |
+| `post_market` | 60 | $7 |
+
+Catchup (`catchup_<type>`) and special (`special_<trigger>`) sessions fall through to `FALLBACK_DEFAULT` — prefix matching is a future improvement, intentionally out of scope for v1.
 
 `FALLBACK_DEFAULT`: `{ maxTurns: 50, maxUsd: 5 }` — matches the existing `DEFAULT_MAX_TURNS = 50` plus a sensible USD cap.
 

@@ -141,7 +141,7 @@ describe("runFundSession", () => {
     expect(opts.prompt).toContain("pre_market session");
     expect(opts.prompt).toContain("Analyze overnight developments.");
     expect(opts.model).toBe("sonnet");
-    expect(opts.maxTurns).toBe(50);
+    expect(opts.maxTurns).toBe(40);
   });
 
   it("uses session max_duration_minutes for timeout", async () => {
