@@ -188,4 +188,17 @@ describe("buildStateSnapshot", () => {
     expect(snap).toContain("<watchlist");
     expect(snap).toContain("(empty");
   });
+
+  it("clips oversized handoff with truncation marker (runtime cap, not just test sanity)", async () => {
+    await seed("f9", {
+      "session-handoff.md": "Y".repeat(20_000),  // way over the 8KB cap
+      "portfolio.json": '{"cash": 5000}',
+    });
+    const snap = await buildStateSnapshot("f9");
+    // Marker present
+    expect(snap).toContain("[truncated,");
+    expect(snap).toContain("session-handoff");
+    // Snapshot stays well under 50KB
+    expect(snap.length).toBeLessThan(50_000);
+  });
 });

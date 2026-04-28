@@ -14,6 +14,13 @@ async function readOr(path: string, fallback: string): Promise<string> {
   }
 }
 
+/** Truncate `s` to at most `max` characters; if truncated, append a marker
+ *  noting how many characters were dropped. */
+function clip(s: string, max: number, label: string): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}\n... [truncated, ${s.length - max} chars omitted from ${label}]`;
+}
+
 function tryRecentTrades(fundName: string): string {
   let db: ReturnType<typeof openJournal> | undefined;
   try {
@@ -62,21 +69,23 @@ function tryWatchlistTop(fundName: string): string {
 export async function buildStateSnapshot(fundName: string): Promise<string> {
   const paths = fundPaths(fundName);
 
-  const handoff = await readOr(paths.state.sessionHandoff, "(none — first session)");
-  const portfolio = await readOr(paths.state.portfolio, "(none)");
-  const tracker = await readOr(paths.state.tracker, "(none)");
-  const pendingSessions = await readOr(paths.state.pendingSessions, "(none)");
+  const [handoff, portfolio, tracker, pendingSessions] = await Promise.all([
+    readOr(paths.state.sessionHandoff, "(none — first session)"),
+    readOr(paths.state.portfolio, "(none)"),
+    readOr(paths.state.tracker, "(none)"),
+    readOr(paths.state.pendingSessions, "(none)"),
+  ]);
   const recentTrades = tryRecentTrades(fundName);
   const watchlist = tryWatchlistTop(fundName);
 
   return [
     `<state_snapshot>`,
-    `<session_handoff>${handoff === "(none — first session)" ? "(none — first session)" : `\n${handoff.trim()}\n`}</session_handoff>`,
-    `<portfolio>${portfolio === "(none)" ? "(none)" : `\n${portfolio.trim()}\n`}</portfolio>`,
-    `<objective_tracker>${tracker === "(none)" ? "(none)" : `\n${tracker.trim()}\n`}</objective_tracker>`,
-    `<pending_sessions>${pendingSessions === "(none)" ? "(none)" : `\n${pendingSessions.trim()}\n`}</pending_sessions>`,
-    `<recent_trades count="${TOP_TRADES}">${recentTrades.startsWith("(") ? recentTrades : `\n${recentTrades}\n`}</recent_trades>`,
-    `<watchlist top="${TOP_WATCHLIST}">${watchlist.startsWith("(") ? watchlist : `\n${watchlist}\n`}</watchlist>`,
+    `<session_handoff>${handoff === "(none — first session)" ? "(none — first session)" : `\n${clip(handoff.trim(), 8_000, "session-handoff")}\n`}</session_handoff>`,
+    `<portfolio>${portfolio === "(none)" ? "(none)" : `\n${clip(portfolio.trim(), 8_000, "portfolio")}\n`}</portfolio>`,
+    `<objective_tracker>${tracker === "(none)" ? "(none)" : `\n${clip(tracker.trim(), 4_000, "objective_tracker")}\n`}</objective_tracker>`,
+    `<pending_sessions>${pendingSessions === "(none)" ? "(none)" : `\n${clip(pendingSessions.trim(), 4_000, "pending_sessions")}\n`}</pending_sessions>`,
+    `<recent_trades count="${TOP_TRADES}">${recentTrades.startsWith("(") ? recentTrades : `\n${clip(recentTrades, 12_000, "recent_trades")}\n`}</recent_trades>`,
+    `<watchlist top="${TOP_WATCHLIST}">${watchlist.startsWith("(") ? watchlist : `\n${clip(watchlist, 8_000, "watchlist")}\n`}</watchlist>`,
     `</state_snapshot>`,
   ].join("\n");
 }
