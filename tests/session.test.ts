@@ -37,8 +37,7 @@ vi.mock("../src/state.js", () => ({
 
 vi.mock("../src/subagent.js", () => ({
   buildAnalystAgents: vi.fn(() => ({
-    "market-analyst": { description: "Market", prompt: "test", model: "sonnet" },
-    "technical-analyst": { description: "Technical", prompt: "test", model: "sonnet" },
+    "market-research": { description: "Market Research", prompt: "test", model: "sonnet" },
     "risk-guardian": { description: "Risk", prompt: "test", model: "sonnet" },
   })),
 }));
@@ -252,8 +251,7 @@ describe("runFundSession with agents", () => {
 
     const opts = mockRunAgentQuery.mock.calls[0][0];
     expect(opts.agents).toBeDefined();
-    expect(opts.agents["market-analyst"]).toBeDefined();
-    expect(opts.agents["technical-analyst"]).toBeDefined();
+    expect(opts.agents["market-research"]).toBeDefined();
     expect(opts.agents["risk-guardian"]).toBeDefined();
   });
 
