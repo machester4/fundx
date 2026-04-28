@@ -10,6 +10,8 @@ import { loadGlobalConfig } from "../config.js";
 import { sessionModePrefix } from "./chat.service.js";
 import { buildStateSnapshot } from "./snapshot.service.js";
 import { VerdictTracker } from "./verdict-tracker.js";
+import type { SDKMessage, HookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { HookOutput } from "./verdict-tracker.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
@@ -26,6 +28,31 @@ const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
 /** Used when the session_type is not present in DEFAULTS_BY_SESSION_TYPE
  *  (e.g. a custom session type). Generous middle-of-the-road. */
 const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
+
+/** Build the tracker-attached hook + onMessage options shared by both
+ *  runAgentQuery invocations (initial call + retry-on-SESSION_EXPIRED).
+ *  Extracted to avoid drift between the two call sites. */
+function buildTrackerHookOptions(tracker: VerdictTracker) {
+  return {
+    onMessage: (msg: SDKMessage) => tracker.observe(msg),
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "mcp__broker-local__place_order",
+          hooks: [
+            async (input: HookInput) => {
+              const ti = (input as { tool_input?: { symbol?: string; side?: "buy" | "sell" } }).tool_input;
+              if (!ti?.symbol || !ti.side) {
+                return { decision: "approve" } satisfies HookOutput;
+              }
+              return tracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
 
 /** Resolve the budget for a session through a 6-level cascade.
  *  Most-specific override wins:
@@ -235,23 +262,7 @@ export async function runFundSession(
       timeoutMs: timeout,
       agents,
       resumeSessionId: activeSession?.session_id,
-      onMessage: (msg) => verdictTracker.observe(msg),
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: "mcp__broker-local__place_order",
-            hooks: [
-              async (input) => {
-                const ti = (input as { tool_input?: { symbol?: string; side?: "buy" | "sell" } }).tool_input;
-                if (!ti?.symbol || !ti.side) {
-                  return { decision: "approve" } as const;
-                }
-                return verdictTracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
-              },
-            ],
-          },
-        ],
-      },
+      ...buildTrackerHookOptions(verdictTracker),
     });
 
     // If resumption failed (expired session), retry without resume
@@ -270,23 +281,7 @@ export async function runFundSession(
         maxBudgetUsd: effectiveMaxBudgetUsd,
         timeoutMs: timeout,
         agents,
-        onMessage: (msg) => verdictTracker.observe(msg),
-        hooks: {
-          PreToolUse: [
-            {
-              matcher: "mcp__broker-local__place_order",
-              hooks: [
-                async (input) => {
-                  const ti = (input as { tool_input?: { symbol?: string; side?: "buy" | "sell" } }).tool_input;
-                  if (!ti?.symbol || !ti.side) {
-                    return { decision: "approve" } as const;
-                  }
-                  return verdictTracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
-                },
-              ],
-            },
-          ],
-        },
+        ...buildTrackerHookOptions(verdictTracker),
       });
     }
   } catch (err) {
