@@ -10,62 +10,71 @@ hypothesis and how to test it.
 
 Review after each major Claude model release or quarterly, whichever comes first.
 
-## Component Inventory
+## Phase 1b verdicts (2026-04-28, model: Opus 4.7)
+
+Methodology: qualitative spot-check (1 baseline + 1 disabled session per YELLOW
+component). See `docs/superpowers/specs/2026-04-27-harness-phase-1b-audit-design.md`
+for full methodology and `docs/superpowers/audit-1b/audit-log.md` for per-session
+evidence with cost tracking.
+
+Total spot-check cost: ~$25.41 (against $50 cap).
 
 ### Sub-Agents
 
-| Agent | Initial | Hypothesis | Why YELLOW (if applicable) | Verdict |
-|-------|---------|-----------|----------------------------|---------|
-| market-analyst | 🟡 | Without dedicated agent + 25-turn context window + structured `<market_assessment>` output, Opus 4.7 won't gather coherent multi-factor regime assessment in-context | Possible merge with technical-analyst into one `market-research` agent — both produce structured assessments using market-data MCP, separate context windows may be redundant for Opus 4.7 | TBD post-spot-check |
-| technical-analyst | 🟡 | Without dedicated agent + TA framework + anti-Fibonacci/anti-Elliott guidance, Opus 4.7 will produce hand-wavy TA without specific levels | Same merge candidate as market-analyst — TA work is recipe-like and Opus 4.7 likely handles inline | TBD post-spot-check |
-| risk-guardian | 🟢 | Without separated HARD GATE agent prompted "find reasons to reject", main agent will rationalize trades that violate drawdown/correlation/sizing limits | (canonical generator/evaluator separation pattern, well-supported by literature) | KEEP |
-| trade-evaluator | 🟢 | Without separated SKEPTICAL agent prompted to find biases (FOMO/anchoring/recency/narrative fallacy), main agent's self-evaluation will skew positive | (canonical generator/evaluator separation pattern, well-supported by literature) | KEEP |
+| Agent | Initial | Verdict | Reason |
+|-------|---------|---------|--------|
+| market-analyst | 🟡 | **SIMPLIFY** | Merge with technical-analyst into single `market-research` agent. Disabled run: $4.05 vs baseline $4.39, agent inlined macro analysis using market-regime skill formula, ~80-85% quality. Unique value (Fed dot plot depth, breadth metrics) is marginal for routine sessions. |
+| technical-analyst | 🟡 | **SIMPLIFY** | Merge with market-analyst. Disabled run revealed agent reuses prior technical artifacts in same-day repeat sessions; tech-analyst's marginal value concentrated in FIRST analysis cycle of a day. |
+| risk-guardian | 🟢 | **KEEP** | Canonical generator/evaluator separation pattern (literature pattern #3). Hard-gate behavior + drawdown budget tiers + correlation rule are non-trivial structural framework. Not spot-checked (clearly load-bearing per Pass 1 reading). |
+| trade-evaluator | 🟢 | **KEEP** | Canonical evaluator pattern. Skeptical bias-check (FOMO/anchoring/recency/narrative fallacy) caught real issues in spot-check #4 (GEV thesis: anti-hallucination violations + tail-risk vs stop-loss mismatch). Demonstrably load-bearing. |
 
 ### Skills
 
-| Skill | Initial | Hypothesis | Why YELLOW (if applicable) | Verdict |
-|-------|---------|-----------|----------------------------|---------|
-| investment-thesis | 🟢 | Without explicit Bull/Bear/Devil's Advocate/Pre-Mortem (Gary Klein) framework, Opus 4.7 will produce thesis but skip structured stress-testing | (specific cognitive interventions; pre-mortem in particular is not naturally produced by an optimistically-biased LLM) | KEEP |
-| risk-assessment | 🟡 | Without explicit EV calculation + drawdown recovery math + two-method sizing requirement, Opus 4.7 will skip rigorous pre-trade math | Significant overlap with `position-sizing` (Kelly + conviction sizing) and `risk-guardian` agent (drawdown recovery, correlation rules). Also contains universe.awareness MCP guidance shoehorned in — different concern | TBD post-spot-check |
-| trade-memory | 🟢 | Without explicit SQL templates + R-multiple framework + decision rules, Opus 4.7 won't proactively query the local SQLite trade journal | (the journal is invisible without prompting; without queries, the entire learning loop is broken) | KEEP |
-| market-regime | 🟢 | Without composite scoring formula (Vol 30% + Trend 30% + Credit 20% + Macro 20%) and 4-tier classification table, Opus 4.7 will hand-wave regime classification | (specific quantitative framework with downstream sizing multipliers — 0.7x/0.5x/0.25x — that depend on regime classification) | KEEP |
-| position-sizing | 🟡 | Without conviction-tier table + Kelly formula + fund-type adjustments + Piotroski F-Score gate, Opus 4.7 will size positions intuitively | Significant overlap with `risk-assessment` skill (also requires "two methods" sizing, conviction + Kelly). Could merge into one `sizing-and-risk-check` skill | TBD post-spot-check |
-| session-reflection | 🟢 | Without structured end-of-session protocol (Decision Audit + Bias Check + Calibration + Journal + Objective + Contract Eval + Handoff Writing), Opus 4.7 won't reliably close the loop | (orchestrates entire Reflect phase of canonical Orient/Work/Reflect cycle; handoff format is load-bearing for next-session continuity) | KEEP |
-| portfolio-review | 🟢 | Without explicit framework (Position-by-Position + Portfolio-Level + Survival Question + Barbell Assessment + Objective-Specific), Opus 4.7 won't conduct holistic portfolio reviews | (Survival Question and Barbell Assessment are specific cognitive interventions — Taleb-style; objective-specific review maps to fund taxonomy) | KEEP |
-| opportunity-screening | 🟢 | Without explicit guidance on screener MCP (watchlist_query/trajectory/tag, screen_run vs screen_discover), Opus 4.7 won't use these tools effectively | (heavy on MCP tool usage guidance — without this skill, the screener MCP is opaque) | KEEP |
+| Skill | Initial | Verdict | Reason |
+|-------|---------|---------|--------|
+| investment-thesis | 🟢 | **KEEP** | Pre-mortem (Gary Klein) + bull/bear/devil's-advocate stack are specific cognitive interventions. Pre-mortem in particular is not naturally produced by an optimistically-biased LLM. Not spot-checked. |
+| risk-assessment | 🟡 | **REMOVE** (with relocation) | Disabled run: $4.53 vs $4.39 baseline. Agent fully reproduced EV+Kelly+conviction math INLINE because position-sizing skill (overlapping ~70%) was still enabled. Unique value: explicit EV calculation framework + universe MCP guidance (~30% of skill content). Removal requires relocating universe guidance to either (a) new `universe` skill, (b) opportunity-screening, or (c) per-fund CLAUDE.md template. |
+| trade-memory | 🟢 | **KEEP** | Without explicit SQL templates + R-multiple framework, the `trade_journal.sqlite` is invisible to the agent. Removing breaks the entire learning loop. Not spot-checked. |
+| market-regime | 🟢 | **KEEP** | Specific quantitative framework (Vol 30% + Trend 30% + Credit 20% + Macro 20% composite) with downstream sizing multipliers (0.7x/0.5x/0.25x). Not spot-checked but evidenced indirectly: spot-check #1 (market-analyst disabled) showed agent applied this formula correctly inline. |
+| position-sizing | 🟡 | **KEEP** | Load-bearing. Disabled run: agent SKIPPED Kelly criterion, Piotroski F-Score, and two-method comparison entirely; proposed a position near max-cap without rigorous methodology. Cross-confirmed by spot-check #3 (risk-assessment disabled): agent did Kelly inline only because position-sizing was still enabled. The math lives here. |
+| session-reflection | 🟢 | **KEEP** | Orchestrates entire Reflect phase of canonical Orient/Work/Reflect cycle. Handoff format is load-bearing for next-session continuity. The 10-bias table is detailed and unlikely to be replicated without prompting. Not spot-checked. |
+| portfolio-review | 🟢 | **KEEP** | Survival Question and Barbell Assessment are specific Taleb-style cognitive interventions. Objective-specific review (runway/growth/income/accumulation) maps to fund taxonomy. Not spot-checked. |
+| opportunity-screening | 🟢 | **KEEP** | Heavy on screener MCP tool usage guidance — without this skill, the screener MCP tools are opaque. Not spot-checked. |
 
 ### Rules
 
-| Rule | Hypothesis | Test Method | Last Tested | Verdict |
-|------|-----------|-------------|-------------|---------|
-| session-init | Without init sequence, agent skips state reading | Check file-read rate in first 5 turns | - | (out of scope for Phase 1b — rules are cheap, audit later) |
-| session-completion | Without completion guard, agent ends prematurely | Check handoff quality with/without rule | - | (out of scope for Phase 1b) |
-| state-consistency | Without schema enforcement, agent writes malformed state | Check state file validity with/without rule | - | (out of scope for Phase 1b) |
-| decision-quality | Without hierarchy, agent ignores risk limits for thesis | Check decision ordering with/without rule | - | (out of scope for Phase 1b) |
-| analysis-standards | Without standards, agent writes vague analysis | Compare specificity with/without rule | - | (out of scope for Phase 1b) |
-| risk-discipline | Without discipline rule, agent widens stops | Check stop-loss adherence with/without rule | - | (out of scope for Phase 1b) |
-| learning-loop | Without loop, agent doesn't query journal | Check journal query rate with/without rule | - | (out of scope for Phase 1b) |
-| market-awareness | Without awareness, agent misses calendar events | Check event awareness with/without rule | - | (out of scope for Phase 1b) |
-| communication | Without rule, agent mixes languages | Check language consistency with/without rule | - | (out of scope for Phase 1b) |
-| self-scheduling | Without format spec, agent writes malformed pending sessions | Check pending session validity with/without rule | - | (out of scope for Phase 1b) |
+| Rule | Initial | Verdict |
+|------|---------|---------|
+| (all 10 rules) | (out of scope for Phase 1b) | (deferred — rules are cheap, audit opportunistically in future cycles) |
 
-## Pass 2 Targets (YELLOW components needing spot-check)
+## Summary
 
-- [ ] `market-analyst` — possible merge with technical-analyst into `market-research`
-- [ ] `technical-analyst` — possible merge with market-analyst
-- [ ] `risk-assessment` — overlap with position-sizing + risk-guardian
-- [ ] `position-sizing` — overlap with risk-assessment
+- **9 KEEP**: 2 sub-agents (risk-guardian, trade-evaluator) + 7 skills (investment-thesis, trade-memory, market-regime, position-sizing, session-reflection, portfolio-review, opportunity-screening)
+- **2 SIMPLIFY**: market-analyst + technical-analyst → merge into single `market-research` sub-agent
+- **1 REMOVE**: risk-assessment (with mandatory relocation of universe MCP guidance)
+- Total: 12 verdicts. 4 YELLOWs spot-checked. Audit cost: ~$25.41 (within $50 cap).
 
-**4 YELLOWs total.** Pass 2 budget estimate: ~$8-12 (4 × $2-3 per disable session). Cumulative after Pass 2 expected: ~$15-19. Within $40 cutoff and $50 hard cap.
+## Phase 2 implications
 
-## How to Run an Audit
+- The G1 hook (binding evaluator verdict) was planned to gate `place_order` on a recent APPROVED verdict from `trade-evaluator`. Trade-evaluator is KEEP, so the hook design stands.
+- The risk-guardian verdict is also KEEP, so a parallel gate on its verdict (planned in Phase 2) is unaffected.
+- The merge of market-analyst + technical-analyst into `market-research` does NOT affect the verdict-source pool for Phase 2 hooks (those are output-producing analysts, not verdict-issuing evaluators).
+- **No Phase 2 scope changes required.**
+
+## Phase 3 implications
+
+- The LLM-as-judge eval grader (G5) needs to score outputs from the post-audit component set. Specifically:
+  - The new `market-research` sub-agent's output format (TBD during merge work) must be the grader's target, not separate market-analyst + technical-analyst outputs.
+  - Removed risk-assessment skill means the grader doesn't need to score "did the agent apply EV calculation" — it can score "did the agent apply two-method sizing (per position-sizing skill)" instead.
+- **Phase 3 scope adjustment:** rubric design happens after audit changes are merged.
+
+## How to Run an Audit (general process for future cycles)
 
 1. Select component to test
-2. Create a test fund with identical config
-3. Run 5 paper-mode sessions WITH the component
-4. Run 5 paper-mode sessions WITHOUT the component (remove skill/rule/agent)
-5. Compare outputs on the relevant metric
-6. Record results and verdict: **KEEP** / **SIMPLIFY** / **REMOVE**
-7. If REMOVE: delete from `src/skills.ts` + run `fundx fund upgrade --all`
-
-(Note: Phase 1b uses qualitative spot-check methodology — 1 baseline + 1 disabled session per YELLOW — instead of the 5+5 quantitative approach. See `docs/superpowers/specs/2026-04-27-harness-phase-1b-audit-design.md` Pass 2 methodology.)
+2. Create a test fund with realistic seeded state
+3. Capture a baseline session with full scaffolding
+4. Disable the component (comment out in src/subagent.ts or src/skills.ts; for skills, run `fundx fund upgrade` to propagate to disk)
+5. Run a session with the same focus as baseline
+6. Compare side-by-side: what did the disabled run lose, change, or compensate for?
+7. Verdict: **KEEP** / **SIMPLIFY** / **REMOVE**
+8. If REMOVE/SIMPLIFY: apply the change, run eval suite, propagate via `fundx fund upgrade --all`
