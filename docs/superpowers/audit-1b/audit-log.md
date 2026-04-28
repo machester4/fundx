@@ -33,6 +33,7 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 | seed-2 (directive focus) | pre_market | $1.52 | $3.61 |
 | baseline-v1 (default focus, no-trade) | pre_market | $0.90 | $4.51 |
 | baseline-v2 (audit-directive focus, exercises components) | pre_market | $4.39 | $8.90 |
+| spot-check #1: market-analyst DISABLED | pre_market | $4.05 | $12.95 |
 
 ### Note on baseline approach
 
@@ -46,3 +47,17 @@ comparison. Focus will be reverted at end of Phase 1b.
 baseline-v2 produced 13 analysis files including market-assessment, 6 per-ticker
 technical assessments, trade-evaluation for 2 candidates (MU, AMAT), and a
 risk-validation for MU. Cost $4.39, 24 turns.
+
+### 2026-04-28 spot-check #1 — market-analyst DISABLED
+
+- Session: pre_market with comprehensive audit focus (same as baseline-v2)
+- Cost: $4.05, 25 turns, status success
+- Artifacts produced: 5 files (audit.md + 4 technical-*) — NO market-assessment.md (sub-agent disabled)
+- Macro coverage: Done INLINE in audit.md. Composite regime score 1.70 with all 4 components scored exactly per market-regime skill formula. Specific data: VIX ~19, IG OAS ~80bps, HY OAS ~285bps, Brent ~$100/bbl, CPI 3.3%, GDP nowcast 1.2% SAAR. News headlines cited with sources.
+- Comparison vs baseline market-assessment.md:
+  - LOST: Fed dot plot detail, sector performance table (Energy +34% YTD, etc.), breadth assessment
+  - KEPT: regime classification + components, key macro data points, news headlines with sources, critical events table, FOMC context
+  - Quality estimate: ~80-85% of baseline. Lost breadth, kept core decision-relevant signals.
+- Cost saving: -$0.34 (-8%) per session
+
+**Preliminary verdict: SIMPLIFY** — partial value overlaps with market-regime skill (regime scoring) and portfolio-review skill (sector breakdown). The unique sub-agent value is depth of macro detail (Fed dot plot, breadth metrics). For a small fund or routine sessions, marginal. Final verdict pending technical-analyst spot-check (potential merge into market-research).
