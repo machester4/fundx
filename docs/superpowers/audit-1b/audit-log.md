@@ -36,6 +36,7 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 | spot-check #1: market-analyst DISABLED | pre_market | $4.05 | $12.95 |
 | spot-check #2: technical-analyst DISABLED (artifacts contaminated) | pre_market | $2.93 | $15.88 |
 | spot-check #3: risk-assessment DISABLED | pre_market | $4.53 | $20.41 |
+| spot-check #4: position-sizing DISABLED (timeout, log corrupt) | pre_market | ~$5.00 (est) | ~$25.41 |
 
 ### Note on baseline approach
 
@@ -99,3 +100,24 @@ risk-validation for MU. Cost $4.39, 24 turns.
 - ❌ Universe MCP guidance (check_universe / list_universe / update_universe) — UNIQUE, ~30% of skill content, must relocate if removing
 
 **Preliminary verdict: REMOVE** — provided that the universe MCP guidance is relocated to either: (a) a new dedicated `universe` skill, (b) the opportunity-screening skill, or (c) the per-fund CLAUDE.md template. The risk math itself is fully covered by position-sizing + risk-guardian.
+
+### 2026-04-28 spot-check #4 — position-sizing DISABLED
+
+- Session: pre_market with comprehensive audit focus
+- Cost: estimated ~$5 (session_log corrupt — reported timeout/$0/0 turns despite 4 substantive analysis files produced; see anomaly note below)
+- Artifacts produced: 4 files (market-assessment-s8, pre_market, trade-evaluation-GEV, risk-validation-GEV)
+- Quality observations:
+  - Agent identified GEV (GE Vernova) as candidate from watchlist
+  - Built bull/bear thesis (investment-thesis skill still enabled)
+  - Proposed BUY 1 share at $1,067 = ~21% of portfolio (close to 25% max cap, no fractional sizing alternative)
+  - Stated R/R 3.31:1 and EV +4.7% (basic risk-reward, NOT Kelly criterion)
+  - **DID NOT compute Kelly** (vs spot-check #3 where agent DID compute Kelly inline because position-sizing was still enabled)
+  - **DID NOT apply Piotroski F-Score quality gate**
+  - **DID NOT apply two-method comparison + take-minimum rule**
+  - trade-evaluator caught critical issues (anti-hallucination violations, narrative fallacy, stop-loss vs tail-risk mismatch) → REJECT 2/5
+
+**Critical insight:** position-sizing is the LOAD-BEARING piece. When risk-assessment was disabled (#3), the agent applied Kelly+conviction+take-minimum because position-sizing carried that math. When position-sizing is disabled (#4), the agent skipped that math entirely and proposed a position near the max cap without rigorous sizing methodology.
+
+**Preliminary verdict: KEEP** — load-bearing. The Kelly criterion + Piotroski F-Score + two-method comparison framework only persists in position-sizing skill. Removing this skill measurably degrades sizing discipline.
+
+**Anomaly to investigate later:** session_log reported timeout/$0/0-turns despite the agent clearly producing substantial work (full GEV thesis, trade evaluation, risk validation). This may indicate a bug in the SDK result-capture path under timeout conditions, or an interaction with the fund_upgrade-disrupted state. Worth a future investigation but does NOT affect this verdict.
