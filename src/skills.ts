@@ -1445,9 +1445,9 @@ After Orient, prioritize based on session type:
 ## Analysis Reuse
 
 After Orient, before launching sub-agents, check \`analysis/\` for assessments from
-the last 4 hours. If a market-assessment exists from today and conditions have not changed
-materially, you may reference it instead of re-running the market-analyst. This saves turns
-and cost.
+the last 4 hours. If a market-research assessment exists from today and conditions have not
+changed materially, you may reference it instead of re-running market-research. This saves
+turns and cost.
 
 Reuse criteria: same trading day, no major news since assessment, regime has not shifted.
 `,

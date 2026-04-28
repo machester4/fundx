@@ -9,18 +9,19 @@ describe("buildAnalystAgents", () => {
 
   // ── Structure ───────────────────────────────────────────────
 
-  it("returns exactly 4 agent definitions", () => {
-    expect(keys).toHaveLength(4);
+  it("returns exactly 3 agent definitions", () => {
+    expect(keys).toHaveLength(3);
   });
 
-  it("contains the new agent names", () => {
-    expect(keys).toContain("market-analyst");
-    expect(keys).toContain("technical-analyst");
+  it("contains the post-Phase-1b agent names", () => {
+    expect(keys).toContain("market-research");
     expect(keys).toContain("risk-guardian");
     expect(keys).toContain("trade-evaluator");
   });
 
-  it("does NOT contain old agent names", () => {
+  it("does NOT contain pre-merge agent names", () => {
+    expect(keys).not.toContain("market-analyst");
+    expect(keys).not.toContain("technical-analyst");
     expect(keys).not.toContain("macro-analyst");
     expect(keys).not.toContain("sentiment-analyst");
     expect(keys).not.toContain("news-analyst");
@@ -54,93 +55,75 @@ describe("buildAnalystAgents", () => {
     }
   });
 
-  // ── market-analyst ─────────────────────────────────────────
+  // ── market-research (merged from market-analyst + technical-analyst) ──
 
-  describe("market-analyst", () => {
-    const agent = agents["market-analyst"];
+  describe("market-research", () => {
+    const agent = agents["market-research"];
 
     it("has market-data MCP server", () => {
       expect(agent.mcpServers).toContain("market-data");
     });
 
-    it("covers macro domain", () => {
+    it("covers macro domain (from former market-analyst)", () => {
       expect(agent.prompt).toMatch(/monetary policy/i);
       expect(agent.prompt).toMatch(/economic cycle/i);
       expect(agent.prompt).toMatch(/geopolitical/i);
     });
 
-    it("covers sentiment domain", () => {
+    it("covers sentiment domain (from former market-analyst)", () => {
       expect(agent.prompt).toMatch(/VIX/);
       expect(agent.prompt).toMatch(/put.call/i);
       expect(agent.prompt).toMatch(/breadth/i);
       expect(agent.prompt).toMatch(/contrarian/i);
     });
 
-    it("covers news domain", () => {
+    it("covers news domain (from former market-analyst)", () => {
       expect(agent.prompt).toMatch(/breaking/i);
       expect(agent.prompt).toMatch(/regulatory/i);
       expect(agent.prompt).toMatch(/catalyst/i);
       expect(agent.prompt).toMatch(/insider/i);
     });
 
+    it("covers technical analysis (from former technical-analyst)", () => {
+      expect(agent.prompt).toMatch(/evidence.based/i);
+      expect(agent.prompt).toMatch(/academic support/i);
+      expect(agent.prompt).toMatch(/200.day MA/i);
+      expect(agent.prompt).toMatch(/RSI/);
+      expect(agent.prompt).toMatch(/MACD/);
+      expect(agent.prompt).toMatch(/volume confirmation/i);
+    });
+
     it("has anti-hallucination directive", () => {
       expect(agent.prompt).toMatch(/never cite a price.*without retrieving/i);
     });
 
-    it("outputs <market_assessment> XML", () => {
+    it("outputs both <market_assessment> and <technical_assessment> within <market_research>", () => {
+      expect(agent.prompt).toContain("<market_research>");
       expect(agent.prompt).toContain("<market_assessment>");
+      expect(agent.prompt).toContain("<technical_assessment>");
+      expect(agent.prompt).toContain("</market_research>");
     });
 
-    it("has maxTurns of 25", () => {
-      expect(agent.maxTurns).toBe(25);
+    it("has maxTurns of 35 (combined budget)", () => {
+      expect(agent.maxTurns).toBe(35);
     });
 
-    it("references MCP tool guidance", () => {
+    it("references MCP tool guidance for both news and bars", () => {
       expect(agent.prompt).toMatch(/get_news/);
       expect(agent.prompt).toMatch(/get_rss_news/);
       expect(agent.prompt).toMatch(/get_market_movers/);
+      expect(agent.prompt).toMatch(/get_bars/);
     });
 
-    it("instructs agent to write analysis to file", () => {
+    it("instructs agent to write combined analysis + per-ticker technical files", () => {
       expect(agent.prompt).toContain("analysis/");
-      expect(agent.prompt).toContain("_market-assessment.md");
-    });
-
-    it("has Write in tools", () => {
-      expect(agents["market-analyst"].tools).toContain("Write");
-    });
-  });
-
-  // ── technical-analyst ──────────────────────────────────────
-
-  describe("technical-analyst", () => {
-    const agent = agents["technical-analyst"];
-
-    it("has market-data MCP server", () => {
-      expect(agent.mcpServers).toContain("market-data");
-    });
-
-    it("has evidence-based guidance", () => {
-      expect(agent.prompt).toMatch(/evidence.based/i);
-      expect(agent.prompt).toMatch(/academic support/i);
-      expect(agent.prompt).toMatch(/200.day MA/i);
-    });
-
-    it("outputs <technical_assessment> XML", () => {
-      expect(agent.prompt).toContain("<technical_assessment>");
-    });
-
-    it("has maxTurns of 20", () => {
-      expect(agent.maxTurns).toBe(20);
-    });
-
-    it("instructs agent to write analysis to file", () => {
-      expect(agent.prompt).toContain("analysis/");
+      expect(agent.prompt).toContain("_market-research.md");
       expect(agent.prompt).toContain("_technical-");
     });
 
-    it("has Write in tools", () => {
-      expect(agents["technical-analyst"].tools).toContain("Write");
+    it("has Write and WebSearch in tools", () => {
+      expect(agent.tools).toContain("Write");
+      expect(agent.tools).toContain("WebSearch");
     });
   });
 
@@ -161,10 +144,9 @@ describe("buildAnalystAgents", () => {
       expect(agent.prompt).toMatch(/VERDICT/);
     });
 
-    it("has lower maxTurns than other agents", () => {
+    it("has lower maxTurns than market-research", () => {
       expect(agent.maxTurns).toBe(15);
-      expect(agent.maxTurns).toBeLessThan(agents["market-analyst"].maxTurns!);
-      expect(agent.maxTurns).toBeLessThan(agents["technical-analyst"].maxTurns!);
+      expect(agent.maxTurns).toBeLessThan(agents["market-research"].maxTurns!);
     });
 
     it("includes drawdown recovery table", () => {

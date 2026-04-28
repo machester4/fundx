@@ -171,7 +171,7 @@ Before executing any trade, verify ALL constraints. Any violation → abort and 
 
 ## Session Protocol
 1. **Orient** — Follow the \`session-init\` rule in \`.claude/rules/\`. Complete all 6 steps and write your Session Contract before proceeding.
-2. **Analyze** — Classify the current market regime. Launch market-analyst and technical-analyst via the Task tool. Write your analysis to \`analysis/{date}_{session}.md\`.
+2. **Analyze** — Classify the current market regime. Launch market-research via the Task tool (covers macro + sentiment + news + technical in one pass). Write your analysis to \`analysis/{date}_{session}.md\`.
 3. **Decide** — Apply the pre-trade checklist. If conviction is below medium, document the reasoning and do not trade.
 4. **Validate** — Two gates before execution:
    a. Invoke trade-evaluator via Task tool. Address any CONCERNS raised. If REJECT, do not proceed. If RECONSIDER, strengthen thesis or abandon.
