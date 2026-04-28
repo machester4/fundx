@@ -15,6 +15,19 @@ function mockToolResult(text: string): SDKMessage {
   } as unknown as SDKMessage;
 }
 
+// Realistic shape: tool_result blocks live on user-typed messages per SDK spec.
+function mockToolResultOnUserMessage(text: string): SDKMessage {
+  return {
+    type: "user",
+    message: {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "fake", content: text },
+      ],
+    },
+  } as unknown as SDKMessage;
+}
+
 const evalApproved = `<trade_evaluation>
 TICKER: AAPL
 SIDE: buy
@@ -108,6 +121,39 @@ SIDE: buy
 RECOMMENDATION: RECONSIDER
 </trade_evaluation>`));
     expect(t._verdicts[0].approved).toBe(false);
+  });
+
+  it("extracts verdict from user-typed message (real SDK shape)", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(evalApproved));
+    expect(t._verdicts).toHaveLength(1);
+    expect(t._verdicts[0].ticker).toBe("AAPL");
+  });
+
+  it("extracts verdict from both user and assistant message types", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(evalApproved));     // user-typed
+    t.observe(mockToolResult(guardApproved));                 // assistant-typed (defensive coverage)
+    expect(t._verdicts).toHaveLength(2);
+  });
+
+  it("ignores 'system' or other message types", () => {
+    const t = new VerdictTracker();
+    t.observe({ type: "system", subtype: "init" } as unknown as SDKMessage);
+    t.observe({ type: "result" } as unknown as SDKMessage);
+    expect(t._verdicts).toHaveLength(0);
+  });
+
+  it("tolerates leading whitespace in field lines", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(`<trade_evaluation>
+    TICKER: AAPL
+    SIDE: buy
+    SCORE: 4
+    RECOMMENDATION: PROCEED
+</trade_evaluation>`));
+    expect(t._verdicts).toHaveLength(1);
+    expect(t._verdicts[0].ticker).toBe("AAPL");
   });
 });
 

@@ -19,17 +19,22 @@ const APPROVED_VALUES = new Set(["PROCEED", "APPROVED"]);
 const TRADE_EVAL_RE = /<trade_evaluation>([\s\S]*?)<\/trade_evaluation>/g;
 const RISK_VAL_RE = /<risk_validation>([\s\S]*?)<\/risk_validation>/g;
 
-const TICKER_RE = /^TICKER:\s*([A-Z][A-Z0-9.-]*)\s*$/m;
-const SIDE_RE = /^SIDE:\s*(buy|sell)\s*$/m;
-const RECOMMENDATION_RE = /^RECOMMENDATION:\s*(PROCEED|RECONSIDER|REJECT)\s*$/m;
-const VERDICT_RE = /^VERDICT:\s*(APPROVED|REJECTED)\s*$/m;
+const TICKER_RE = /^[ \t]*TICKER:\s*([A-Z][A-Z0-9.-]*)\s*$/m;
+const SIDE_RE = /^[ \t]*SIDE:\s*(buy|sell)\s*$/m;
+const RECOMMENDATION_RE = /^[ \t]*RECOMMENDATION:\s*(PROCEED|RECONSIDER|REJECT)\s*$/m;
+const VERDICT_RE = /^[ \t]*VERDICT:\s*(APPROVED|REJECTED)\s*$/m;
 
 export class VerdictTracker {
   /** Public for test introspection only — do not use externally. */
   _verdicts: Verdict[] = [];
 
   observe(message: SDKMessage): void {
-    if (message.type !== "assistant") return;
+    // Verdicts arrive as <trade_evaluation> / <risk_validation> XML blocks
+    // inside tool_result content. Per SDK types, tool_result blocks live on
+    // user-typed messages (SDKUserMessage carrying MessageParam content).
+    // Assistant messages carry text + tool_use blocks but not tool_result.
+    // We accept both types defensively in case the SDK ever changes shape.
+    if (message.type !== "user" && message.type !== "assistant") return;
     const content = (message as { message?: { content?: unknown[] } }).message?.content;
     if (!Array.isArray(content)) return;
 
