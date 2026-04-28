@@ -34,6 +34,7 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 | baseline-v1 (default focus, no-trade) | pre_market | $0.90 | $4.51 |
 | baseline-v2 (audit-directive focus, exercises components) | pre_market | $4.39 | $8.90 |
 | spot-check #1: market-analyst DISABLED | pre_market | $4.05 | $12.95 |
+| spot-check #2: technical-analyst DISABLED (artifacts contaminated) | pre_market | $2.93 | $15.88 |
 
 ### Note on baseline approach
 
@@ -61,3 +62,17 @@ risk-validation for MU. Cost $4.39, 24 turns.
 - Cost saving: -$0.34 (-8%) per session
 
 **Preliminary verdict: SIMPLIFY** — partial value overlaps with market-regime skill (regime scoring) and portfolio-review skill (sector breakdown). The unique sub-agent value is depth of macro detail (Fed dot plot, breadth metrics). For a small fund or routine sessions, marginal. Final verdict pending technical-analyst spot-check (potential merge into market-research).
+
+### 2026-04-28 spot-check #2 — technical-analyst DISABLED
+
+- Session: pre_market with comprehensive audit focus
+- Cost: $2.93, 21 turns, status success
+- Artifacts produced: 2 files (pre_market.md + trade-evaluation-CIEN.md) — NO technical-* files
+- **Important caveat — contamination:** The agent recognized that prior `2026-04-28_audit.md` (from spot-check #1) had recent technicals and EXPLICITLY reused them per the session-init rule's "same-day reuse" logic. The disabled run did NOT attempt fresh per-ticker TA inline.
+- Cost saving: -$1.46 (-33%) per session — but inflated by reuse rather than capability gap
+
+**Real insight from contamination:** This is actual production behavior — in repeated-day operation, the agent reuses prior technical artifacts rather than re-invoking tech-analyst. The marginal value of technical-analyst is concentrated in the FIRST analysis cycle of a day (when it produced 6 detailed per-ticker files in baseline). Subsequent sessions same-day skip it via reuse logic.
+
+**Preliminary verdict: SIMPLIFY** — combined with market-analyst SIMPLIFY signal, both should likely be MERGED into a single `market-research` sub-agent invoked once per day (or per regime change). The depth of per-ticker technicals is load-bearing for the FIRST cycle but not for repeated sessions.
+
+**Pass 3 final verdict guidance:** Combine market-analyst + technical-analyst SIMPLIFY into one `market-research` merge action. Estimated saving: ~25-30% of audit-cycle tokens by deduplicating two prompt contexts into one larger but still-bounded prompt.
