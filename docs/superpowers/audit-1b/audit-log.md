@@ -35,6 +35,7 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 | baseline-v2 (audit-directive focus, exercises components) | pre_market | $4.39 | $8.90 |
 | spot-check #1: market-analyst DISABLED | pre_market | $4.05 | $12.95 |
 | spot-check #2: technical-analyst DISABLED (artifacts contaminated) | pre_market | $2.93 | $15.88 |
+| spot-check #3: risk-assessment DISABLED | pre_market | $4.53 | $20.41 |
 
 ### Note on baseline approach
 
@@ -76,3 +77,25 @@ risk-validation for MU. Cost $4.39, 24 turns.
 **Preliminary verdict: SIMPLIFY** — combined with market-analyst SIMPLIFY signal, both should likely be MERGED into a single `market-research` sub-agent invoked once per day (or per regime change). The depth of per-ticker technicals is load-bearing for the FIRST cycle but not for repeated sessions.
 
 **Pass 3 final verdict guidance:** Combine market-analyst + technical-analyst SIMPLIFY into one `market-research` merge action. Estimated saving: ~25-30% of audit-cycle tokens by deduplicating two prompt contexts into one larger but still-bounded prompt.
+
+### 2026-04-28 spot-check #3 — risk-assessment DISABLED
+
+- Session: pre_market with comprehensive audit focus
+- Cost: $4.53, 31 turns, status success (cost slightly UP vs baseline because agent did extra work to compensate)
+- Artifacts produced: 5 files (market-assessment, pre_market, 3 technical-*) — NO risk-validation file
+- Quality observations:
+  - Agent DID build full COHR thesis (bull/bear/devil's advocate — investment-thesis skill)
+  - Agent DID compute Pre-Trade Checklist with cash floor + event horizon + stop gap risk (3 items, all FAIL → BLOCKED)
+  - **Agent DID compute EV + Kelly + conviction sizing INLINE**: "Conviction 3/5 × 0.7 regime = 7%; Kelly P=50%, win=20%, loss=8%, EV=+6%, Half-Kelly=15%; take minimum = 1 share"
+  - Agent applied "two methods, take minimum" rule from position-sizing skill (still enabled)
+  - REJECT verdict 1.5/5 — agent correctly synthesized risk concerns
+- Cost delta: +$0.14 vs baseline — the agent compensated for missing skill with more reasoning turns
+
+**Critical insight:** position-sizing skill (still enabled) covers ~70% of what risk-assessment provides:
+- ✅ Conviction sizing tier table — present in BOTH
+- ✅ Kelly criterion + Half-Kelly + take-minimum rule — present in BOTH
+- ✅ Drawdown recovery math — present in BOTH (also in risk-guardian sub-agent)
+- ❌ Explicit EV calculation framework — UNIQUE to risk-assessment, but agent did it inline
+- ❌ Universe MCP guidance (check_universe / list_universe / update_universe) — UNIQUE, ~30% of skill content, must relocate if removing
+
+**Preliminary verdict: REMOVE** — provided that the universe MCP guidance is relocated to either: (a) a new dedicated `universe` skill, (b) the opportunity-screening skill, or (c) the per-fund CLAUDE.md template. The risk math itself is fully covered by position-sizing + risk-guardian.
