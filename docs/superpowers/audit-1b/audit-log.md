@@ -31,3 +31,18 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 |---|---|---:|---:|
 | seed-1 (generic focus) | pre_market | $2.09 | $2.09 |
 | seed-2 (directive focus) | pre_market | $1.52 | $3.61 |
+| baseline-v1 (default focus, no-trade) | pre_market | $0.90 | $4.51 |
+| baseline-v2 (audit-directive focus, exercises components) | pre_market | $4.39 | $8.90 |
+
+### Note on baseline approach
+
+baseline-v1 was a thin no-trade decision (11 turns) that produced no analysis files,
+making it useless for spot-check comparison. baseline-v2 uses an audit-directive focus
+that EXERCISES each component (invokes market-analyst, technical-analyst, applies
+position-sizing/risk-assessment skills, submits to trade-evaluator/risk-guardian).
+Same focus will be used for all Pass 2 disabled runs to ensure apples-to-apples
+comparison. Focus will be reverted at end of Phase 1b.
+
+baseline-v2 produced 13 analysis files including market-assessment, 6 per-ticker
+technical assessments, trade-evaluation for 2 candidates (MU, AMAT), and a
+risk-validation for MU. Cost $4.39, 24 turns.
