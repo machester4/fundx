@@ -37,6 +37,8 @@ This file logs the audit session for Phase 1b. Started 2026-04-27.
 | spot-check #2: technical-analyst DISABLED (artifacts contaminated) | pre_market | $2.93 | $15.88 |
 | spot-check #3: risk-assessment DISABLED | pre_market | $4.53 | $20.41 |
 | spot-check #4: position-sizing DISABLED (timeout, log corrupt) | pre_market | ~$5.00 (est) | ~$25.41 |
+| MVP eval suite (8 cases × 3 runs) post-merge | various | ~$2.43 | ~$27.84 |
+| mvp-portfolio-review re-run (single, capture verification) | various | $0.13 | ~$27.97 |
 
 ### Note on baseline approach
 
