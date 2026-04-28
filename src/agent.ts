@@ -5,6 +5,8 @@ import type {
   ModelUsage,
   AgentDefinition,
   McpSdkServerConfigWithInstance,
+  HookEvent,
+  HookCallbackMatcher,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadGlobalConfig } from "./config.js";
 import { loadFundConfig } from "./services/fund.service.js";
@@ -36,6 +38,9 @@ export interface AgentQueryOptions {
   agents?: Record<string, AgentDefinition>;
   /** Session ID to resume (from a previous chat or daemon session) */
   resumeSessionId?: string;
+  /** PreToolUse / PostToolUse / Stop hooks (passed through to SDK).
+   *  See sdk.d.ts:HookCallbackMatcher for shape. */
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
 }
 
 /** Result from a Claude Agent SDK query */
@@ -248,6 +253,7 @@ export async function runAgentQuery(
         abortController,
         agents: options.agents,
         ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
+        ...(options.hooks ? { hooks: options.hooks } : {}),
       },
     })) {
       // Forward to optional callback
