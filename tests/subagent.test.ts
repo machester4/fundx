@@ -242,5 +242,21 @@ describe("buildAnalystAgents", () => {
       expect(evaluator.prompt).toContain("out_of_universe");
       expect(evaluator.prompt).toContain("UNIVERSE_DISCIPLINE:");
     });
+
+    it("output format includes TICKER and SIDE fields", () => {
+      expect(agent.prompt).toMatch(/<trade_evaluation>[\s\S]*TICKER:/);
+      expect(agent.prompt).toMatch(/<trade_evaluation>[\s\S]*SIDE: \[buy or sell\]/);
+    });
+  });
+
+  // ── Additional test: risk-guardian TICKER + SIDE ────────────
+
+  describe("risk-guardian TICKER + SIDE", () => {
+    const agent = agents["risk-guardian"];
+
+    it("output format includes TICKER and SIDE fields", () => {
+      expect(agent.prompt).toMatch(/<risk_validation>[\s\S]*TICKER:/);
+      expect(agent.prompt).toMatch(/<risk_validation>[\s\S]*SIDE: \[buy or sell\]/);
+    });
   });
 });
