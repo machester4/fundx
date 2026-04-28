@@ -96,6 +96,17 @@ vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn(async () => ({ market_data: { fmp_api_key: "test" } })),
 }));
 
+vi.mock("../src/services/snapshot.service.js", () => ({
+  buildStateSnapshot: vi.fn(async () => "<state_snapshot>mock</state_snapshot>"),
+}));
+
+vi.mock("../src/services/verdict-tracker.js", () => ({
+  VerdictTracker: vi.fn().mockImplementation(() => ({
+    observe: vi.fn(),
+    checkPlaceOrder: vi.fn(() => ({ decision: "approve" })),
+  })),
+}));
+
 import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 
@@ -240,6 +251,23 @@ describe("runFundSession", () => {
     const opts = mockRunAgentQuery.mock.calls[0][0];
     // Empty string is falsy, so model should be undefined (let agent.ts resolve)
     expect(opts.model).toBeUndefined();
+  });
+
+  it("passes onMessage and hooks to runAgentQuery", async () => {
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(typeof opts.onMessage).toBe("function");
+    expect(opts.hooks).toBeDefined();
+    expect(opts.hooks.PreToolUse).toBeInstanceOf(Array);
+    expect(opts.hooks.PreToolUse[0].matcher).toBe("mcp__broker-local__place_order");
+  });
+
+  it("includes state snapshot in the prompt", async () => {
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.prompt).toContain("<state_snapshot>mock</state_snapshot>");
   });
 });
 

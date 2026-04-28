@@ -69,4 +69,21 @@ describe("buildAutonomousPrompt", () => {
     const expectedDate = new Date().toISOString().split("T")[0];
     expect(out).toContain(`analysis/${expectedDate}_pre-market.md`);
   });
+
+  it("injects state snapshot when provided", () => {
+    const out = buildAutonomousPrompt({
+      ...baseInput,
+      stateSnapshot: "<state_snapshot>fake snapshot</state_snapshot>",
+    });
+    expect(out).toContain("<state_snapshot>fake snapshot</state_snapshot>");
+    // Snapshot must come before the running header
+    const snapIdx = out.indexOf("<state_snapshot>");
+    const runIdx = out.indexOf("running a pre-market session");
+    expect(snapIdx).toBeLessThan(runIdx);
+  });
+
+  it("omits snapshot block when not provided", () => {
+    const out = buildAutonomousPrompt(baseInput);
+    expect(out).not.toContain("<state_snapshot>");
+  });
 });

@@ -8,6 +8,8 @@ import type { Budget, FundConfig, GlobalConfig, SessionLogV2, UniverseResolution
 import { resolveUniverse } from "./universe.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { sessionModePrefix } from "./chat.service.js";
+import { buildStateSnapshot } from "./snapshot.service.js";
+import { VerdictTracker } from "./verdict-tracker.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
@@ -56,6 +58,9 @@ export interface BuildAutonomousPromptInput {
   universeBlock?: string | null;
   useDebateSkills?: boolean;
   today?: string;
+  /** Optional pre-populated state snapshot (XML envelope). Inserted after
+   *  the session-mode prefix and before the "You are running..." line. */
+  stateSnapshot?: string;
 }
 
 /** Pure helper: builds the prompt for an autonomous scheduled session.
@@ -70,6 +75,7 @@ export function buildAutonomousPrompt(input: BuildAutonomousPromptInput): string
   const lines: string[] = [
     sessionModePrefix("autonomous-scheduled"),
     ``,
+    ...(input.stateSnapshot ? [input.stateSnapshot, ``] : []),
     `You are running a ${input.sessionType} session for fund '${input.fundName}'.`,
     ``,
     `Focus: ${input.focus}`,
@@ -191,6 +197,8 @@ export async function runFundSession(
   }
   const universeBlock = renderUniverseBlock(universeResolution);
 
+  const stateSnapshot = await buildStateSnapshot(fundName);
+
   const prompt = buildAutonomousPrompt({
     fundName,
     sessionType,
@@ -198,6 +206,7 @@ export async function runFundSession(
     universeBlock,
     useDebateSkills: options?.useDebateSkills,
     today,
+    stateSnapshot,
   });
 
   const model = config.claude.model || undefined;
@@ -213,6 +222,8 @@ export async function runFundSession(
 
   const activeSession = await readActiveSession(fundName).catch(() => null);
 
+  const verdictTracker = new VerdictTracker();
+
   let result;
   try {
     result = await runAgentQuery({
@@ -224,6 +235,23 @@ export async function runFundSession(
       timeoutMs: timeout,
       agents,
       resumeSessionId: activeSession?.session_id,
+      onMessage: (msg) => verdictTracker.observe(msg),
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "mcp__broker-local__place_order",
+            hooks: [
+              async (input) => {
+                const ti = (input as { tool_input?: { symbol?: string; side?: "buy" | "sell" } }).tool_input;
+                if (!ti?.symbol || !ti.side) {
+                  return { decision: "approve" } as const;
+                }
+                return verdictTracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
+              },
+            ],
+          },
+        ],
+      },
     });
 
     // If resumption failed (expired session), retry without resume
@@ -242,6 +270,23 @@ export async function runFundSession(
         maxBudgetUsd: effectiveMaxBudgetUsd,
         timeoutMs: timeout,
         agents,
+        onMessage: (msg) => verdictTracker.observe(msg),
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "mcp__broker-local__place_order",
+              hooks: [
+                async (input) => {
+                  const ti = (input as { tool_input?: { symbol?: string; side?: "buy" | "sell" } }).tool_input;
+                  if (!ti?.symbol || !ti.side) {
+                    return { decision: "approve" } as const;
+                  }
+                  return verdictTracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
+                },
+              ],
+            },
+          ],
+        },
       });
     }
   } catch (err) {
