@@ -305,14 +305,11 @@ describe("FUND_RULES", () => {
     expect(calls.some((p) => p.endsWith("session-init.md"))).toBe(true);
     const initCall = mockedWriteFile.mock.calls.find((c) => (c[0] as string).endsWith("session-init.md"));
     const content = initCall![1] as string;
-    expect(content).toContain("Session Initialization");
-    expect(content).toContain("Read handoff");
+    expect(content).toContain("# Session Init");
+    expect(content).toContain("<state_snapshot>");
     expect(content).toContain("session-handoff.md");
     expect(content).toContain("Session Contract");
-    expect(content).toContain("Session-Type Priorities");
-    expect(content).toContain("pre-market");
-    expect(content).toContain("post-market");
-    expect(content).toContain("catch-up");
+    expect(content).toContain("Verify state integrity");
   });
 
   it("includes session-completion rule", async () => {
@@ -360,31 +357,21 @@ describe("FUND_RULES includes data-access.md", () => {
   });
 });
 
-describe("FUND_RULES session-init.md mode-aware revision", () => {
-  it("session-init.md has the Applies to section distinguishing chat from autonomous", () => {
+describe("FUND_RULES session-init.md simplified version", () => {
+  it("session-init rule references the <state_snapshot> envelope", () => {
+    const rule = FUND_RULES.find((r) => r.fileName === "session-init.md");
+    expect(rule).toBeDefined();
+    expect(rule!.content).toContain("<state_snapshot>");
+    expect(rule!.content).toContain("Session Contract");
+  });
+
+  it("session-init rule still applies only to autonomous scheduled sessions", () => {
+    const rule = FUND_RULES.find((r) => r.fileName === "session-init.md");
+    expect(rule!.content).toMatch(/autonomous scheduled/i);
+  });
+
+  it("session-init rule has Applies to section", () => {
     const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
     expect(entry.content).toContain("## Applies to");
-    expect(entry.content).toContain("Session mode: interactive chat");
-    expect(entry.content).toContain("Session mode: autonomous scheduled");
-  });
-
-  it("session-init.md no longer uses 'Mandatory Sequence' in the title", () => {
-    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
-    expect(entry.content).not.toContain("Mandatory Sequence");
-    expect(entry.content).toMatch(/^# Session Initialization\s*$/m);
-  });
-
-  it("session-init.md keeps the 6 numbered steps", () => {
-    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
-    for (let i = 1; i <= 6; i++) {
-      expect(entry.content).toMatch(new RegExp(`^${i}\\.\\s+\\*\\*`, "m"));
-    }
-  });
-
-  it("session-init.md Applies to mentions all three modes", () => {
-    const entry = FUND_RULES.find((r) => r.fileName === "session-init.md")!;
-    expect(entry.content).toContain("Session mode: interactive chat");
-    expect(entry.content).toContain("Session mode: interactive ask");
-    expect(entry.content).toContain("Session mode: autonomous scheduled");
   });
 });

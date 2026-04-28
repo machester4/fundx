@@ -1371,85 +1371,39 @@ and avoids forcing translation on either side.
   },
   {
     fileName: "session-init.md",
-    content: `# Session Initialization
+    content: `# Session Init
 
 ## Applies to
+Autonomous scheduled sessions (mode prefix: "Session mode: autonomous scheduled").
 
-This sequence applies to **autonomous scheduled sessions**. The prompt prefix
-will tell you which mode you are in: \`Session mode: autonomous scheduled\`
-means follow the steps below; \`Session mode: interactive chat\` or
-\`Session mode: interactive ask\` means the
-context above already contains the fund state this sequence would gather —
-skip ahead to the user's message and call MCPs only when the data-freshness
-block indicates the context is stale.
+In interactive chat or ask sessions, this rule does not apply — context is built by the harness.
 
-## Sequence (autonomous mode)
+## What you receive
+You begin each autonomous session with a <state_snapshot> envelope in your first
+user message containing the same artifacts the previous version of this rule
+asked you to read manually:
 
-Before any analysis or action, complete these steps in order:
+- session-handoff.md (last session's handoff)
+- portfolio.json (current cash + positions)
+- objective_tracker.json (progress vs goal)
+- pending_sessions.json (self-scheduled follow-ups)
+- recent_trades (top 10 from the journal)
+- watchlist (top 10 candidates)
 
-1. **Read handoff** — Read \`state/session-handoff.md\`. Understand what the last session did,
-   what it deferred, and what it recommended for this session. If missing or stale (>24h),
-   note this and proceed — you will rely more heavily on state files.
+Interpret the snapshot directly. The state files in \`state/\` remain the
+canonical source if you need to re-read something specific (e.g., the full
+journal beyond the top 10, or older handoffs in archive).
 
-2. **Read state** — Read \`state/portfolio.json\` and \`state/objective_tracker.json\`.
-   Know current positions, cash, total value, and objective progress.
+## What you must do
 
-3. **Read session log** — Read \`state/session_log.json\`. Check last session status, cost,
-   timing. If the last session errored, investigate why before proceeding.
+1. **Verify state integrity.** From the snapshot's <portfolio> block: cash + positions market value should reconcile with the fund's tracked total (close enough for fp arithmetic). If a major discrepancy, surface it as an Open Concern in the handoff and stop before any trades.
 
-4. **Check pending** — Read \`state/pending_sessions.json\`. Was this session self-scheduled?
-   If so, the reason is in the pending entry — address it.
+2. **Write a Session Contract** to \`state/session-handoff.md\` (replace the existing \`## Session Contract\` block, do not append). Declare:
+   - This session's intent in 1-2 sentences
+   - The success criteria
+   - What "done" looks like
 
-5. **Verify state integrity** — Portfolio cash + sum(position market_values) should
-   approximate total_value (within 2%). If not, investigate before trading.
-
-6. **Write Session Contract** — Write a minimal handoff to \`state/session-handoff.md\` with
-   your session contract:
-
-   > Orient complete. Portfolio: $[cash] cash, [N] positions, [X]% toward objective.
-   > Last session: [type] on [date], status [ok/error].
-   > This session intent: [what you plan to do and why].
-
-   This serves two purposes: confirms you completed Orient, and ensures the next session
-   has context even if this session is interrupted.
-
-7. **Review watchlist** — Before moving to analysis, consult the workspace watchlist for any candidates
-   surfaced by screens.
-
-   Call the \`screener.watchlist_query\` tool twice:
-
-   1. \`{ fund: "<this fund's name>", status: ["candidate", "watching"], limit: 20 }\` — fresh and established candidates eligible for this fund.
-   2. \`{ fund: "<this fund's name>", status: ["fading"], limit: 20 }\` — names that were previously active but are cooling off.
-
-   For each entry whose status changed since the timestamp of the prior
-   \`session-handoff.md\`, note the transition in the Session Contract under a
-   **Watchlist updates** heading (ticker, old → new status, reason). Fresh
-   candidates and any \`fading → watching\` re-entries become primary inputs to the
-   Analyze phase. If the watchlist is empty (common in a freshly initialised
-   workspace until the first screen run completes), record that and proceed
-   without it — the screen will populate on its next daily cycle.
-
-Only after completing all 7 steps, proceed with analysis.
-
-## Session-Type Priorities
-
-After Orient, prioritize based on session type:
-
-- **pre-market**: Overnight developments, regime check, plan today's actions, set alerts
-- **mid-session**: Verify morning thesis still valid, check price levels, execute if triggers hit
-- **post-market**: Close-of-day review, full reflection, comprehensive handoff for tomorrow
-- **catch-up**: Understand what was missed, compressed analysis, flag anything urgent
-- **pending (self-scheduled)**: Address the specific reason this session was scheduled
-- **chat (interactive)**: Read handoff for context, then respond to user's needs
-
-## Analysis Reuse
-
-After Orient, before launching sub-agents, check \`analysis/\` for assessments from
-the last 4 hours. If a market-research assessment exists from today and conditions have not
-changed materially, you may reference it instead of re-running market-research. This saves
-turns and cost.
-
-Reuse criteria: same trading day, no major news since assessment, regime has not shifted.
+3. Proceed with your Session Protocol (see CLAUDE.md).
 `,
   },
   {
