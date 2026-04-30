@@ -107,6 +107,17 @@ vi.mock("../src/services/verdict-tracker.js", () => ({
   })),
 }));
 
+vi.mock("../src/services/handoff-archive.service.js", () => ({
+  archiveHandoffIfExists: vi.fn(async () => "/tmp/mock-archive.md"),
+}));
+
+vi.mock("../src/services/handoff-tracker.js", () => ({
+  HandoffTracker: vi.fn().mockImplementation(() => ({
+    handoffWritten: true, // default to true so existing happy-path tests don't trip the alert
+    checkOnStop: vi.fn(() => ({ written: true })),
+  })),
+}));
+
 import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 
@@ -268,6 +279,28 @@ describe("runFundSession", () => {
 
     const opts = mockRunAgentQuery.mock.calls[0][0];
     expect(opts.prompt).toContain("<state_snapshot>mock</state_snapshot>");
+  });
+
+  it("instantiates HandoffTracker and passes Stop hook to runAgentQuery", async () => {
+    await runFundSession("test-fund", "pre_market");
+
+    const opts = mockRunAgentQuery.mock.calls[0][0];
+    expect(opts.hooks).toBeDefined();
+    expect(opts.hooks.Stop).toBeInstanceOf(Array);
+    expect(opts.hooks.Stop[0].hooks).toBeInstanceOf(Array);
+  });
+
+  it("calls archiveHandoffIfExists with fund name and session type", async () => {
+    const { archiveHandoffIfExists } = await import("../src/services/handoff-archive.service.js");
+    await runFundSession("test-fund", "pre_market");
+    expect(vi.mocked(archiveHandoffIfExists)).toHaveBeenCalledWith("test-fund", "pre_market");
+  });
+
+  it("includes handoff_written field in the session log", async () => {
+    await runFundSession("test-fund", "pre_market");
+    const [, log] = mockWriteSessionLog.mock.calls[0];
+    expect(log.handoff_written).toBeDefined();
+    expect(typeof log.handoff_written).toBe("boolean");
   });
 });
 

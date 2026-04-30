@@ -3,13 +3,15 @@ import { loadFundConfig } from "./fund.service.js";
 import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory } from "../state.js";
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
-import { DAEMON_NEEDS_RESTART } from "../paths.js";
+import { DAEMON_NEEDS_RESTART, fundPaths } from "../paths.js";
 import type { Budget, FundConfig, GlobalConfig, SessionLogV2, UniverseResolution } from "../types.js";
 import { resolveUniverse } from "./universe.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { sessionModePrefix } from "./chat.service.js";
 import { buildStateSnapshot } from "./snapshot.service.js";
 import { VerdictTracker } from "./verdict-tracker.js";
+import { archiveHandoffIfExists } from "./handoff-archive.service.js";
+import { HandoffTracker } from "./handoff-tracker.js";
 import type { SDKMessage, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { HookOutput } from "./verdict-tracker.js";
 
@@ -32,9 +34,12 @@ const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
 /** Build the tracker-attached hook + onMessage options shared by both
  *  runAgentQuery invocations (initial call + retry-on-SESSION_EXPIRED).
  *  Extracted to avoid drift between the two call sites. */
-function buildTrackerHookOptions(tracker: VerdictTracker) {
+function buildTrackerHookOptions(
+  verdictTracker: VerdictTracker,
+  handoffTracker?: HandoffTracker,
+) {
   return {
-    onMessage: (msg: SDKMessage) => tracker.observe(msg),
+    onMessage: (msg: SDKMessage) => verdictTracker.observe(msg),
     hooks: {
       PreToolUse: [
         {
@@ -45,11 +50,30 @@ function buildTrackerHookOptions(tracker: VerdictTracker) {
               if (!ti?.symbol || !ti.side) {
                 return { decision: "approve" } satisfies HookOutput;
               }
-              return tracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
+              return verdictTracker.checkPlaceOrder({ symbol: ti.symbol, side: ti.side });
             },
           ],
         },
       ],
+      ...(handoffTracker
+        ? {
+            Stop: [
+              {
+                hooks: [
+                  async () => {
+                    const { written } = handoffTracker.checkOnStop();
+                    if (!written) {
+                      console.warn(
+                        `[stop-hook] handoff not written this session — flagged in session_log`,
+                      );
+                    }
+                    return {};
+                  },
+                ],
+              },
+            ],
+          }
+        : {}),
     },
   };
 }
@@ -224,6 +248,12 @@ export async function runFundSession(
   }
   const universeBlock = renderUniverseBlock(universeResolution);
 
+  // Archive previous handoff to state/handoffs/<ts>_<type>.md (no-op on first session)
+  const archivedPath = await archiveHandoffIfExists(fundName, sessionType);
+  if (archivedPath) {
+    console.log(`[handoff-archive] archived to ${archivedPath}`);
+  }
+
   const stateSnapshot = await buildStateSnapshot(fundName);
 
   const prompt = buildAutonomousPrompt({
@@ -246,6 +276,9 @@ export async function runFundSession(
   const timeout = effectiveDuration * 60 * 1000;
 
   const startedAt = new Date().toISOString();
+  const startedAtMs = Date.parse(startedAt);
+  const paths = fundPaths(fundName);
+  const handoffTracker = new HandoffTracker(paths.state.sessionHandoff, startedAtMs);
 
   const activeSession = await readActiveSession(fundName).catch(() => null);
 
@@ -262,7 +295,7 @@ export async function runFundSession(
       timeoutMs: timeout,
       agents,
       resumeSessionId: activeSession?.session_id,
-      ...buildTrackerHookOptions(verdictTracker),
+      ...buildTrackerHookOptions(verdictTracker, handoffTracker),
     });
 
     // If resumption failed (expired session), retry without resume
@@ -281,7 +314,7 @@ export async function runFundSession(
         maxBudgetUsd: effectiveMaxBudgetUsd,
         timeoutMs: timeout,
         agents,
-        ...buildTrackerHookOptions(verdictTracker),
+        ...buildTrackerHookOptions(verdictTracker, handoffTracker),
       });
     }
   } catch (err) {
@@ -307,6 +340,7 @@ export async function runFundSession(
     session_id: result.session_id,
     status: result.status,
     budget_resolved: budget,
+    handoff_written: handoffTracker.handoffWritten,
   };
 
   await writeSessionLog(fundName, log);
@@ -371,6 +405,12 @@ export async function runFundSession(
         `\u26A0\uFE0F <b>[Daemon]</b> Session failed for <b>${displayName}</b> — probable token expiry.\nRestarting daemon to refresh auth...`,
       );
     } catch { /* best effort */ }
+  }
+
+  if (log.handoff_written === false && log.status === "success") {
+    await notifySession(
+      `⚠️ <b>${displayName}</b> — ${sessionType} ended successfully but did NOT write a handoff. Next session will read stale state.`,
+    );
   }
 
   if (result.session_id && result.status === "success") {
