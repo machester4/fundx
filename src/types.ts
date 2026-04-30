@@ -612,6 +612,7 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
     .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout"])
     .optional(),
   budget_resolved: budgetSchema.optional(),
+  handoff_written: z.boolean().optional(),
 });
 
 export type SessionLogV2 = z.infer<typeof sessionLogV2Schema>;

@@ -118,6 +118,25 @@ describe("sessionLogV2Schema with budget_resolved", () => {
     });
     expect(out.budget_resolved).toEqual({ maxTurns: 40, maxUsd: 5 });
   });
+
+  it("accepts a session log with handoff_written field", () => {
+    const out = sessionLogV2Schema.parse({
+      fund: "f",
+      session_type: "pre_market",
+      started_at: "2026-04-30T10:00:00.000Z",
+      handoff_written: true,
+    });
+    expect(out.handoff_written).toBe(true);
+  });
+
+  it("accepts a session log without handoff_written (back-compat)", () => {
+    const out = sessionLogV2Schema.parse({
+      fund: "f",
+      session_type: "pre_market",
+      started_at: "2026-04-30T10:00:00.000Z",
+    });
+    expect(out.handoff_written).toBeUndefined();
+  });
 });
 
 const baseFund = (): FundConfig => ({
