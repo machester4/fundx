@@ -123,3 +123,31 @@ risk-validation for MU. Cost $4.39, 24 turns.
 **Preliminary verdict: KEEP** — load-bearing. The Kelly criterion + Piotroski F-Score + two-method comparison framework only persists in position-sizing skill. Removing this skill measurably degrades sizing discipline.
 
 **Anomaly to investigate later:** session_log reported timeout/$0/0-turns despite the agent clearly producing substantial work (full GEV thesis, trade evaluation, risk validation). This may indicate a bug in the SDK result-capture path under timeout conditions, or an interaction with the fund_upgrade-disrupted state. Worth a future investigation but does NOT affect this verdict.
+
+---
+
+## Phase 2 verification — 2026-04-29 / 2026-04-30
+
+| Test | Result | Cost | Notes |
+|---|---|---:|---|
+| Smoke 1 (BUY without verdicts → DENIED) | ✅ PASS | ~$0.50 (est, log overwritten) | Hook denied via `PreToolUse:mcp__broker-local__place_order`; analysis written to `analysis/2026-04-28_smoke1.md`; portfolio unchanged |
+| Smoke 2 (BUY GLD with full pipeline) | ⚠️ NUANCED | $1.67 | trade-evaluator returned REJECT (1/5) on real constraint violations (cash floor 26.6% < 30%, R/R 2.31:1 < 3:1). Agent correctly skipped risk-guardian and place_order per protocol. Hook never had to fire because the gate at the analytical level worked. Demonstrates gates function in real-violation path. |
+| Smoke 2b (BUY BAC with smaller trade) | ⚠️ NUANCED | ~$3-5 (est, session timed out at 15min cap) | trade-evaluator returned RECONSIDER (3/5) due to FOMC-day calendar rule. Same outcome as smoke 2 — agent correctly applied calendar rule. Did not test hook ALLOW path end-to-end. |
+| Smoke 3 (SELL GLD with risk-guardian only) | ✅ PASS | $1.67 | Hook ALLOWED the SELL when risk-guardian APPROVED. Order filled at $421.91. GLD position 1→0. Cash $1,749.69→$2,171.60. Demonstrates G1 hook's BUY/SELL asymmetric policy works correctly: SELL only requires guardian. |
+| MVP eval suite | ✅ 8/8 PASS, 24/24 runs | $2.97 | No regressions. All cases use `runAsk`/`runChatTurn` paths (not `runFundSession`), so unaffected by hook wiring. |
+| **Phase 2 cumulative** | | **~$10-12** | Within $20 sub-budget for Task 7 |
+
+### Coverage summary
+
+End-to-end verification of Phase 2 mechanisms:
+
+- **G1 hook DENY path** ✅ — smoke 1 confirmed `PreToolUse` hook denies `place_order` when no verdicts in transcript
+- **G1 hook ALLOW path (SELL)** ✅ — smoke 3 confirmed hook allows when risk-guardian APPROVED for SELL
+- **G1 hook ALLOW path (BUY with both verdicts)** ⚠️ NOT END-TO-END TESTED — both BUY smoke attempts (2 and 2b) had agent correctly halt at analytical gate (REJECT/RECONSIDER from trade-evaluator) before reaching place_order. Unit tests in `tests/verdict-tracker.test.ts` cover this path mechanically (`approves BUY when both verdicts approved`).
+- **G3 snapshot pre-population** ✅ IMPLICIT — every smoke session received the `<state_snapshot>` envelope (verified by snapshot test 716 + agent's correct cash floor reference of "30% Transition regime minimum" indicating snapshot was read).
+- **session-init rule simplification** ✅ — the smoke sessions correctly interpreted snapshot without manual file reads.
+
+### Anomalies noted (out of scope for Phase 2 fix, captured for follow-up)
+
+- **session_log corruption on timeout**: smoke 2b ran 15 min then timed out. session_log.json reported `cost: $0, turns: 0, status: timeout` despite the agent having clearly produced substantive analysis (trade-evaluation-BAC.md exists). Same bug observed in Phase 1b spot-check #4. Investigate `runFundSession`'s log-write path under SDK timeout conditions.
+- **Test fund constraint difficulty**: With $5K capital and 30% cash floor in Transition regime, only ~$251 spendable cash. Combined with FOMC-day calendar rule, opening any new position legitimately is hard. Future audit fund should have either larger capital or be tested outside calendar-rule constraint windows.
