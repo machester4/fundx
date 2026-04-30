@@ -241,6 +241,7 @@ src/
 - Global config: `~/.fundx/config.yaml` (Telegram token, market data provider, FMP API key, default model)
 - Per-fund config: `~/.fundx/funds/<name>/fund_config.yaml` (objective, risk, universe, schedule, AI personality)
 - Budgets: per-session-type `maxTurns` / `maxUsd` cap resolved through `fund.budget` → `global.budget` → hardcoded defaults (see `resolveBudget` in `src/services/session.service.ts`). SDK hard-kills at 100% via `error_max_budget` / `error_max_turns` status; Telegram alert distinguishes budget kills from generic errors.
+- State pre-population + verdict gate: every autonomous session receives a `<state_snapshot>` envelope (handoff + portfolio + objective + pending + top-10 trades + top-10 watchlist) in its first user message, replacing the manual orient sequence. A `PreToolUse` hook on `mcp__broker-local__place_order` denies BUY without both `trade-evaluator` PROCEED + `risk-guardian` APPROVED, and SELL without `risk-guardian` APPROVED. See `src/services/snapshot.service.ts` and `src/services/verdict-tracker.ts`.
 - Market data: `market_data.provider` (`fmp` or `yfinance`) + `market_data.fmp_api_key` in global config
 - Trading is always paper mode — trades execute locally against `portfolio.json`
 - The `.gitignore` already covers `.env` files — maintain this pattern
