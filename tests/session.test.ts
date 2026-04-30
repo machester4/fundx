@@ -118,6 +118,11 @@ vi.mock("../src/services/handoff-tracker.js", () => ({
   })),
 }));
 
+const mockSendTelegramNotification = vi.fn(async () => undefined);
+vi.mock("../src/services/gateway.service.js", () => ({
+  sendTelegramNotification: (...args: unknown[]) => mockSendTelegramNotification(...args),
+}));
+
 import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 
@@ -301,6 +306,37 @@ describe("runFundSession", () => {
     const [, log] = mockWriteSessionLog.mock.calls[0];
     expect(log.handoff_written).toBeDefined();
     expect(typeof log.handoff_written).toBe("boolean");
+  });
+
+  it("emits warning when session succeeds but handoff was not written", async () => {
+    // Override HandoffTracker mock for this test only
+    const { HandoffTracker } = await import("../src/services/handoff-tracker.js");
+    vi.mocked(HandoffTracker).mockImplementationOnce(
+      () => ({
+        handoffWritten: false,
+        checkOnStop: vi.fn(() => ({ written: false })),
+      }) as never,
+    );
+
+    await runFundSession("test-fund", "pre_market");
+
+    // The notifySession path lazily imports sendTelegramNotification.
+    // Find the call with the warning message.
+    const calls = mockSendTelegramNotification.mock.calls;
+    const warningCall = calls.find((args) =>
+      typeof args[0] === "string" && args[0].includes("did NOT write a handoff"),
+    );
+    expect(warningCall).toBeDefined();
+  });
+
+  it("does NOT emit warning when handoff_written is true", async () => {
+    // Default mock returns handoffWritten: true
+    await runFundSession("test-fund", "pre_market");
+
+    const warningCalls = mockSendTelegramNotification.mock.calls.filter((args) =>
+      typeof args[0] === "string" && args[0].includes("did NOT write a handoff"),
+    );
+    expect(warningCalls).toHaveLength(0);
   });
 });
 
