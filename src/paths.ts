@@ -128,6 +128,7 @@ export function fundPaths(fundName: string) {
       pendingSessions: join(root, "state", "pending_sessions.json"),
       sessionCounts: join(root, "state", "session_counts.json"),
       sessionHandoff: join(root, "state", "session-handoff.md"),
+      handoffsDir: join(root, "state", "handoffs"),
       dailySnapshot: join(root, "state", "daily_snapshot.json"),
       notifiedMilestones: join(root, "state", "notified_milestones.json"),
       universe: join(root, "state", "universe.json"),
