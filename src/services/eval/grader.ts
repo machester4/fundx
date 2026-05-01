@@ -160,7 +160,11 @@ async function callJudge(
 
   const abortController = new AbortController();
   if (signal) {
-    signal.addEventListener("abort", () => abortController.abort());
+    if (signal.aborted) {
+      abortController.abort();
+    } else {
+      signal.addEventListener("abort", () => abortController.abort(), { once: true });
+    }
   }
 
   for await (const message of query({
@@ -190,8 +194,8 @@ async function callJudge(
   return parseJudgeResponse(output, costUsd);
 }
 
-const SCORE_LINE_RE = /^([a-z_]+):\s*(\d+)\s*$/im;
-const RATIONALE_LINE_RE = /^([a-z_]+)_rationale:\s*(.+)$/im;
+const SCORE_LINE_RE = /^([a-z_]+):\s*(\d+)\s*$/;
+const RATIONALE_LINE_RE = /^([a-z_]+)_rationale:\s*(.+)$/;
 const JUDGE_BLOCK_RE = /<judge_score>([\s\S]*?)<\/judge_score>/;
 
 export function parseJudgeResponse(text: string, costUsd: number): CallJudgeResult {
