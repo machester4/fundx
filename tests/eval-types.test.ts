@@ -7,6 +7,8 @@ import {
   evalCaseResultSchema,
   evalReportSchema,
   evalFailureSchema,
+  judgeConfigSchema,
+  judgeResultSchema,
 } from "../src/types.js";
 
 describe("evalFundStateSchema", () => {
@@ -135,5 +137,103 @@ describe("evalCaseResultSchema", () => {
       total_duration_ms: 10000, total_cost_usd: 0.06,
     });
     expect(parsed.passed).toBe(true);
+  });
+});
+
+describe("judgeConfigSchema", () => {
+  it("parses a valid judge config with both dims", () => {
+    const out = judgeConfigSchema.parse({
+      dims: { data_grounding: 4, task_completion: 4 },
+    });
+    expect(out.dims.data_grounding).toBe(4);
+    expect(out.dims.task_completion).toBe(4);
+  });
+
+  it("rejects scores outside 1-5", () => {
+    expect(() =>
+      judgeConfigSchema.parse({ dims: { data_grounding: 0 } }),
+    ).toThrow();
+    expect(() =>
+      judgeConfigSchema.parse({ dims: { data_grounding: 6 } }),
+    ).toThrow();
+  });
+
+  it("rejects unknown dim names", () => {
+    expect(() =>
+      judgeConfigSchema.parse({ dims: { unknown_dim: 3 } }),
+    ).toThrow();
+  });
+});
+
+describe("evalAssertionsSchema with judge", () => {
+  it("accepts assertions without judge (back-compat)", () => {
+    const out = evalAssertionsSchema.parse({
+      must_invoke: [],
+      must_not_invoke: [],
+    });
+    expect(out.judge).toBeUndefined();
+  });
+
+  it("accepts assertions with judge block", () => {
+    const out = evalAssertionsSchema.parse({
+      must_invoke: [],
+      must_not_invoke: [],
+      judge: { dims: { data_grounding: 4 } },
+    });
+    expect(out.judge?.dims.data_grounding).toBe(4);
+  });
+});
+
+describe("evalRunCaptureSchema with judge", () => {
+  it("accepts run capture without judge (back-compat)", () => {
+    const out = evalRunCaptureSchema.parse({
+      run_index: 1,
+      passed: true,
+      tool_history: [],
+      tokens_in: 100,
+      tokens_out: 50,
+      num_turns: 1,
+      duration_ms: 1000,
+      cost_usd: 0.05,
+      final_response: "ok",
+      error: null,
+      failures: [],
+    });
+    expect(out.judge).toBeUndefined();
+  });
+
+  it("accepts run capture with judge result", () => {
+    const out = evalRunCaptureSchema.parse({
+      run_index: 1,
+      passed: true,
+      tool_history: [],
+      tokens_in: 100,
+      tokens_out: 50,
+      num_turns: 1,
+      duration_ms: 1000,
+      cost_usd: 0.05,
+      final_response: "ok",
+      error: null,
+      failures: [],
+      judge: {
+        scores: { data_grounding: 4 },
+        rationale: { data_grounding: "all numbers retrieved this session" },
+        judge_cost_usd: 0.31,
+      },
+    });
+    expect(out.judge?.scores.data_grounding).toBe(4);
+    expect(out.judge?.judge_cost_usd).toBe(0.31);
+  });
+});
+
+describe("evalFailureSchema judge_below_threshold variant", () => {
+  it("accepts judge_below_threshold failure type", () => {
+    const out = evalFailureSchema.parse({
+      type: "judge_below_threshold",
+      detail: "data_grounding scored below threshold",
+      expected: "data_grounding >= 4",
+      actual: "data_grounding = 2",
+    });
+    expect(out.type).toBe("judge_below_threshold");
   });
 });

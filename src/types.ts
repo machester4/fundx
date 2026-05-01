@@ -899,11 +899,33 @@ export const evalFundStateSchema = z.object({
 });
 export type EvalFundState = z.infer<typeof evalFundStateSchema>;
 
+// ── LLM-judge schemas (Phase 3b) ────────────────────────────────
+
+export const judgeDimSchema = z.enum(["data_grounding", "task_completion"]);
+export type JudgeDim = z.infer<typeof judgeDimSchema>;
+
+export const judgeConfigSchema = z.object({
+  /** Per-dimension threshold (1-5). A run passes the judge if every declared
+   *  dimension scores >= its threshold. */
+  dims: z.record(judgeDimSchema, z.number().int().min(1).max(5)),
+});
+export type JudgeConfig = z.infer<typeof judgeConfigSchema>;
+
+export const judgeResultSchema = z.object({
+  scores: z.record(judgeDimSchema, z.number().int().min(1).max(5)),
+  /** One-sentence justification per dim, from the judge. */
+  rationale: z.record(judgeDimSchema, z.string()),
+  /** Cost of the judge call itself (USD), tracked separately from run cost. */
+  judge_cost_usd: z.number().min(0),
+});
+export type JudgeResult = z.infer<typeof judgeResultSchema>;
+
 export const evalAssertionsSchema = z.object({
   must_invoke: z.array(z.string()).default([]),
   must_not_invoke: z.array(z.string()).default([]),
   max_turns: z.number().int().positive().optional(),
   max_tokens_out: z.number().int().positive().optional(),
+  judge: judgeConfigSchema.optional(),
 });
 export type EvalAssertions = z.infer<typeof evalAssertionsSchema>;
 
@@ -921,7 +943,7 @@ export const evalCaseSchema = z.object({
 export type EvalCase = z.infer<typeof evalCaseSchema>;
 
 export const evalFailureSchema = z.object({
-  type: z.enum(["must_invoke", "must_not_invoke", "max_turns", "max_tokens_out", "run_errored"]),
+  type: z.enum(["must_invoke", "must_not_invoke", "max_turns", "max_tokens_out", "run_errored", "judge_below_threshold"]),
   detail: z.string(),
   expected: z.string(),
   actual: z.string(),
@@ -943,6 +965,7 @@ export const evalRunCaptureSchema = z.object({
   final_response: z.string(),
   error: z.string().nullable(),
   failures: z.array(evalFailureSchema),
+  judge: judgeResultSchema.optional(),
 });
 export type EvalRunCapture = z.infer<typeof evalRunCaptureSchema>;
 
@@ -956,6 +979,7 @@ export const evalCaseResultSchema = z.object({
   runs: z.array(evalRunCaptureSchema),
   total_duration_ms: z.number().int().nonnegative(),
   total_cost_usd: z.number().nonnegative(),
+  judge_total_cost_usd: z.number().nonnegative().optional(),
 });
 export type EvalCaseResult = z.infer<typeof evalCaseResultSchema>;
 
@@ -972,5 +996,6 @@ export const evalReportSchema = z.object({
     runs_failed: z.number().int().nonnegative(),
   }),
   cases: z.array(evalCaseResultSchema),
+  total_judge_cost_usd: z.number().nonnegative().optional(),
 });
 export type EvalReport = z.infer<typeof evalReportSchema>;

@@ -76,6 +76,7 @@ export function evaluateCase(runs: EvalRunCapture[], threshold: number): CaseAgg
     max_turns: 0,
     max_tokens_out: 0,
     run_errored: 0,
+    judge_below_threshold: 0,
   };
   for (const r of runs) {
     for (const f of r.failures) aggregate[f.type] += 1;
