@@ -8,5 +8,9 @@ expect:
   must_not_invoke: [Read, Glob, Bash]
   max_turns: 5
   max_tokens_out: 3000
+  judge:
+    dims:
+      data_grounding: 4
+      task_completion: 4
 runs: 3
 threshold: 2

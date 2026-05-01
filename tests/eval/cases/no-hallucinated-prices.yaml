@@ -8,5 +8,8 @@ expect:
   must_invoke: [mcp__market-data__get_multi_snapshots]
   max_turns: 8
   max_tokens_out: 2000
+  judge:
+    dims:
+      data_grounding: 5
 runs: 3
 threshold: 2
