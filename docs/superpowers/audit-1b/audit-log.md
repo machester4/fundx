@@ -151,3 +151,14 @@ End-to-end verification of Phase 2 mechanisms:
 
 - **session_log corruption on timeout**: smoke 2b ran 15 min then timed out. session_log.json reported `cost: $0, turns: 0, status: timeout` despite the agent having clearly produced substantive analysis (trade-evaluation-BAC.md exists). Same bug observed in Phase 1b spot-check #4. Investigate `runFundSession`'s log-write path under SDK timeout conditions.
 - **Test fund constraint difficulty**: With $5K capital and 30% cash floor in Transition regime, only ~$251 spendable cash. Combined with FOMC-day calendar rule, opening any new position legitimately is hard. Future audit fund should have either larger capital or be tested outside calendar-rule constraint windows.
+
+---
+
+## Phase 3a verification — 2026-04-30
+
+| Test | Result | Cost | Notes |
+|---|---|---:|---|
+| Smoke 1 (normal session, reflection invoked → handoff_written=true) | ✅ PASS | $2.16 | Archive created at `state/handoffs/2026-04-30T23-38-39.621Z_pre_market.md`; new handoff written at 20:42 (after session start 20:38); session_log handoff_written=True; no warning alert (Telegram disabled) |
+| Smoke 2 (session skips reflection → handoff_written=false) | ✅ PASS | $0.97 | Stop hook logged `[stop-hook] handoff not written this session — flagged in session_log`; session_log status=success, handoff_written=False; handoff content still from Smoke 1; Smoke 1 handoff archived to `state/handoffs/2026-05-01T00-07-47.505Z_pre_market.md`; Telegram warning path skipped (telegram.enabled=false in test fund) |
+| MVP eval suite | ✅ 8/8 PASS, 24/24 runs | $2.92 | No regressions |
+| **Phase 3a cumulative** | | **$6.05** | Both mechanisms confirmed end-to-end |
