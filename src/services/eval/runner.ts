@@ -5,6 +5,7 @@ import type {
 } from "../../types.js";
 import type { ChatMcpServers } from "../chat.service.js";
 import { evaluateRun, evaluateCase } from "./assertions.js";
+import { gradeRun } from "./grader.js";
 import type { SeedEvalFundHandle } from "./seed.js";
 
 export interface RunChatTurnResult {
@@ -62,7 +63,33 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
 
     for (let i = 0; i < caseDef.runs; i++) {
       const capture = await runOnce(i + 1, caseDef, context, mcpServers, handle.fundName, deps);
-      runs.push(evaluateRun(capture, caseDef.expect));
+      let run = evaluateRun(capture, caseDef.expect);
+
+      if (caseDef.expect.judge && !run.error) {
+        try {
+          run = await gradeRun(run, caseDef.expect.judge);
+        } catch (err) {
+          console.warn(
+            `[eval-grader] gradeRun threw for case ${caseDef.id} run ${i + 1}:`,
+            err instanceof Error ? err.message : err,
+          );
+          run = {
+            ...run,
+            failures: [
+              ...run.failures,
+              {
+                type: "judge_below_threshold",
+                detail: "Judge invocation failed",
+                expected: "judge to complete",
+                actual: err instanceof Error ? err.message : String(err),
+              },
+            ],
+            passed: false,
+          };
+        }
+      }
+
+      runs.push(run);
     }
   } finally {
     await handle.cleanup();
@@ -79,6 +106,10 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
     runs,
     total_duration_ms: Date.now() - startedAt,
     total_cost_usd: runs.reduce((acc, r) => acc + r.cost_usd, 0),
+    judge_total_cost_usd:
+      runs.some((r) => r.judge !== undefined)
+        ? runs.reduce((sum, r) => sum + (r.judge?.judge_cost_usd ?? 0), 0)
+        : undefined,
   };
 }
 

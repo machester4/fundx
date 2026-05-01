@@ -2,6 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { runEvalCase } from "../src/services/eval/runner.js";
 import type { EvalCase } from "../src/types.js";
 
+vi.mock("../src/services/eval/grader.js", () => ({
+  gradeRun: vi.fn(async (run, _config, _opts) => ({
+    ...run,
+    judge: {
+      scores: { data_grounding: 5 },
+      rationale: { data_grounding: "ok" },
+      judge_cost_usd: 0.31,
+    },
+  })),
+}));
+
 function makeCase(partial: Partial<EvalCase> = {}): EvalCase {
   return {
     id: "mvp-test",
@@ -153,5 +164,159 @@ describe("runEvalCase", () => {
 
     // seed was never called — the validation runs before any side effect
     expect(seed).not.toHaveBeenCalled();
+  });
+
+  it("calls gradeRun when case.expect.judge is configured", async () => {
+    const { gradeRun } = await import("../src/services/eval/grader.js");
+    vi.mocked(gradeRun).mockClear();
+
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+    const runChatTurn = vi.fn().mockResolvedValue({
+      sessionId: "s",
+      response: "ok",
+      costUsd: 0.02,
+      numTurns: 1,
+      tokensIn: 100,
+      tokensOut: 50,
+      toolHistory: [{ name: "foo", elapsed: 0.5 }],
+    });
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    await runEvalCase(
+      makeCase({
+        expect: {
+          must_invoke: [],
+          must_not_invoke: [],
+          judge: { dims: { data_grounding: 4 } },
+        },
+      }),
+      {
+        model: "claude-sonnet-4-6",
+        timeoutMs: 60000,
+        seed,
+        runChatTurn,
+        buildFundContext,
+        buildChatMcpServers,
+      },
+    );
+
+    expect(vi.mocked(gradeRun)).toHaveBeenCalled();
+  });
+
+  it("does NOT call gradeRun when no judge configured", async () => {
+    const { gradeRun } = await import("../src/services/eval/grader.js");
+    vi.mocked(gradeRun).mockClear();
+
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+    const runChatTurn = vi.fn().mockResolvedValue({
+      sessionId: "s",
+      response: "ok",
+      costUsd: 0.02,
+      numTurns: 1,
+      tokensIn: 100,
+      tokensOut: 50,
+      toolHistory: [{ name: "foo", elapsed: 0.5 }],
+    });
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    await runEvalCase(makeCase(), {
+      model: "claude-sonnet-4-6",
+      timeoutMs: 60000,
+      seed,
+      runChatTurn,
+      buildFundContext,
+      buildChatMcpServers,
+    });
+
+    expect(vi.mocked(gradeRun)).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call gradeRun if run errored before grading", async () => {
+    const { gradeRun } = await import("../src/services/eval/grader.js");
+    vi.mocked(gradeRun).mockClear();
+
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+    const runChatTurn = vi.fn().mockRejectedValue(new Error("simulated run error"));
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    await runEvalCase(
+      makeCase({
+        expect: {
+          must_invoke: [],
+          must_not_invoke: [],
+          judge: { dims: { data_grounding: 4 } },
+        },
+      }),
+      {
+        model: "claude-sonnet-4-6",
+        timeoutMs: 60000,
+        seed,
+        runChatTurn,
+        buildFundContext,
+        buildChatMcpServers,
+      },
+    );
+
+    expect(vi.mocked(gradeRun)).not.toHaveBeenCalled();
+  });
+
+  it("aggregates judge_cost_usd into judge_total_cost_usd on the case result", async () => {
+    const { gradeRun } = await import("../src/services/eval/grader.js");
+    vi.mocked(gradeRun).mockClear();
+
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+    const runChatTurn = vi.fn().mockResolvedValue({
+      sessionId: "s",
+      response: "ok",
+      costUsd: 0.02,
+      numTurns: 1,
+      tokensIn: 100,
+      tokensOut: 50,
+      toolHistory: [{ name: "foo", elapsed: 0.5 }],
+    });
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    const result = await runEvalCase(
+      makeCase({
+        runs: 2,
+        threshold: 1,
+        expect: {
+          must_invoke: [],
+          must_not_invoke: [],
+          judge: { dims: { data_grounding: 4 } },
+        },
+      }),
+      {
+        model: "claude-sonnet-4-6",
+        timeoutMs: 60000,
+        seed,
+        runChatTurn,
+        buildFundContext,
+        buildChatMcpServers,
+      },
+    );
+
+    expect(result.judge_total_cost_usd).toBeDefined();
+    expect(result.judge_total_cost_usd).toBeCloseTo(0.62, 2); // 2 runs × $0.31 from mock
   });
 });
