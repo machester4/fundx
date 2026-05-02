@@ -507,6 +507,8 @@ Most assertions are **outcome-based**: `must_not_invoke: [Read, Glob, Bash]` + a
 for cases where the user explicitly names the action (e.g., "corré el screener" → must
 invoke `mcp__screener__screen_run`).
 
+Cases can also opt into an LLM-as-judge quality layer (Phase 3b) by adding a `judge:` block to their `expect:` section — see `tests/eval/README.md` and `src/services/eval/grader.ts`.
+
 Nightly CI (`/.github/workflows/eval-nightly.yml`) runs the MVP suite at 02:00 UTC, uploads
 the JSON report as a 90-day artifact, and on failure opens (or comments on) deduped
 GitHub issues via `scripts/eval-open-issue.ts`.
