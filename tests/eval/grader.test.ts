@@ -252,4 +252,32 @@ task_completion_rationale: ok
     const callArgs = mockedQuery.mock.calls[0][0] as { options: { model: string } };
     expect(callArgs.options.model).toBe("claude-haiku-4-5-20251001");
   });
+
+  it("strips CLAUDECODE env var when invoking the SDK (prevents nested-session error)", async () => {
+    mockJudgeResponse(`<judge_score>
+data_grounding: 5
+data_grounding_rationale: ok
+task_completion: 5
+task_completion_rationale: ok
+</judge_score>`);
+
+    // Set CLAUDECODE so we can verify it gets stripped
+    const originalClaudeCode = process.env.CLAUDECODE;
+    process.env.CLAUDECODE = "1";
+
+    try {
+      await gradeRun(baseRun(), baseConfig(), { calibrationDir: tmpCalibration });
+
+      const callArgs = mockedQuery.mock.calls[0][0] as { options: { env?: Record<string, string> } };
+      expect(callArgs.options.env).toBeDefined();
+      expect(callArgs.options.env).not.toHaveProperty("CLAUDECODE");
+    } finally {
+      // Restore env to original state
+      if (originalClaudeCode === undefined) {
+        delete process.env.CLAUDECODE;
+      } else {
+        process.env.CLAUDECODE = originalClaudeCode;
+      }
+    }
+  });
 });
