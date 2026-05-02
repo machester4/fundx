@@ -167,6 +167,12 @@ async function callJudge(
     }
   }
 
+  // Strip CLAUDECODE so the SDK subprocess is not rejected as a "nested Claude
+  // Code session" when the eval is invoked from within an existing Claude Code
+  // session (mirrors the same workaround in src/agent.ts).
+  const childEnv = { ...process.env } as Record<string, string>;
+  delete childEnv["CLAUDECODE"];
+
   for await (const message of query({
     prompt,
     options: {
@@ -174,6 +180,7 @@ async function callJudge(
       maxTurns: 1,
       maxBudgetUsd: 5,
       cwd: process.cwd(),
+      env: childEnv,
       systemPrompt: { type: "preset", preset: "claude_code" },
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
