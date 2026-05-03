@@ -78,7 +78,7 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
             failures: [
               ...run.failures,
               {
-                type: "judge_below_threshold",
+                type: "judge_invocation_error",
                 detail: "Judge invocation failed",
                 expected: "judge to complete",
                 actual: err instanceof Error ? err.message : String(err),

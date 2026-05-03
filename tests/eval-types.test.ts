@@ -237,3 +237,15 @@ describe("evalFailureSchema judge_below_threshold variant", () => {
     expect(out.type).toBe("judge_below_threshold");
   });
 });
+
+describe("evalFailureSchema judge_invocation_error variant", () => {
+  it("accepts judge_invocation_error failure type", () => {
+    const out = evalFailureSchema.parse({
+      type: "judge_invocation_error",
+      detail: "Judge invocation failed",
+      expected: "judge to complete",
+      actual: "ENOENT: no such file or directory",
+    });
+    expect(out.type).toBe("judge_invocation_error");
+  });
+});

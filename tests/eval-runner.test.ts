@@ -275,6 +275,64 @@ describe("runEvalCase", () => {
     expect(vi.mocked(gradeRun)).not.toHaveBeenCalled();
   });
 
+  it("emits judge_invocation_error (not judge_below_threshold) when gradeRun throws", async () => {
+    const { gradeRun } = await import("../src/services/eval/grader.js");
+    vi.mocked(gradeRun).mockReset();
+    vi.mocked(gradeRun).mockRejectedValueOnce(new Error("calibration missing"));
+
+    const seed = vi.fn().mockResolvedValue({
+      fundName: "fundx-eval-x",
+      watchlistDbPath: "/tmp/x",
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    });
+    const runChatTurn = vi.fn().mockResolvedValue({
+      sessionId: "s",
+      response: "ok",
+      costUsd: 0.02,
+      numTurns: 1,
+      tokensIn: 100,
+      tokensOut: 50,
+      toolHistory: [{ name: "foo", elapsed: 0.5 }],
+    });
+    const buildFundContext = vi.fn().mockResolvedValue("ctx");
+    const buildChatMcpServers = vi.fn().mockResolvedValue({});
+
+    const result = await runEvalCase(
+      makeCase({
+        runs: 1,
+        threshold: 1,
+        expect: {
+          must_invoke: [],
+          must_not_invoke: [],
+          judge: { dims: { data_grounding: 4 } },
+        },
+      }),
+      {
+        model: "claude-sonnet-4-6",
+        timeoutMs: 60000,
+        seed,
+        runChatTurn,
+        buildFundContext,
+        buildChatMcpServers,
+      },
+    );
+
+    const failures = result.runs[0].failures;
+    expect(failures.find((f) => f.type === "judge_invocation_error")).toBeDefined();
+    expect(failures.find((f) => f.type === "judge_below_threshold")).toBeUndefined();
+    expect(failures.find((f) => f.type === "judge_invocation_error")?.actual).toContain("calibration missing");
+
+    // Reset mock to default for subsequent tests
+    vi.mocked(gradeRun).mockImplementation(async (run) => ({
+      ...run,
+      judge: {
+        scores: { data_grounding: 5 },
+        rationale: { data_grounding: "ok" },
+        judge_cost_usd: 0.31,
+      },
+    }));
+  });
+
   it("aggregates judge_cost_usd into judge_total_cost_usd on the case result", async () => {
     const { gradeRun } = await import("../src/services/eval/grader.js");
     vi.mocked(gradeRun).mockClear();

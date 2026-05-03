@@ -943,7 +943,7 @@ export const evalCaseSchema = z.object({
 export type EvalCase = z.infer<typeof evalCaseSchema>;
 
 export const evalFailureSchema = z.object({
-  type: z.enum(["must_invoke", "must_not_invoke", "max_turns", "max_tokens_out", "run_errored", "judge_below_threshold"]),
+  type: z.enum(["must_invoke", "must_not_invoke", "max_turns", "max_tokens_out", "run_errored", "judge_below_threshold", "judge_invocation_error"]),
   detail: z.string(),
   expected: z.string(),
   actual: z.string(),
