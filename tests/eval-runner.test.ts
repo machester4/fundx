@@ -333,7 +333,7 @@ describe("runEvalCase", () => {
     }));
   });
 
-  it("aggregates judge_cost_usd into judge_total_cost_usd on the case result", async () => {
+  it("aggregates judge_cost_usd into total_judge_cost_usd on the case result", async () => {
     const { gradeRun } = await import("../src/services/eval/grader.js");
     vi.mocked(gradeRun).mockClear();
 
@@ -374,7 +374,7 @@ describe("runEvalCase", () => {
       },
     );
 
-    expect(result.judge_total_cost_usd).toBeDefined();
-    expect(result.judge_total_cost_usd).toBeCloseTo(0.62, 2); // 2 runs × $0.31 from mock
+    expect(result.total_judge_cost_usd).toBeDefined();
+    expect(result.total_judge_cost_usd).toBeCloseTo(0.62, 2); // 2 runs × $0.31 from mock
   });
 });

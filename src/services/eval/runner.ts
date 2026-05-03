@@ -106,7 +106,7 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
     runs,
     total_duration_ms: Date.now() - startedAt,
     total_cost_usd: runs.reduce((acc, r) => acc + r.cost_usd, 0),
-    judge_total_cost_usd:
+    total_judge_cost_usd:
       runs.some((r) => r.judge !== undefined)
         ? runs.reduce((sum, r) => sum + (r.judge?.judge_cost_usd ?? 0), 0)
         : undefined,

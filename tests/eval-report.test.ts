@@ -44,7 +44,7 @@ describe("buildReport", () => {
     const report = buildReport({
       model: "claude-sonnet-4-6",
       cases: [
-        caseResult({ id: "judged-case", judge_total_cost_usd: 0.91 }),
+        caseResult({ id: "judged-case", total_judge_cost_usd: 0.91 }),
         caseResult({ id: "non-judged-case" }),
       ],
       runsPassed: 6,
@@ -125,7 +125,7 @@ describe("renderTerminal", () => {
         ],
         total_duration_ms: 1000,
         total_cost_usd: 0.05,
-        judge_total_cost_usd: 0.31,
+        total_judge_cost_usd: 0.31,
       }),
     ]);
     const plain = out.replace(/\x1b\[[0-9;]*m/g, "");

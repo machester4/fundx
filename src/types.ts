@@ -979,7 +979,7 @@ export const evalCaseResultSchema = z.object({
   runs: z.array(evalRunCaptureSchema),
   total_duration_ms: z.number().int().nonnegative(),
   total_cost_usd: z.number().nonnegative(),
-  judge_total_cost_usd: z.number().nonnegative().optional(),
+  total_judge_cost_usd: z.number().nonnegative().optional(),
 });
 export type EvalCaseResult = z.infer<typeof evalCaseResultSchema>;
 

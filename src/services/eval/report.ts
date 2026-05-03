@@ -34,8 +34,8 @@ export function buildReport(input: BuildReportInput): EvalReport {
     },
     cases: input.cases,
     total_judge_cost_usd:
-      input.cases.some((c) => c.judge_total_cost_usd !== undefined)
-        ? input.cases.reduce((sum, c) => sum + (c.judge_total_cost_usd ?? 0), 0)
+      input.cases.some((c) => c.total_judge_cost_usd !== undefined)
+        ? input.cases.reduce((sum, c) => sum + (c.total_judge_cost_usd ?? 0), 0)
         : undefined,
   };
 }
@@ -52,7 +52,7 @@ export function renderTerminal(cases: EvalCaseResult[]): string {
     const secs = (c.total_duration_ms / 1000).toFixed(1);
     const cost = `$${c.total_cost_usd.toFixed(2)}`;
     lines.push(`${mark} ${c.id.padEnd(32)} ${verdict}  ${passRate}   ${secs}s   ${cost}`);
-    if (c.judge_total_cost_usd !== undefined) {
+    if (c.total_judge_cost_usd !== undefined) {
       const judgeRuns = c.runs.filter((r) => r.judge !== undefined);
       if (judgeRuns.length > 0) {
         const dims = Object.keys(judgeRuns[0].judge!.scores) as JudgeDim[];
@@ -61,7 +61,7 @@ export function renderTerminal(cases: EvalCaseResult[]): string {
           const avg = sum / judgeRuns.length;
           return `${dim}=${avg.toFixed(1)}`;
         }).join(" ");
-        lines.push(`  ${DIM}judge:${RESET} ${avgScores} ${DIM}($${c.judge_total_cost_usd.toFixed(2)})${RESET}`);
+        lines.push(`  ${DIM}judge:${RESET} ${avgScores} ${DIM}($${c.total_judge_cost_usd.toFixed(2)})${RESET}`);
       }
     }
     if (!c.passed) {

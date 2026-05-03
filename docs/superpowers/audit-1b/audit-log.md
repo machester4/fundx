@@ -179,7 +179,7 @@ End-to-end verification of Phase 2 mechanisms:
 
 End-to-end verification of Phase 3b LLM-judge mechanism:
 
-- **Schema additions** ✅ — `judge`, `judge_total_cost_usd`, `total_judge_cost_usd`, `judge_below_threshold` all present in eval JSON output across all runs.
+- **Schema additions** ✅ — `judge`, `total_judge_cost_usd` (per-case + per-report), `judge_below_threshold` all present in eval JSON output across all runs.
 - **gradeRun invocation** ✅ — judge data present on both opt-in cases in 2nd attempt (3 runs each = 6 judge invocations completed, plus 3 more in re-run + 1 negative test = 10 total).
 - **Threshold gating** ✅ — confirmed in both directions: `mvp-market-regime-spanish` correctly failed when scores (2-3) fell below threshold 4; same case correctly passed when threshold was lowered to 3 with consistent score=3 across 3 runs. Negative test additionally confirmed the failure path emits structured `judge_below_threshold` records with the dimension, expected threshold, actual score, and the judge's rationale.
 - **Calibration loading** ✅ — both `data_grounding.md` and `task_completion.md` consumed by all judge calls; rationales reference rubric anchors ("multiple specific numbers cited that were never retrieved this session" maps to score 1; "all sector percentages plausibly come from get_sector_performance" partial-credit phrasing maps to score 2-3).
