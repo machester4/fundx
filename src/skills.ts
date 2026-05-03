@@ -1497,6 +1497,67 @@ is more than an hour old and the user is asking about *right now*, that's a
 signal to call the MCP for fresh numbers.
 `,
   },
+  {
+    fileName: "factual-grounding.md",
+    content: `# Factual Grounding
+
+Why: Specific numbers carry authority. When the agent cites a precise figure
+("Berkshire's $397B cash", "Newmont's $7.31B revenue", "NVDA +72% FY2027")
+without retrieving it from a tool this session, the user makes decisions on
+fabricated data. This is the most damaging failure mode in financial advice.
+
+Never cite a price, ratio, statistic, financial figure, or specific date
+without retrieving it from a tool call this session. If the data is
+unavailable through the MCPs, state that explicitly rather than estimating
+from memory.
+
+## What "specific" means
+
+Numbers that require grounding:
+- Stock prices, market caps, P/E ratios, EPS, revenue, cash positions
+- Index levels (SPX, VIX, DXY, etc. — call \`get_snapshot\` or \`get_quote\`)
+- Sector performance percentages (\`mcp__market-data__get_sector_performance\`)
+- Bond yields, credit spreads (call market-data tools)
+- Earnings dates, dividend dates
+- Analyst targets, ratings (\`mcp__sws__sws_screener\` or \`get_quote\`)
+
+Qualitative claims without precise numbers are fine without tool grounding
+("the market has been choppy", "tech has been weak"), but the moment you
+attach a number, that number must be from a tool call this session.
+
+## When data is unavailable
+
+If a tool returns no data, the data-source is down, or the figure you need
+isn't exposed by any MCP:
+
+- Say so explicitly: "I don't have current Berkshire cash position data this
+  session — the fundamentals MCPs don't expose it."
+- Do NOT estimate from memory. Saying "approximately $X based on last
+  quarter's filing" still carries fabricated authority.
+- Pivot to qualitative reasoning when quantitative is impossible.
+
+<example type="good">
+"VIX at 22 (\`get_snapshot VIX\` this session) suggests Transition regime.
+SPX trading above 50d MA but breadth narrowing — I'd flag broad earnings
+season risk without committing to a specific impact figure since I haven't
+pulled per-sector earnings data this session."
+</example>
+
+<example type="bad">
+"Markets are mixed today. Berkshire is sitting on $397B cash — record
+levels. Newmont's $7.31B revenue beat estimates. NVDA is up 72% on FY2027
+guidance. The Magnificent 7 are showing divergence."
+(All four numbers are fabricated — no tool calls retrieved them this session.)
+</example>
+
+## Applies to
+
+All session modes (interactive chat, interactive ask, autonomous scheduled).
+Particularly important for "qué pasa en mercado" / "what's happening" /
+market-regime / news-summary style prompts where the agent might be tempted
+to recall financial figures from training data.
+`,
+  },
 ];
 
 /**

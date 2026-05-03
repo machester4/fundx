@@ -375,3 +375,32 @@ describe("FUND_RULES session-init.md simplified version", () => {
     expect(entry.content).toContain("## Applies to");
   });
 });
+
+describe("FUND_RULES includes factual-grounding.md", () => {
+  it("has a factual-grounding.md entry", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "factual-grounding.md");
+    expect(entry).toBeDefined();
+    expect(entry!.content).toContain("# Factual Grounding");
+  });
+
+  it("factual-grounding.md states the canonical anti-hallucination rule", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "factual-grounding.md")!;
+    expect(entry.content).toMatch(/Never cite a price, ratio, statistic/i);
+    expect(entry.content).toMatch(/state that explicitly/i);
+  });
+
+  it("factual-grounding.md applies to all session modes (chat, ask, autonomous)", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "factual-grounding.md")!;
+    expect(entry.content).toContain("## Applies to");
+    expect(entry.content).toMatch(/interactive chat/i);
+    expect(entry.content).toMatch(/interactive ask/i);
+    expect(entry.content).toMatch(/autonomous scheduled/i);
+  });
+
+  it("factual-grounding.md cites the specific market-regime hallucination examples", () => {
+    const entry = FUND_RULES.find((r) => r.fileName === "factual-grounding.md")!;
+    expect(entry.content).toContain("Berkshire");
+    expect(entry.content).toContain("Newmont");
+    expect(entry.content).toContain("NVDA");
+  });
+});
