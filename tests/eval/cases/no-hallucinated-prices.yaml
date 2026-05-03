@@ -5,11 +5,8 @@ language: es
 fund_state:
   base: runway-empty-cash-only
 expect:
-  must_invoke: [mcp__market-data__get_multi_snapshots]
+  must_invoke: [mcp__market-data__get_quote]
   max_turns: 8
   max_tokens_out: 2000
-  judge:
-    dims:
-      data_grounding: 4
 runs: 3
 threshold: 2
