@@ -187,14 +187,19 @@ async function callJudge(
       abortController,
     },
   })) {
-    if (
-      message.type === "result" &&
-      "subtype" in message &&
-      message.subtype === "success" &&
-      "result" in message
-    ) {
-      output = (message as { result: string }).result;
-      costUsd = (message as { total_cost_usd?: number }).total_cost_usd ?? 0;
+    if (message.type === "result") {
+      // Capture cost from any result-typed message — Anthropic bills for the
+      // call regardless of whether the SDK ended in success / error_max_budget
+      // / error_max_turns. Discarding cost on error would systematically
+      // under-report eval spend.
+      costUsd = (message as { total_cost_usd?: number }).total_cost_usd ?? costUsd;
+      if (
+        "subtype" in message &&
+        message.subtype === "success" &&
+        "result" in message
+      ) {
+        output = (message as { result: string }).result;
+      }
     }
   }
 

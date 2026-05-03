@@ -280,4 +280,26 @@ task_completion_rationale: ok
       }
     }
   });
+
+  it("captures judge_cost_usd even when SDK terminates with error subtype", async () => {
+    // Mock SDK ending with error_max_budget — cost should still be captured
+    mockedQuery.mockImplementation(async function* () {
+      yield {
+        type: "result",
+        subtype: "error_max_budget",
+        total_cost_usd: 0.42,
+        num_turns: 1,
+        modelUsage: { "claude-opus-4-7": { inputTokens: 100, outputTokens: 50 } },
+        session_id: "judge-fake",
+      };
+    } as never);
+
+    const out = await gradeRun(baseRun(), baseConfig(), { calibrationDir: tmpCalibration });
+
+    // Cost telemetry preserved even though judge didn't produce output
+    expect(out.judge?.judge_cost_usd).toBe(0.42);
+    // Parser failed (no output produced) — scores default to 1
+    expect(out.judge?.scores.data_grounding).toBe(1);
+    expect(out.judge?.rationale.data_grounding).toContain("parser failed");
+  });
 });
