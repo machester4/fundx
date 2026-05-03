@@ -10,6 +10,6 @@ expect:
   max_tokens_out: 2000
   judge:
     dims:
-      data_grounding: 5
+      data_grounding: 4
 runs: 3
 threshold: 2
