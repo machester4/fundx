@@ -1,0 +1,54 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { fundPaths } from "../paths.js";
+import { notifyDaemonEvent } from "./daemon.service.js";
+import type { DailyUsage } from "./session-history.service.js";
+
+interface DailyCapState {
+  alerted_for_date?: string;
+}
+
+function todayUtcDateString(): string {
+  return new Date().toISOString().split("T")[0]!;
+}
+
+async function readDailyCapState(fundName: string): Promise<DailyCapState> {
+  const path = fundPaths(fundName).state.dailyCapState;
+  try {
+    const raw = await readFile(path, "utf-8");
+    return JSON.parse(raw) as DailyCapState;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
+  }
+}
+
+async function writeDailyCapState(fundName: string, state: DailyCapState): Promise<void> {
+  const path = fundPaths(fundName).state.dailyCapState;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(state, null, 2) + "\n", "utf-8");
+}
+
+/** Send a one-shot per-day Telegram alert when a fund reaches its daily cap.
+ *  If already alerted today (per fund), this is a no-op. */
+export async function notifyDailyCapReached(
+  fundName: string,
+  capUsd: number,
+  usage: DailyUsage,
+): Promise<void> {
+  const today = todayUtcDateString();
+  const state = await readDailyCapState(fundName);
+  if (state.alerted_for_date === today) return;
+
+  const subject = `Daily cap reached — ${fundName}`;
+  const body = `Fund ${fundName} reached daily cap $${capUsd} ($${usage.totalUsd.toFixed(2)} used in ${usage.sessionCount} sessions). Sessions will resume at 00:00 UTC tomorrow.`;
+  await notifyDaemonEvent(subject, body);
+
+  await writeDailyCapState(fundName, { alerted_for_date: today });
+}
+
+/** Clear the alerted_for_date so a fresh alert can fire on the next cap hit.
+ *  Called by the daily cron tick at midnight UTC. */
+export async function clearDailyCapAlertState(fundName: string): Promise<void> {
+  await writeDailyCapState(fundName, {});
+}
