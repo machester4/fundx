@@ -124,9 +124,11 @@ src/
     fund.service.ts     # Fund CRUD, config load/save, list, validate, create
     init.service.ts     # Workspace initialization
     status.service.ts   # Dashboard data aggregation
-    session.service.ts  # Session runner — buildAutonomousPrompt + runFundSession
-    daemon.service.ts   # Daemon start/stop, cron scheduling
-    supervisor.service.ts    # Daemon supervisor / watchdog
+    session.service.ts  # Session runner — buildAutonomousPrompt + runFundSession + resolveBudget + resolveDailyCapUsd + checkDailyCap (Phase 4)
+    session-history.service.ts  # Append-only session_log.jsonl: appendSessionLogEntry + readTodaysSessionUsage + pruneSessionLogJsonl (Phase 4)
+    daily-cap.service.ts        # Daily-per-fund USD cap alerts: notifyDailyCapReached + clearDailyCapAlertState (Phase 4)
+    daemon.service.ts   # Daemon start/stop, cron scheduling, daily JSONL prune at 00:00 UTC (Phase 4)
+    supervisor.service.ts    # Daemon supervisor / watchdog + heartbeat watch (3 min stale → Telegram alert) (Phase 4)
     gateway.service.ts  # Telegram gateway management
     ask.service.ts      # Question answering + cross-fund analysis (uses unified buildFundContext)
     chat.service.ts     # Chat REPL — context building, streaming, sessionModePrefix, buildFundContext, relTime
@@ -348,7 +350,8 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
     │   ├── communication.md           # English persisted artifacts; chat mirrors user
     │   ├── session-init.md            # autonomous Orient sequence (chat skips it)
     │   ├── session-completion.md      # end-of-session verification
-    │   └── data-access.md             # prefer MCPs over Read/Bash/Glob for fund state
+    │   ├── data-access.md             # prefer MCPs over Read/Bash/Glob for fund state
+    │   └── factual-grounding.md       # never cite a price/ratio/stat without retrieving it from a tool this session
     └── skills/
         ├── investment-thesis/SKILL.md
         ├── risk-assessment/SKILL.md
