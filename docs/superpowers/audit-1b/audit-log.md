@@ -261,3 +261,31 @@ End-to-end verification of Phase C fix:
 
 - **Tool payloads in judge prompt** — long-term improvement: pass actual tool response payloads (or summaries) to the judge so calibration band-aids aren't needed. Phase 4 G6 candidate.
 - **Intra-case judge variance still possible** — if a future run scores low even on grounded output, the case's `threshold: 2` (2/3 must pass) absorbs occasional misses. Monitor across nightly CI.
+
+---
+
+## Phase 4 verification — 2026-05-08
+
+| Test | Result | Cost | Notes |
+|---|---|---:|---|
+| Smoke 1: fund near cap → next session skipped + alert | ✅ PASS (after one allowed run) | $1.10 | Pre-populated JSONL with cost_usd=0.95 vs cap=$1; first mid_session ran (allowed: 0.95 < 1.0) and added $1.10 → today's total $2.05. Second session (post_market) was correctly skipped with status="skipped_daily_cap". session_log.json + JSONL both reflect skip; daily_cap_state.json written with today's date; Telegram alert "Daily cap reached — fundx-audit" fired. Cap fires when `totalUsd >= cap`, so a fund just below cap gets one final session before locking — by-design behaviour. |
+| Smoke 2: second skipped session same day → dedup (no new alert) | ✅ PASS | $0 | Third session (pre_market) also skipped; daily_cap_state.json shows today's date (unchanged from Smoke 1); no second Telegram message. JSONL grew to 4 entries (1 baseline + 1 allowed run + 2 skips with cost_usd=0). |
+| Smoke 3: heartbeat live alert (SIGSTOP/CONT) | ⏭️ DEFERRED | $0 | Daemon process running since 2026-05-01 predates T8 heartbeat watch; live test would require daemon restart affecting live Telegram gateway + cron schedules. Heartbeat decision logic fully covered by 7 unit tests in `tests/supervisor-heartbeat.test.ts`. To validate live: `fundx stop && fundx start && kill -STOP <new pid>` for 4 min, then SIGCONT. |
+| `fundx status` UI shows today's USD per fund | ✅ PASS | $0 | Output for fundx-audit included `today: $0.95/$1 (95%) ⚠️`; other funds showed `today: $0.00/$5 (0%)` baseline at default cap. Threshold indicator (⚠️) visible at 80-99%. |
+| MVP eval suite (regression check) | ⚠️ 7/8 PASS | $2.42 agent + $1.39 judge | 7 of 8 cases passed at threshold 2/3. `mvp-portfolio-review-spanish` failed 1/3 (judge variance: data_grounding scored 3 vs threshold 4 on 2 of 3 runs). Failure pattern matches pre-existing intra-case judge variance (open item from Phase 3b/C audit). All 7 other cases passed clean. Phase 4 is purely operational (cap/heartbeat/audit log) with no agent behaviour change, so this failure is consistent with the noted intra-case judge variance, not a Phase 4 regression. |
+| **Phase 4 cumulative** | | $5.91 (smoke + eval + judge) | Cap mechanism (skip + dedup + JSONL append) confirmed end-to-end. Heartbeat watch logic unit-tested (live test deferred). Status UI shows per-fund daily usage with threshold colors. |
+
+### Coverage summary
+
+End-to-end verification of Phase 4 G6:
+
+- **Append-only JSONL** ✅ — Smoke 1+2 confirmed appendSessionLogEntry writes lines per session; readTodaysSessionUsage filter works; total today = $2.05 across 4 entries (1 baseline + 1 real + 2 skips).
+- **Daily cap enforcement** ✅ — Smoke 1 confirmed sessions skip + Telegram alert fires; Smoke 2 confirmed dedup works (same-day repeat skip = no new alert).
+- **Heartbeat watch** ✅ (unit-tested) — 7 tests in `tests/supervisor-heartbeat.test.ts` cover the decision matrix; live verification deferred.
+- **Status UI** ✅ — `fundx status` shows today's USD per fund with threshold colors and indicators (⚠️ at 80-99%).
+- **Runbook** ✅ — `docs/operations.md` reviewed.
+
+### Open items / follow-ups
+
+- **`mvp-portfolio-review-spanish` re-run** — known intra-case judge variance (data_grounding sometimes scores 3 instead of 4 even on grounded output). Phase 3b/C carry-over. Not a Phase 4 regression. Watch nightly CI — if the failure persists across nights, escalate to judge prompt refinement (Phase 4 G6 carry-over: tool payloads in judge prompt).
+- **Live heartbeat smoke** — when next daemon restart happens for an unrelated reason, run `kill -STOP <pid>` for 4 min then SIGCONT to validate the heartbeat alert path end-to-end.
