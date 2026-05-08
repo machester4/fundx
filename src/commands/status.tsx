@@ -4,7 +4,7 @@ import { Spinner } from "@inkjs/ui";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
-import { getAllFundStatuses, getServiceStatuses, getDailyUsagePerFund, type FundDailyUsage } from "../services/status.service.js";
+import { getAllFundStatuses, getServiceStatuses, getDailyUsagePerFund, resolveDailyUsageStyle, type FundDailyUsage } from "../services/status.service.js";
 import { isDaemonRunning, getDaemonPid } from "../services/daemon.service.js";
 import { getStats as getNewsInspectStats, type ExtendedNewsStats } from "../services/news-inspect.service.js";
 import { SUPERVISOR_PID, DAEMON_HEARTBEAT, NEWS_DIR } from "../paths.js";
@@ -107,16 +107,13 @@ function Dot({ color }: { color: string }) {
 }
 
 function DailyUsageLine({ usage }: { usage: FundDailyUsage }) {
+  const { color, capped, warning } = resolveDailyUsageStyle(usage);
   const pctRounded = Math.round(usage.pct);
-  let color: "redBright" | "yellow" | "white" | "gray" = "gray";
-  if (usage.capped) color = "redBright";
-  else if (usage.pct >= 80) color = "yellow";
-  else if (usage.pct >= 50) color = "white";
 
-  if (usage.capped) {
+  if (capped) {
     return <Text color={color}>{"\uD83D\uDD34"} today: CAPPED ${usage.totalUsd.toFixed(2)}/${usage.cap}</Text>;
   }
-  const indicator = usage.pct >= 80 ? " \u26A0\uFE0F" : "";
+  const indicator = warning ? " \u26A0\uFE0F" : "";
   return <Text color={color}>today: ${usage.totalUsd.toFixed(2)}/${usage.cap} ({pctRounded}%){indicator}</Text>;
 }
 

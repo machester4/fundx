@@ -426,3 +426,30 @@ export async function getDailyUsagePerFund(): Promise<Map<string, FundDailyUsage
   }
   return result;
 }
+
+// ── Daily Usage Styling ────────────────────────────────────────
+
+export const DAILY_USAGE_THRESHOLDS = {
+  DIM_BELOW_PCT: 50,
+  WARN_AT_PCT: 80,
+  CAPPED_AT_PCT: 100,
+} as const;
+
+/** Pure: resolve color + flags for a usage cell across both UI surfaces.
+ *  Centralised so threshold changes only require edits in one place. */
+export function resolveDailyUsageStyle(usage: FundDailyUsage): {
+  color: "redBright" | "yellow" | "white" | "gray";
+  capped: boolean;
+  warning: boolean;
+} {
+  if (usage.capped) {
+    return { color: "redBright", capped: true, warning: false };
+  }
+  if (usage.pct >= DAILY_USAGE_THRESHOLDS.WARN_AT_PCT) {
+    return { color: "yellow", capped: false, warning: true };
+  }
+  if (usage.pct >= DAILY_USAGE_THRESHOLDS.DIM_BELOW_PCT) {
+    return { color: "white", capped: false, warning: false };
+  }
+  return { color: "gray", capped: false, warning: false };
+}

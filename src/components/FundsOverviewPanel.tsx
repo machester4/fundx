@@ -1,9 +1,14 @@
+// NOTE: This component is not yet rendered by any command in src/. The
+// `dailyUsage` prop and TodayUsageCell helper are wired for future
+// dashboard usage (planned in docs/superpowers/specs/2026-05-07-harness-phase-4-design.md).
+
 import React from "react";
 import { Box, Text } from "ink";
 import { StatusBadge } from "./StatusBadge.js";
 import { PnlText } from "./PnlText.js";
 import { Sparkline } from "./Sparkline.js";
 import type { FundStatusData, FundExtras, FundDailyUsage } from "../services/status.service.js";
+import { resolveDailyUsageStyle } from "../services/status.service.js";
 
 interface FundsOverviewPanelProps {
   funds: FundStatusData[];
@@ -28,23 +33,20 @@ function ProgressBar({ pct, barWidth = 8 }: { pct: number; barWidth?: number }) 
 }
 
 function TodayUsageCell({ usage, compact }: { usage: FundDailyUsage; compact?: boolean }) {
+  const { color, capped, warning } = resolveDailyUsageStyle(usage);
   const pctRounded = Math.round(usage.pct);
-  let color: "redBright" | "yellow" | "white" | "gray" = "gray";
-  if (usage.capped) color = "redBright";
-  else if (usage.pct >= 80) color = "yellow";
-  else if (usage.pct >= 50) color = "white";
 
   if (compact) {
     // List summary: short form "$X.XX/$Y" with color, plus 🔴 when capped
     const text = `$${usage.totalUsd.toFixed(2)}/$${usage.cap}`;
-    return <Text color={color}>{usage.capped ? `🔴 ${text}` : text}</Text>;
+    return <Text color={color}>{capped ? `🔴 ${text}` : text}</Text>;
   }
 
   // Focused view: full "today: $X.XX/$Y (Z%)" with color and ⚠️/🔴 indicators
-  if (usage.capped) {
+  if (capped) {
     return <Text color={color}>🔴 today: CAPPED ${usage.totalUsd.toFixed(2)}/${usage.cap}</Text>;
   }
-  const indicator = usage.pct >= 80 ? " ⚠️" : "";
+  const indicator = warning ? " ⚠️" : "";
   return <Text color={color}>today: ${usage.totalUsd.toFixed(2)}/${usage.cap} ({pctRounded}%){indicator}</Text>;
 }
 
