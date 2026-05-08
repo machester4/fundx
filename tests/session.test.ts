@@ -123,6 +123,20 @@ vi.mock("../src/services/gateway.service.js", () => ({
   sendTelegramNotification: (...args: unknown[]) => mockSendTelegramNotification(...args),
 }));
 
+// Mock session-history + daily-cap so we don't hit real fs in the unit tests.
+// Default: usage well below cap so the pre-session check is a no-op.
+const mockAppendSessionLogEntry = vi.fn(async () => undefined);
+const mockReadTodaysSessionUsage = vi.fn(async () => ({ totalUsd: 0, sessionCount: 0, entries: [] }));
+vi.mock("../src/services/session-history.service.js", () => ({
+  appendSessionLogEntry: (...args: unknown[]) => mockAppendSessionLogEntry(...args),
+  readTodaysSessionUsage: (...args: unknown[]) => mockReadTodaysSessionUsage(...args),
+}));
+
+const mockNotifyDailyCapReached = vi.fn(async () => undefined);
+vi.mock("../src/services/daily-cap.service.js", () => ({
+  notifyDailyCapReached: (...args: unknown[]) => mockNotifyDailyCapReached(...args),
+}));
+
 import { runFundSession } from "../src/services/session.service.js";
 import { loadFundConfig } from "../src/services/fund.service.js";
 

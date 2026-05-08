@@ -12,6 +12,12 @@ import { buildStateSnapshot } from "./snapshot.service.js";
 import { VerdictTracker } from "./verdict-tracker.js";
 import { archiveHandoffIfExists } from "./handoff-archive.service.js";
 import { HandoffTracker } from "./handoff-tracker.js";
+import {
+  appendSessionLogEntry,
+  readTodaysSessionUsage,
+  type DailyUsage,
+} from "./session-history.service.js";
+import { notifyDailyCapReached } from "./daily-cap.service.js";
 import type { SDKMessage, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { HookOutput } from "./verdict-tracker.js";
 
@@ -49,6 +55,16 @@ export function resolveDailyCapUsd(
     global.budget?.dailyCapUsd ??
     DEFAULT_DAILY_CAP_USD
   );
+}
+
+/** Read today's session usage and compare to the cap.
+ *  allowed = totalUsd < cap. Pure read — caller emits alerts and writes log. */
+export async function checkDailyCap(
+  fundName: string,
+  cap: number,
+): Promise<{ allowed: boolean; usage: DailyUsage }> {
+  const usage = await readTodaysSessionUsage(fundName);
+  return { allowed: usage.totalUsd < cap, usage };
 }
 
 /** Build the tracker-attached hook + onMessage options shared by both
@@ -249,6 +265,27 @@ export async function runFundSession(
     );
   }
 
+  // Phase 4: pre-session daily cap check. Skip BEFORE any side effects.
+  const dailyCap = resolveDailyCapUsd(config, globalConfig);
+  const capCheck = await checkDailyCap(fundName, dailyCap);
+  if (!capCheck.allowed) {
+    const skipNow = new Date().toISOString();
+    const skipLog: SessionLogV2 = {
+      fund: fundName,
+      session_type: sessionType,
+      started_at: skipNow,
+      ended_at: skipNow,
+      trades_executed: 0,
+      summary: `Skipped: daily cap $${dailyCap} reached ($${capCheck.usage.totalUsd.toFixed(2)} used in ${capCheck.usage.sessionCount} sessions)`,
+      cost_usd: 0,
+      status: "skipped_daily_cap",
+    };
+    await writeSessionLog(fundName, skipLog);
+    await appendSessionLogEntry(fundName, skipLog);
+    await notifyDailyCapReached(fundName, dailyCap, capCheck.usage);
+    return;
+  }
+
   // Notify session start
   const displayName = escapeHtml(config.fund.display_name);
   await notifySession(
@@ -364,6 +401,7 @@ export async function runFundSession(
   };
 
   await writeSessionLog(fundName, log);
+  await appendSessionLogEntry(fundName, log);
 
   // Notify session completion
   const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);

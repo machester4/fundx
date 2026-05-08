@@ -30,6 +30,10 @@ vi.mock("node:fs/promises", () => ({
   writeFile: vi.fn(async (path: string, content: string) => {
     fileSystem.set(path, content);
   }),
+  appendFile: vi.fn(async (path: string, content: string) => {
+    const existing = fileSystem.get(path) ?? "";
+    fileSystem.set(path, existing + content);
+  }),
   rename: vi.fn(async (src: string, dest: string) => {
     const content = fileSystem.get(src);
     if (content !== undefined) {
