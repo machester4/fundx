@@ -169,6 +169,10 @@ export const fundBudgetConfigSchema = z
   .object({
     default: budgetSchema.optional(),
     perSessionType: z.record(z.string(), budgetSchema).optional(),
+    /** Daily aggregate USD cap per fund. When the sum of cost_usd across
+     *  today's sessions reaches this value, further sessions are skipped
+     *  with status "skipped_daily_cap" until 00:00 UTC. */
+    dailyCapUsd: z.number().positive().optional(),
   })
   .optional();
 
@@ -609,7 +613,7 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
   num_turns: z.number().optional(),
   session_id: z.string().optional(),
   status: z
-    .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout"])
+    .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout", "skipped_daily_cap"])
     .optional(),
   budget_resolved: budgetSchema.optional(),
   handoff_written: z.boolean().optional(),

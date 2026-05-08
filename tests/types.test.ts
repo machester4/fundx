@@ -9,6 +9,8 @@ import {
   notifiedMilestonesSchema,
   universeSchema,
   fmpScreenerFiltersSchema,
+  fundBudgetConfigSchema,
+  sessionLogV2Schema,
 } from "../src/types.js";
 
 describe("fundConfigSchema", () => {
@@ -289,5 +291,36 @@ describe("universeSchema (per-fund universe)", () => {
       universeSchema.parse({ filters: { country: "USA" } }),
     ).toThrow();
     expect(universeSchema.parse({ filters: { country: "US" } }).filters?.country).toBe("US");
+  });
+});
+
+describe("fundBudgetConfigSchema with dailyCapUsd", () => {
+  it("accepts config without dailyCapUsd (back-compat)", () => {
+    const out = fundBudgetConfigSchema.parse({});
+    expect(out?.dailyCapUsd).toBeUndefined();
+  });
+
+  it("accepts config with dailyCapUsd", () => {
+    const out = fundBudgetConfigSchema.parse({ dailyCapUsd: 10 });
+    expect(out?.dailyCapUsd).toBe(10);
+  });
+
+  it("rejects non-positive dailyCapUsd", () => {
+    expect(() => fundBudgetConfigSchema.parse({ dailyCapUsd: 0 })).toThrow();
+    expect(() => fundBudgetConfigSchema.parse({ dailyCapUsd: -1 })).toThrow();
+  });
+});
+
+describe("sessionLogV2Schema status enum", () => {
+  it("accepts skipped_daily_cap status", () => {
+    const out = sessionLogV2Schema.parse({
+      fund: "f",
+      session_type: "pre_market",
+      started_at: "2026-05-07T00:00:00Z",
+      trades_executed: 0,
+      summary: "skipped",
+      status: "skipped_daily_cap",
+    });
+    expect(out.status).toBe("skipped_daily_cap");
   });
 });
