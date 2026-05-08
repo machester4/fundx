@@ -8,6 +8,8 @@ import { loadGlobalConfig } from "../config.js";
 import { getMarketDataProvider } from "./market.service.js";
 import { isDaemonRunning, getDaemonPid } from "./daemon.service.js";
 import { readCachedUniverse } from "./universe.service.js";
+import { readTodaysSessionUsage } from "./session-history.service.js";
+import { resolveDailyCapUsd } from "./session.service.js";
 import type { FundConfig, ServiceStatus, NextCronInfo } from "../types.js";
 
 export interface FundStatusData {
@@ -392,4 +394,35 @@ export async function getDashboardData(): Promise<DashboardData> {
     services,
     nextCron,
   };
+}
+
+export interface FundDailyUsage {
+  totalUsd: number;
+  sessionCount: number;
+  cap: number;
+  pct: number;       // (totalUsd / cap) * 100
+  capped: boolean;   // pct >= 100
+}
+
+/** Per-fund map of today's USD usage + cap + threshold percentage.
+ *  Used by `fundx status` and the dashboard. */
+export async function getDailyUsagePerFund(): Promise<Map<string, FundDailyUsage>> {
+  const result = new Map<string, FundDailyUsage>();
+  const fundNames = await listFundNames();
+  const globalConfig = await loadGlobalConfig();
+
+  for (const name of fundNames) {
+    const fundConfig = await loadFundConfig(name);
+    const cap = resolveDailyCapUsd(fundConfig, globalConfig);
+    const usage = await readTodaysSessionUsage(name);
+    const pct = (usage.totalUsd / cap) * 100;
+    result.set(name, {
+      totalUsd: usage.totalUsd,
+      sessionCount: usage.sessionCount,
+      cap,
+      pct,
+      capped: pct >= 100,
+    });
+  }
+  return result;
 }
