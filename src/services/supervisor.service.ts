@@ -1,10 +1,11 @@
 import { fork, spawn } from "node:child_process";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { readFile, writeFile, unlink, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { SUPERVISOR_PID, DAEMON_NEEDS_RESTART } from "../paths.js";
+import { SUPERVISOR_PID, DAEMON_NEEDS_RESTART, DAEMON_HEARTBEAT } from "../paths.js";
 
 const MAX_RESTARTS = 5;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
 
 /** Calculate exponential backoff delay for restart attempt N */
 export function getBackoffDelay(attempt: number): number {
@@ -15,6 +16,49 @@ export function getBackoffDelay(attempt: number): number {
 export function shouldGiveUp(restartTimestamps: number[], now: number): boolean {
   const recent = restartTimestamps.filter((t) => now - t < WINDOW_MS);
   return recent.length >= MAX_RESTARTS;
+}
+
+export interface HeartbeatEvalInput {
+  now: number;
+  heartbeatMtimeMs: number;
+  heartbeatExists: boolean;
+  daemonLaunchedAt: number;
+  daemonRunning: boolean;
+  previouslyAlerted: boolean;
+}
+
+export interface HeartbeatEvalResult {
+  shouldAlert: boolean;
+  shouldRecover: boolean;
+  stale: boolean;
+  ageMs: number;
+}
+
+/** Pure: decide whether to alert / recover based on heartbeat freshness.
+ *  - If daemon not running: no alerts ever.
+ *  - If heartbeat exists: stale = (now - mtime) > HEARTBEAT_STALE_MS.
+ *  - If heartbeat missing: stale = (now - daemonLaunchedAt) > HEARTBEAT_STALE_MS (grace period).
+ *  - shouldAlert: stale AND not previouslyAlerted.
+ *  - shouldRecover: not stale AND previouslyAlerted. */
+export function evaluateHeartbeatStaleness(input: HeartbeatEvalInput): HeartbeatEvalResult {
+  if (!input.daemonRunning) {
+    return { shouldAlert: false, shouldRecover: false, stale: false, ageMs: 0 };
+  }
+
+  let stale = false;
+  let ageMs = 0;
+  if (input.heartbeatExists) {
+    ageMs = input.now - input.heartbeatMtimeMs;
+    stale = ageMs > HEARTBEAT_STALE_MS;
+  } else {
+    const sinceLaunchMs = input.now - input.daemonLaunchedAt;
+    stale = sinceLaunchMs > HEARTBEAT_STALE_MS;
+    ageMs = sinceLaunchMs;
+  }
+
+  const shouldAlert = stale && !input.previouslyAlerted;
+  const shouldRecover = !stale && input.previouslyAlerted;
+  return { shouldAlert, shouldRecover, stale, ageMs };
 }
 
 /**
@@ -29,6 +73,7 @@ export async function startSupervisor(): Promise<void> {
   let stopping = false;
   let currentChild: ReturnType<typeof fork> | null = null;
   let resetTimer: ReturnType<typeof setTimeout> | null = null;
+  let daemonLaunchedAt = Date.now();
 
   // Signal handlers registered ONCE at supervisor scope (not per-launch)
   async function handleShutdown() {
@@ -44,6 +89,7 @@ export async function startSupervisor(): Promise<void> {
   process.on("SIGINT", handleShutdown);
 
   function launchDaemon() {
+    daemonLaunchedAt = Date.now();
     const child = fork(process.argv[1]!, ["--_daemon-mode"], {
       stdio: "inherit",
     });
@@ -119,6 +165,60 @@ export async function startSupervisor(): Promise<void> {
 
   process.on("SIGTERM", () => clearInterval(restartCheckInterval));
   process.on("SIGINT", () => clearInterval(restartCheckInterval));
+
+  // Phase 4: heartbeat freshness watch — proactively alert if daemon's event loop is hung
+  let heartbeatAlerted = false;
+
+  const heartbeatCheckInterval = setInterval(async () => {
+    if (stopping) return;
+    let mtimeMs = 0;
+    let exists = false;
+    if (existsSync(DAEMON_HEARTBEAT)) {
+      try {
+        const s = await stat(DAEMON_HEARTBEAT);
+        mtimeMs = s.mtimeMs;
+        exists = true;
+      } catch {
+        // read error → treat as missing (use grace-period semantics)
+      }
+    }
+
+    const result = evaluateHeartbeatStaleness({
+      now: Date.now(),
+      heartbeatMtimeMs: mtimeMs,
+      heartbeatExists: exists,
+      daemonLaunchedAt,
+      daemonRunning: currentChild !== null,
+      previouslyAlerted: heartbeatAlerted,
+    });
+
+    if (result.shouldAlert) {
+      try {
+        const { notifyDaemonEvent } = await import("./daemon.service.js");
+        await notifyDaemonEvent(
+          "Daemon heartbeat stale",
+          `Heartbeat ${Math.round(result.ageMs / 1000)}s old. Sessions may be missed.`,
+        );
+        heartbeatAlerted = true;
+      } catch {
+        /* best effort */
+      }
+    } else if (result.shouldRecover) {
+      try {
+        const { notifyDaemonEvent } = await import("./daemon.service.js");
+        await notifyDaemonEvent(
+          "Daemon heartbeat recovered",
+          "Heartbeat fresh again after stale period.",
+        );
+        heartbeatAlerted = false;
+      } catch {
+        /* best effort */
+      }
+    }
+  }, 60_000);
+
+  process.on("SIGTERM", () => clearInterval(heartbeatCheckInterval));
+  process.on("SIGINT", () => clearInterval(heartbeatCheckInterval));
 
   launchDaemon();
 }
