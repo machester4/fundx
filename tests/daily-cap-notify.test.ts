@@ -67,4 +67,18 @@ describe("notifyDailyCapReached", () => {
     const today = new Date().toISOString().split("T")[0];
     expect(stateAfter.alerted_for_date).toBe(today);
   });
+
+  it("treats a corrupt state file like ENOENT — sends alert and overwrites instead of throwing", async () => {
+    const path = join(tmpRoot, "funds", FUND, "state", "daily_cap_state.json");
+    // Partial JSON write / disk corruption — JSON.parse throws SyntaxError
+    await writeFile(path, "{ not valid json", "utf-8");
+
+    await notifyDailyCapReached(FUND, 5, { totalUsd: 5.32, sessionCount: 7, entries: [] });
+
+    // Did not throw, alert fired, state file rewritten cleanly with today's date
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const stateAfter = JSON.parse(await readFile(path, "utf-8"));
+    const today = new Date().toISOString().split("T")[0];
+    expect(stateAfter.alerted_for_date).toBe(today);
+  });
 });

@@ -405,24 +405,34 @@ export interface FundDailyUsage {
 }
 
 /** Per-fund map of today's USD usage + cap + threshold percentage.
- *  Used by `fundx status` and the dashboard. */
+ *  Used by `fundx status` and the dashboard.
+ *  Per-fund failures are logged and the fund is omitted from the map — one
+ *  bad fund (corrupt YAML, unreadable JSONL) must not blank out the whole
+ *  dashboard. */
 export async function getDailyUsagePerFund(): Promise<Map<string, FundDailyUsage>> {
   const result = new Map<string, FundDailyUsage>();
   const fundNames = await listFundNames();
   const globalConfig = await loadGlobalConfig();
 
   for (const name of fundNames) {
-    const fundConfig = await loadFundConfig(name);
-    const cap = resolveDailyCapUsd(fundConfig, globalConfig);
-    const usage = await readTodaysSessionUsage(name);
-    const pct = (usage.totalUsd / cap) * 100;
-    result.set(name, {
-      totalUsd: usage.totalUsd,
-      sessionCount: usage.sessionCount,
-      cap,
-      pct,
-      capped: pct >= 100,
-    });
+    try {
+      const fundConfig = await loadFundConfig(name);
+      const cap = resolveDailyCapUsd(fundConfig, globalConfig);
+      const usage = await readTodaysSessionUsage(name);
+      const pct = (usage.totalUsd / cap) * 100;
+      result.set(name, {
+        totalUsd: usage.totalUsd,
+        sessionCount: usage.sessionCount,
+        cap,
+        pct,
+        capped: pct >= 100,
+      });
+    } catch (err) {
+      console.warn(
+        `[status] daily usage read failed for ${name}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
   return result;
 }

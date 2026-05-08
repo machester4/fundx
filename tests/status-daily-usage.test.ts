@@ -148,4 +148,18 @@ describe("getDailyUsagePerFund", () => {
     const map = await getDailyUsagePerFund();
     expect(map.get(FUND_A)?.cap).toBe(8);
   });
+
+  it("omits a fund whose config load throws — does NOT abort the entire dashboard", async () => {
+    mockedListFundNames.mockResolvedValue([FUND_A, FUND_B]);
+    mockedLoadFundConfig.mockImplementation(async (name: string) => {
+      if (name === FUND_A) throw new Error("corrupt YAML");
+      return FUND_CONFIG_NO_BUDGET;
+    });
+    mockedLoadGlobalConfig.mockResolvedValue({} as never);
+
+    const map = await getDailyUsagePerFund();
+    expect(map.has(FUND_A)).toBe(false);
+    expect(map.get(FUND_B)?.totalUsd).toBe(0);
+    expect(map.get(FUND_B)?.cap).toBe(5);
+  });
 });

@@ -20,6 +20,15 @@ async function readDailyCapState(fundName: string): Promise<DailyCapState> {
     return JSON.parse(raw) as DailyCapState;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    // Corrupt JSON (partial write, manual edit, disk error) must not block
+    // session start forever — treat as fresh state and let next alert overwrite.
+    if (err instanceof SyntaxError) {
+      console.warn(
+        `[daily-cap] corrupt state file for ${fundName}, resetting:`,
+        err.message,
+      );
+      return {};
+    }
     throw err;
   }
 }
