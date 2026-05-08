@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fundPaths } from "../paths.js";
+import { writeJsonAtomic } from "../state.js";
 import { notifyDaemonEvent } from "./daemon.service.js";
 import type { DailyUsage } from "./session-history.service.js";
 
@@ -26,7 +27,7 @@ async function readDailyCapState(fundName: string): Promise<DailyCapState> {
 async function writeDailyCapState(fundName: string, state: DailyCapState): Promise<void> {
   const path = fundPaths(fundName).state.dailyCapState;
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(state, null, 2) + "\n", "utf-8");
+  await writeJsonAtomic(path, state);
 }
 
 /** Send a one-shot per-day Telegram alert when a fund reaches its daily cap.

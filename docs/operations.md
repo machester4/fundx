@@ -82,6 +82,12 @@ If you raised the cap mid-day and want a fresh alert next time it's hit:
 echo '{}' > ~/.fundx/funds/<name>/state/daily_cap_state.json
 ```
 
+**Caveat:** if a "Daily cap reached" alert was already sent in the last
+30 minutes, the daemon's in-process alert dedup (`notifyDaemonEvent`) will
+silently suppress the next one even after clearing this file. Either wait
+30 minutes from the last alert, or restart the daemon (`fundx stop && fundx start`)
+to reset the in-memory dedup map.
+
 ## When to escalate (manual debug needed)
 
 - **Daemon crash loop** ("Max restarts exceeded"): something is crashing on

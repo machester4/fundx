@@ -10,7 +10,9 @@ export interface DailyUsage {
 }
 
 /** Append one V2 session log record as a JSON Lines entry.
- *  Atomic for line-sized writes via POSIX appendFile semantics. */
+ *  Single concurrent writer per fund (the daemon), so interleaving is not
+ *  a concern in normal operation. Lines are well under PIPE_BUF (~4KB) on
+ *  typical config — if SessionLogV2 grows new large fields, revisit. */
 export async function appendSessionLogEntry(
   fundName: string,
   log: SessionLogV2,

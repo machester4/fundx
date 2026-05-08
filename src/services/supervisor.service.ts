@@ -200,8 +200,8 @@ export async function startSupervisor(): Promise<void> {
           `Heartbeat ${Math.round(result.ageMs / 1000)}s old. Sessions may be missed.`,
         );
         heartbeatAlerted = true;
-      } catch {
-        /* best effort */
+      } catch (err) {
+        console.error("[supervisor] heartbeat notify failed:", err);
       }
     } else if (result.shouldRecover) {
       try {
@@ -211,8 +211,8 @@ export async function startSupervisor(): Promise<void> {
           "Heartbeat fresh again after stale period.",
         );
         heartbeatAlerted = false;
-      } catch {
-        /* best effort */
+      } catch (err) {
+        console.error("[supervisor] heartbeat notify failed:", err);
       }
     }
   }, 60_000);
