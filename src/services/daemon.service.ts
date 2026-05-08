@@ -14,6 +14,8 @@ import {
 } from "../paths.js";
 import { listFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
+import { pruneSessionLogJsonl } from "./session-history.service.js";
+import { clearDailyCapAlertState } from "./daily-cap.service.js";
 import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
 import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
@@ -914,7 +916,7 @@ export async function startDaemon(): Promise<void> {
     }
   }, { timezone: "UTC" });
 
-  // Daily cleanup of old news articles and analysis files
+  // Daily cleanup of old news articles and analysis files (also session JSONL prune + cap-alert reset)
   cron.schedule("0 0 * * *", async () => {
     try {
       await cleanOldArticles();
@@ -927,6 +929,21 @@ export async function startDaemon(): Promise<void> {
       await log("[analysis] Old analysis files cleaned up");
     } catch (err) {
       await log(`[analysis] Cleanup error: ${err}`);
+    }
+    // Phase 4: prune session_log.jsonl (90-day retention) + clear daily cap-alert dedup state
+    try {
+      const fundNames = await listFundNames();
+      for (const fundName of fundNames) {
+        try {
+          await pruneSessionLogJsonl(fundName, 90);
+          await clearDailyCapAlertState(fundName);
+        } catch (err) {
+          await log(`[daily-cleanup] failed for fund ${fundName}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+      await log("[daily-cleanup] JSONL pruned + cap-alert state cleared for all funds");
+    } catch (err) {
+      await log(`[daily-cleanup] failed to list funds: ${err instanceof Error ? err.message : err}`);
     }
   }, { timezone: "UTC" });
 
