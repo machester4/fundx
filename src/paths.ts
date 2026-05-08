@@ -132,6 +132,8 @@ export function fundPaths(fundName: string) {
       notifiedMilestones: join(root, "state", "notified_milestones.json"),
       universe: join(root, "state", "universe.json"),
       handoffsDir: join(root, "state", "handoffs"),
+      sessionLogJsonl: join(root, "state", "session_log.jsonl"),
+      dailyCapState: join(root, "state", "daily_cap_state.json"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),
