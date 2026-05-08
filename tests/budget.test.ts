@@ -6,7 +6,7 @@ import {
   globalConfigSchema,
   sessionLogV2Schema,
 } from "../src/types.js";
-import { resolveBudget, buildBudgetAlert } from "../src/services/session.service.js";
+import { resolveBudget, resolveDailyCapUsd, buildBudgetAlert } from "../src/services/session.service.js";
 import type { FundConfig, GlobalConfig } from "../src/types.js";
 
 describe("budgetSchema", () => {
@@ -267,5 +267,29 @@ describe("buildBudgetAlert", () => {
     });
     expect(out).toContain("Fund &amp; &lt;Co&gt;");
     expect(out).not.toContain("Fund & <Co>");
+  });
+});
+
+describe("resolveDailyCapUsd cascade", () => {
+  it("uses fund.budget.dailyCapUsd when set", () => {
+    const fund = baseFund();
+    fund.budget = { dailyCapUsd: 12 };
+    const global = baseGlobal();
+    global.budget = { dailyCapUsd: 8 };
+    expect(resolveDailyCapUsd(fund, global)).toBe(12);
+  });
+
+  it("falls back to global.budget.dailyCapUsd when fund unset", () => {
+    const fund = baseFund();
+    fund.budget = {};
+    const global = baseGlobal();
+    global.budget = { dailyCapUsd: 8 };
+    expect(resolveDailyCapUsd(fund, global)).toBe(8);
+  });
+
+  it("falls back to default of 5 when neither is set", () => {
+    const fund = baseFund();
+    const global = baseGlobal();
+    expect(resolveDailyCapUsd(fund, global)).toBe(5);
   });
 });

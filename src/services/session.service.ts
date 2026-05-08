@@ -31,6 +31,26 @@ const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
  *  (e.g. a custom session type). Generous middle-of-the-road. */
 const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
 
+/** Default daily-per-fund USD cap, used when neither fund nor global config sets one. */
+const DEFAULT_DAILY_CAP_USD = 5;
+
+/** Resolve the daily-per-fund USD cap through a 3-level cascade.
+ *  Most-specific override wins:
+ *    1. fund.budget.dailyCapUsd
+ *    2. global.budget.dailyCapUsd
+ *    3. DEFAULT_DAILY_CAP_USD
+ *  Pure function — no I/O. Tested in tests/budget.test.ts. */
+export function resolveDailyCapUsd(
+  fund: FundConfig,
+  global: GlobalConfig,
+): number {
+  return (
+    fund.budget?.dailyCapUsd ??
+    global.budget?.dailyCapUsd ??
+    DEFAULT_DAILY_CAP_USD
+  );
+}
+
 /** Build the tracker-attached hook + onMessage options shared by both
  *  runAgentQuery invocations (initial call + retry-on-SESSION_EXPIRED).
  *  Extracted to avoid drift between the two call sites. */
