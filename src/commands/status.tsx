@@ -4,7 +4,7 @@ import { Spinner } from "@inkjs/ui";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { useAsyncAction } from "../hooks/useAsyncAction.js";
-import { getAllFundStatuses, getServiceStatuses } from "../services/status.service.js";
+import { getAllFundStatuses, getServiceStatuses, getDailyUsagePerFund, type FundDailyUsage } from "../services/status.service.js";
 import { isDaemonRunning, getDaemonPid } from "../services/daemon.service.js";
 import { getStats as getNewsInspectStats, type ExtendedNewsStats } from "../services/news-inspect.service.js";
 import { SUPERVISOR_PID, DAEMON_HEARTBEAT, NEWS_DIR } from "../paths.js";
@@ -25,6 +25,7 @@ interface SystemInfo {
   newsDir: boolean;
   news: ExtendedNewsStats | null;
   nextCron: NextCronInfo | null;
+  dailyUsage: Map<string, FundDailyUsage>;
 }
 
 async function getSystemInfo(): Promise<SystemInfo> {
@@ -54,6 +55,7 @@ async function getSystemInfo(): Promise<SystemInfo> {
   const services = await getServiceStatuses();
   const newsDir = existsSync(NEWS_DIR);
   const news = newsDir ? await getNewsInspectStats().catch(() => null) : null;
+  const dailyUsage = await getDailyUsagePerFund();
 
   // Next scheduled session
   let nextCron: NextCronInfo | null = null;
@@ -90,6 +92,7 @@ async function getSystemInfo(): Promise<SystemInfo> {
     newsDir,
     news,
     nextCron,
+    dailyUsage,
   };
 }
 
@@ -101,6 +104,20 @@ function formatAge(seconds: number): string {
 
 function Dot({ color }: { color: string }) {
   return <Text color={color}>{"\u25CF"} </Text>;
+}
+
+function DailyUsageLine({ usage }: { usage: FundDailyUsage }) {
+  const pctRounded = Math.round(usage.pct);
+  let color: "redBright" | "yellow" | "white" | "gray" = "gray";
+  if (usage.capped) color = "redBright";
+  else if (usage.pct >= 80) color = "yellow";
+  else if (usage.pct >= 50) color = "white";
+
+  if (usage.capped) {
+    return <Text color={color}>{"\uD83D\uDD34"} today: CAPPED ${usage.totalUsd.toFixed(2)}/${usage.cap}</Text>;
+  }
+  const indicator = usage.pct >= 80 ? " \u26A0\uFE0F" : "";
+  return <Text color={color}>today: ${usage.totalUsd.toFixed(2)}/${usage.cap} ({pctRounded}%){indicator}</Text>;
 }
 
 function newsDotColor(sys: SystemInfo): string {
@@ -208,34 +225,42 @@ export default function Status() {
             <Text dimColor>No funds yet. Run fundx fund create.</Text>
           </Box>
         ) : (
-          funds.data.map((fund) => (
-            <Box key={fund.name} flexDirection="column" marginBottom={1} paddingLeft={2}>
-              <Box gap={1}>
-                <StatusBadge status={fund.status} />
-                <Text bold>{fund.displayName}</Text>
-                <Text dimColor>({fund.name})</Text>
+          funds.data.map((fund) => {
+            const usage = sys?.dailyUsage.get(fund.name);
+            return (
+              <Box key={fund.name} flexDirection="column" marginBottom={1} paddingLeft={2}>
+                <Box gap={1}>
+                  <StatusBadge status={fund.status} />
+                  <Text bold>{fund.displayName}</Text>
+                  <Text dimColor>({fund.name})</Text>
+                </Box>
+                <Box paddingLeft={2} gap={1}>
+                  <Text>${fund.initialCapital.toLocaleString()} → ${fund.currentValue.toLocaleString()}</Text>
+                  <PnlText value={fund.pnl} percentage={fund.pnlPct} />
+                </Box>
+                {fund.progressPct !== null && (
+                  <Box paddingLeft={2}>
+                    <Text dimColor>Progress: {fund.progressPct.toFixed(1)}% — {fund.progressStatus}</Text>
+                  </Box>
+                )}
+                {fund.positions > 0 && (
+                  <Box paddingLeft={2}>
+                    <Text dimColor>Positions: {fund.positions} | Cash: {fund.cashPct.toFixed(0)}%</Text>
+                  </Box>
+                )}
+                {fund.lastSession && (
+                  <Box paddingLeft={2}>
+                    <Text dimColor>Last: {fund.lastSession.type} ({fund.lastSession.startedAt})</Text>
+                  </Box>
+                )}
+                {usage && (
+                  <Box paddingLeft={2}>
+                    <DailyUsageLine usage={usage} />
+                  </Box>
+                )}
               </Box>
-              <Box paddingLeft={2} gap={1}>
-                <Text>${fund.initialCapital.toLocaleString()} → ${fund.currentValue.toLocaleString()}</Text>
-                <PnlText value={fund.pnl} percentage={fund.pnlPct} />
-              </Box>
-              {fund.progressPct !== null && (
-                <Box paddingLeft={2}>
-                  <Text dimColor>Progress: {fund.progressPct.toFixed(1)}% — {fund.progressStatus}</Text>
-                </Box>
-              )}
-              {fund.positions > 0 && (
-                <Box paddingLeft={2}>
-                  <Text dimColor>Positions: {fund.positions} | Cash: {fund.cashPct.toFixed(0)}%</Text>
-                </Box>
-              )}
-              {fund.lastSession && (
-                <Box paddingLeft={2}>
-                  <Text dimColor>Last: {fund.lastSession.type} ({fund.lastSession.startedAt})</Text>
-                </Box>
-              )}
-            </Box>
-          ))
+            );
+          })
         )}
       </Box>
     </Box>
