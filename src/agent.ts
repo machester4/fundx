@@ -16,6 +16,17 @@ import { createMarketDataMcpServer } from "./mcp/market-data.js";
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
 
+/** Node.js error codes that indicate an MCP server subprocess crashed or lost its transport connection */
+const TRANSPORT_ERROR_CODES = new Set(["EPIPE", "ECONNREFUSED", "ECONNRESET", "ENOENT"]);
+
+function isMcpTransportError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as { code?: string }).code;
+    if (code && TRANSPORT_ERROR_CODES.has(code)) return true;
+  }
+  return false;
+}
+
 // ── Types ────────────────────────────────────────────────────
 
 /** Options for running a Claude Agent SDK query scoped to a fund */
@@ -235,91 +246,122 @@ export async function runAgentQuery(
   const childEnv = { ...process.env } as Record<string, string>;
   delete childEnv["CLAUDECODE"];
 
+  let attemptedMcpRetry = false;
   try {
-    for await (const message of query({
-      prompt: options.prompt,
-      options: {
-        model,
-        maxTurns: options.maxTurns ?? 50,
-        maxBudgetUsd:
-          options.maxBudgetUsd ?? globalConfig.max_budget_usd ?? undefined,
-        cwd: paths.root,
-        env: childEnv,
-        systemPrompt: { type: "preset", preset: "claude_code" },
-        settingSources: ["project"],
-        mcpServers,
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
-        abortController,
-        agents: options.agents,
-        ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
-        ...(options.hooks ? { hooks: options.hooks } : {}),
-      },
-    })) {
-      // Forward to optional callback
-      options.onMessage?.(message);
+    retryLoop: while (true) {
+      // Reset all accumulators before each attempt so a retry starts clean
+      output = "";
+      costUsd = 0;
+      numTurns = 0;
+      modelUsage = {};
+      sessionId = "";
+      status = "success";
+      error = undefined;
+      toolHistory.length = 0;
+      activeBlockType = null;
+      activeToolName = null;
+      activeToolStartedAt = null;
 
-      // Track tool invocations via stream events
-      if (message.type === "stream_event") {
-        const event = (message as { event?: unknown }).event as
-          | { type?: string; content_block?: { type?: string; name?: string } }
-          | undefined;
-        if (event?.type === "content_block_start" && event.content_block?.type === "tool_use" && typeof event.content_block.name === "string") {
-          activeBlockType = "tool_use";
-          activeToolName = event.content_block.name;
-          activeToolStartedAt = Date.now();
-        } else if (event?.type === "content_block_stop" && activeBlockType === "tool_use") {
-          if (activeToolName !== null && activeToolStartedAt !== null) {
-            toolHistory.push({
-              name: activeToolName,
-              elapsed: (Date.now() - activeToolStartedAt) / 1000,
-            });
+      try {
+        for await (const message of query({
+          prompt: options.prompt,
+          options: {
+            model,
+            maxTurns: options.maxTurns ?? 50,
+            maxBudgetUsd:
+              options.maxBudgetUsd ?? globalConfig.max_budget_usd ?? undefined,
+            cwd: paths.root,
+            env: childEnv,
+            systemPrompt: { type: "preset", preset: "claude_code" },
+            settingSources: ["project"],
+            mcpServers,
+            permissionMode: "bypassPermissions",
+            allowDangerouslySkipPermissions: true,
+            abortController,
+            agents: options.agents,
+            ...(options.resumeSessionId ? { resume: options.resumeSessionId } : {}),
+            ...(options.hooks ? { hooks: options.hooks } : {}),
+          },
+        })) {
+          // Forward to optional callback
+          options.onMessage?.(message);
+
+          // Track tool invocations via stream events
+          if (message.type === "stream_event") {
+            const event = (message as { event?: unknown }).event as
+              | { type?: string; content_block?: { type?: string; name?: string } }
+              | undefined;
+            if (event?.type === "content_block_start" && event.content_block?.type === "tool_use" && typeof event.content_block.name === "string") {
+              activeBlockType = "tool_use";
+              activeToolName = event.content_block.name;
+              activeToolStartedAt = Date.now();
+            } else if (event?.type === "content_block_stop" && activeBlockType === "tool_use") {
+              if (activeToolName !== null && activeToolStartedAt !== null) {
+                toolHistory.push({
+                  name: activeToolName,
+                  elapsed: (Date.now() - activeToolStartedAt) / 1000,
+                });
+              }
+              activeBlockType = null;
+              activeToolName = null;
+              activeToolStartedAt = null;
+            } else if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
+              activeBlockType = "thinking";
+            } else if (event?.type === "content_block_stop" && activeBlockType === "thinking") {
+              activeBlockType = null;
+            }
           }
-          activeBlockType = null;
-          activeToolName = null;
-          activeToolStartedAt = null;
-        } else if (event?.type === "content_block_start" && event.content_block?.type === "thinking") {
-          activeBlockType = "thinking";
-        } else if (event?.type === "content_block_stop" && activeBlockType === "thinking") {
-          activeBlockType = null;
-        }
-      }
 
-      // Capture result metadata
-      if (message.type === "result") {
-        const result = message as SDKResultMessage;
-        costUsd = result.total_cost_usd;
-        numTurns = result.num_turns;
-        modelUsage = result.modelUsage;
-        sessionId = result.session_id;
+          // Capture result metadata
+          if (message.type === "result") {
+            const result = message as SDKResultMessage;
+            costUsd = result.total_cost_usd;
+            numTurns = result.num_turns;
+            modelUsage = result.modelUsage;
+            sessionId = result.session_id;
 
-        if (result.subtype === "success") {
-          output = result.result;
-        } else {
-          status = mapResultSubtype(result.subtype);
-          error = result.subtype;
-          if ("errors" in result && result.errors?.length) {
-            error = result.errors.join("; ");
+            if (result.subtype === "success") {
+              output = result.result;
+            } else {
+              status = mapResultSubtype(result.subtype);
+              error = result.subtype;
+              if ("errors" in result && result.errors?.length) {
+                error = result.errors.join("; ");
+              }
+            }
+          }
+
+          // Capture session_id from init message
+          if (
+            message.type === "system" &&
+            "subtype" in message &&
+            message.subtype === "init"
+          ) {
+            sessionId = message.session_id;
           }
         }
+        break retryLoop;
+      } catch (err) {
+        if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
+          status = "timeout";
+          error = "Query timed out";
+          break retryLoop;
+        }
+        if (
+          isMcpTransportError(err) &&
+          !attemptedMcpRetry &&
+          costUsd === 0 &&
+          numTurns === 0 &&
+          toolHistory.length === 0
+        ) {
+          attemptedMcpRetry = true;
+          console.warn(`[agent] MCP transport error (${(err as { code?: string }).code}); retrying once`);
+          continue retryLoop;
+        }
+        status = "error";
+        error = err instanceof Error ? err.message : String(err);
+        break retryLoop;
       }
-
-      // Capture session_id from init message
-      if (
-        message.type === "system" &&
-        "subtype" in message &&
-        message.subtype === "init"
-      ) {
-        sessionId = message.session_id;
-      }
-    }
-  } catch (err) {
-    if (err instanceof AbortError || (err instanceof Error && err.name === "AbortError")) {
-      status = "timeout";
-      error = "Query timed out";
-    } else {
-      status = "error";
-      error = err instanceof Error ? err.message : String(err);
     }
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
