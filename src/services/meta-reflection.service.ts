@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { writeFileAtomic, writeJsonAtomic } from "../state.js";
+import { join } from "node:path";
+import { writeFileAtomic, writeJsonAtomic, readPortfolio } from "../state.js";
 import { fundPaths } from "../paths.js";
 import {
   lastConsolidationStateSchema,
@@ -7,11 +8,11 @@ import {
   type FundConfig,
 } from "../types.js";
 import { sessionModePrefix } from "./chat.service.js";
-import { runFundSession } from "./session.service.js";
+import { runFundSession, resolveDailyCapUsd, checkDailyCap } from "./session.service.js";
 import { loadFundConfig } from "./fund.service.js";
-import { readPortfolio } from "../state.js";
 import { openJournal } from "../journal.js";
 import { listHandoffsSince } from "./handoff-archive.service.js";
+import { loadGlobalConfig } from "../config.js";
 
 /** Drop oldest entries beyond `cap`. An "entry" starts with a line matching
  *  `^## YYYY-MM-DD — `. Frontmatter and any prelude text before the first entry
@@ -198,7 +199,7 @@ async function snapshotMemory(fundName: string): Promise<{
     fundNotes: { entries: 0, lastUpdate: "never" },
   };
   for (const f of files) {
-    const filePath = paths.memory + "/" + f.name;
+    const filePath = join(paths.memory, f.name);
     try {
       const content = await readFile(filePath, "utf-8");
       concat += "\n--- " + f.name + " ---\n" + content;
@@ -284,6 +285,22 @@ export async function runMetaReflection(fundName: string): Promise<void> {
   }
 
   const config = await loadFundConfig(fundName);
+  const globalConfig = await loadGlobalConfig();
+  const dailyCap = resolveDailyCapUsd(config, globalConfig);
+  const capCheck = await checkDailyCap(fundName, dailyCap);
+  if (!capCheck.allowed) {
+    await writeConsolidationState(fundName, {
+      cursor_iso: cursor, // do NOT advance
+      last_run_iso: nowIso,
+      status: "skipped_daily_cap",
+      n_handoffs_processed: 0,
+      n_journal_entries: 0,
+      n_lessons_written: 0,
+      cost_usd: 0,
+    });
+    return;
+  }
+
   const portfolio = await readPortfolio(fundName).catch(() => null);
   const portfolioSummary = portfolio
     ? portfolio.positions.length + " positions, $" + portfolio.cash.toFixed(0) + " cash"
@@ -331,7 +348,7 @@ export async function runMetaReflection(fundName: string): Promise<void> {
 
   const paths = fundPaths(fundName);
   for (const [name, cap] of Object.entries(MEMORY_CAPS)) {
-    await enforceMemoryCap(paths.memory + "/" + name, cap);
+    await enforceMemoryCap(join(paths.memory, name), cap);
   }
 
   const after = await snapshotMemory(fundName);
@@ -344,7 +361,9 @@ export async function runMetaReflection(fundName: string): Promise<void> {
     beforeLessonCounts.fundNotes.entries;
 
   const newCursor =
-    handoffs.length > 0 ? handoffs[handoffs.length - 1].mtime.toISOString() : cursor;
+    handoffs.length > 0
+      ? handoffs[handoffs.length - 1].mtime.toISOString()
+      : nowIso;
 
   await writeConsolidationState(fundName, {
     cursor_iso: newCursor,
