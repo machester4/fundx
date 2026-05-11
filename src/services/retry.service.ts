@@ -7,12 +7,12 @@ export interface RetryOptions {
   onRetry?: (attempt: number, err: unknown, delayMs: number) => void;
 }
 
-const DEFAULT_OPTIONS = {
+export const DEFAULT_RETRY_OPTIONS = {
   maxAttempts: 3,
   baseDelayMs: 500,
   maxDelayMs: 8000,
   jitter: true,
-};
+} as const;
 
 function computeDelay(
   attempt: number,
@@ -34,13 +34,12 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   opts: Partial<RetryOptions> & Pick<RetryOptions, "shouldRetry">,
 ): Promise<T> {
-  const merged: RetryOptions = { ...DEFAULT_OPTIONS, ...opts };
-  let lastErr: unknown;
+  const merged: RetryOptions = { ...DEFAULT_RETRY_OPTIONS, ...opts };
+  if (merged.maxAttempts < 1) throw new Error("withRetry: maxAttempts must be >= 1");
   for (let attempt = 1; attempt <= merged.maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      lastErr = err;
       const isLast = attempt === merged.maxAttempts;
       if (isLast || !merged.shouldRetry(err)) throw err;
       const delay = computeDelay(attempt, merged.baseDelayMs, merged.maxDelayMs, merged.jitter);
@@ -48,5 +47,6 @@ export async function withRetry<T>(
       await sleep(delay);
     }
   }
-  throw lastErr;
+  // unreachable: loop always returns or throws
+  throw new Error("withRetry: unreachable");
 }
