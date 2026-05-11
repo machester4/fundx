@@ -22,4 +22,3 @@ export * from "./news.service.js";
 export * from "./news-inspect.service.js";
 export * from "./eval/index.js";
 export * from "./retry.service.js";
-export * from "./auth.service.js";
