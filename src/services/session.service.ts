@@ -62,7 +62,7 @@ const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
 const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
 
 /** Default daily-per-fund USD cap, used when neither fund nor global config sets one. */
-const DEFAULT_DAILY_CAP_USD = 5;
+const DEFAULT_DAILY_CAP_USD = 20;
 
 /** Resolve the daily-per-fund USD cap through a 3-level cascade.
  *  Most-specific override wins:

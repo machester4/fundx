@@ -287,9 +287,9 @@ describe("resolveDailyCapUsd cascade", () => {
     expect(resolveDailyCapUsd(fund, global)).toBe(8);
   });
 
-  it("falls back to default of 5 when neither is set", () => {
+  it("falls back to default of 20 when neither is set", () => {
     const fund = baseFund();
     const global = baseGlobal();
-    expect(resolveDailyCapUsd(fund, global)).toBe(5);
+    expect(resolveDailyCapUsd(fund, global)).toBe(20);
   });
 });

@@ -72,7 +72,7 @@ describe("getDailyUsagePerFund", () => {
     const map = await getDailyUsagePerFund();
     const usage = map.get(FUND_A);
     expect(usage?.totalUsd).toBe(0);
-    expect(usage?.cap).toBe(5);
+    expect(usage?.cap).toBe(20);
     expect(usage?.pct).toBe(0);
     expect(usage?.capped).toBe(false);
   });
@@ -92,12 +92,12 @@ describe("getDailyUsagePerFund", () => {
     const map = await getDailyUsagePerFund();
     expect(map.get(FUND_A)?.totalUsd).toBeCloseTo(2.34, 2);
     expect(map.get(FUND_A)?.sessionCount).toBe(2);
-    expect(map.get(FUND_A)?.pct).toBeCloseTo(46.8, 1);
+    expect(map.get(FUND_A)?.pct).toBeCloseTo(11.7, 1);
   });
 
   it("reports capped=true when total >= cap", async () => {
     const today = new Date().toISOString();
-    const jsonl = JSON.stringify({ fund: FUND_A, session_type: "pre_market", started_at: today, trades_executed: 0, summary: "", cost_usd: 5.12 }) + "\n";
+    const jsonl = JSON.stringify({ fund: FUND_A, session_type: "pre_market", started_at: today, trades_executed: 0, summary: "", cost_usd: 20.12 }) + "\n";
     await writeFile(join(tmpRoot, "funds", FUND_A, "state", "session_log.jsonl"), jsonl, "utf-8");
 
     mockedListFundNames.mockResolvedValue([FUND_A]);
@@ -160,6 +160,6 @@ describe("getDailyUsagePerFund", () => {
     const map = await getDailyUsagePerFund();
     expect(map.has(FUND_A)).toBe(false);
     expect(map.get(FUND_B)?.totalUsd).toBe(0);
-    expect(map.get(FUND_B)?.cap).toBe(5);
+    expect(map.get(FUND_B)?.cap).toBe(20);
   });
 });
