@@ -132,6 +132,10 @@ The daemon runs `meta_reflection` per active fund every Sunday at 18:00 UTC. It 
 
 Per fund, look at `state/last_consolidation.json` — should show `last_run_iso` within the past week and `status: "success"` (or `"no_data"` if the fund had no new activity). Memory files (`memory/*.md`) should grow over time across weeks. The `state/session_log.jsonl` should contain a `session_type: "meta_reflection"` entry from last Sunday.
 
+### After deploying a new version
+
+Run `fundx fund upgrade --all` to propagate the latest skill files (including `memory-consolidation`) to existing funds. New funds get the skill automatically on creation.
+
 ### Backfill on existing funds
 
 For funds with a large handoff archive that pre-dates the feature, run `fundx fund consolidate <name>`. The first run processes everything; subsequent weekly runs only see new handoffs. Watch cost in `state/last_consolidation.json` after the first run.

@@ -184,6 +184,35 @@ describe("enforceMemoryCap", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("handles bold-style (**YYYY-MM-DD —) entries and drops oldest correctly", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fundx-test-"));
+    try {
+      const file = join(dir, "fund-notes.md");
+      // Mix of ## style and ** style entries
+      const boldEntry = (date: string, title: string) =>
+        "**" + date + " — " + title + "**\n\nBody for " + title + ".\n\n";
+      const content =
+        SEED +
+        boldEntry("2026-04-01", "BoldOld1") +
+        ENTRY("2026-04-08", "HashOld2") +
+        boldEntry("2026-05-01", "BoldNewer1") +
+        ENTRY("2026-05-08", "HashNewer2");
+      await writeFile(file, content);
+      await enforceMemoryCap(file, 2);
+      const got = await readFile(file, "utf-8");
+      // Frontmatter preserved
+      expect(got).toContain("description: Market patterns");
+      // Oldest two entries dropped
+      expect(got).not.toContain("BoldOld1");
+      expect(got).not.toContain("HashOld2");
+      // Newest two kept
+      expect(got).toContain("BoldNewer1");
+      expect(got).toContain("HashNewer2");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("consolidation state CRUD", () => {

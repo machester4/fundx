@@ -1494,6 +1494,9 @@ Autonomous scheduled sessions (mode prefix: "Session mode: autonomous scheduled"
 
 In interactive chat or ask sessions, this rule does not apply — context is built by the harness.
 
+## Does Not Apply To
+- \`meta_reflection\` sessions — these read handoffs (do not write one) and append to \`memory/*.md\` (do not update \`objective_tracker.json\` or write a Session Contract). Follow the \`memory-consolidation\` skill instead.
+
 ## What you receive
 You begin each autonomous session with a <state_snapshot> envelope in your first
 user message containing the same artifacts the previous version of this rule
@@ -1536,6 +1539,9 @@ Autonomous scheduled sessions. In interactive chat or ask the user controls when
 the conversation ends, so a rigid checklist doesn't apply — though the underlying
 hygiene (don't claim things you didn't verify, keep handoff fresh if you wrote
 trades) still matters.
+
+## Does Not Apply To
+- \`meta_reflection\` sessions — these read handoffs (do not write one) and append to \`memory/*.md\` (do not update \`objective_tracker.json\` or write a Session Contract). Follow the \`memory-consolidation\` skill instead.
 
 Before ending an autonomous session, verify all of the following:
 

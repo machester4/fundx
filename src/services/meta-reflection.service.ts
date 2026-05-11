@@ -29,7 +29,7 @@ export async function enforceMemoryCap(filePath: string, cap: number): Promise<v
   }
 
   const positions: number[] = [];
-  const re = /^## (\d{4}-\d{2}-\d{2}) — /gm;
+  const re = /^(?:## |\*\*)(\d{4}-\d{2}-\d{2}) — /gm;
   let match: RegExpExecArray | null;
   while ((match = re.exec(content)) !== null) {
     positions.push(match.index);
@@ -203,7 +203,7 @@ async function snapshotMemory(fundName: string): Promise<{
     try {
       const content = await readFile(filePath, "utf-8");
       concat += "\n--- " + f.name + " ---\n" + content;
-      const matches = [...content.matchAll(/^## (\d{4}-\d{2}-\d{2}) — /gm)];
+      const matches = [...content.matchAll(/^(?:## |\*\*)(\d{4}-\d{2}-\d{2}) — /gm)];
       stats[f.key] = {
         entries: matches.length,
         lastUpdate: matches.length > 0 ? matches[matches.length - 1][1] : "never",
