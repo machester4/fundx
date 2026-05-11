@@ -970,12 +970,18 @@ export async function startDaemon(): Promise<void> {
           try {
             const config = await loadFundConfig(fundName);
             if (config.fund.status !== "active") continue;
-            await runMetaReflection(fundName);
+            const locked = await acquireFundLock(fundName, "meta-reflection");
+            if (!locked) {
+              await log(`[meta-reflection] skipping '${fundName}' (lock held)`);
+              continue;
+            }
+            try {
+              await runMetaReflection(fundName);
+            } finally {
+              await releaseFundLock(fundName);
+            }
           } catch (err) {
-            console.warn(
-              "[meta-reflection] " + fundName + " failed:",
-              err instanceof Error ? err.message : err,
-            );
+            await log(`[meta-reflection] '${fundName}' failed: ${err instanceof Error ? err.message : err}`);
           }
         }
       } catch (err) {
