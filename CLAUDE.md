@@ -351,7 +351,8 @@ FundX uses the Claude Agent SDK's native skill and rules system. Instructions li
     │   ├── session-init.md            # autonomous Orient sequence (chat skips it)
     │   ├── session-completion.md      # end-of-session verification
     │   ├── data-access.md             # prefer MCPs over Read/Bash/Glob for fund state
-    │   └── factual-grounding.md       # never cite a price/ratio/stat without retrieving it from a tool this session
+    │   ├── factual-grounding.md       # never cite a price/ratio/stat without retrieving it from a tool this session
+    │   └── web-research.md             # when to use WebSearch/WebFetch for catalysts, sentiment, primary sources (Phase 5+)
     └── skills/
         ├── investment-thesis/SKILL.md
         ├── risk-assessment/SKILL.md

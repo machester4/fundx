@@ -1513,7 +1513,8 @@ from memory.
 
 ## What "specific" means
 
-Numbers that require grounding:
+Numbers that require grounding via the **MCP tools** (NOT web search — MCPs
+are the authoritative source for these):
 - Stock prices, market caps, P/E ratios, EPS, revenue, cash positions
 - Index levels (SPX, VIX, DXY, etc. — call \`get_snapshot\` or \`get_quote\`)
 - Sector performance percentages (\`mcp__market-data__get_sector_performance\`)
@@ -1521,9 +1522,11 @@ Numbers that require grounding:
 - Earnings dates, dividend dates
 - Analyst targets, ratings (\`mcp__sws__sws_screener\` or \`get_quote\`)
 
-Qualitative claims without precise numbers are fine without tool grounding
-("the market has been choppy", "tech has been weak"), but the moment you
-attach a number, that number must be from a tool call this session.
+Qualitative claims, catalysts, narrative, and breaking news are different —
+WebSearch/WebFetch are appropriate sources for those (see \`web-research.md\`).
+You can cite "the FDA issued a complete response letter for $XYZ today" with
+a WebFetch'd source URL even if no MCP exposes that fact. The key invariant:
+**numbers → MCPs, qualitative/catalysts → web is OK**.
 
 ## When data is unavailable
 
@@ -1556,6 +1559,73 @@ All session modes (interactive chat, interactive ask, autonomous scheduled).
 Particularly important for "qué pasa en mercado" / "what's happening" /
 market-regime / news-summary style prompts where the agent might be tempted
 to recall financial figures from training data.
+`,
+  },
+  {
+    fileName: "web-research.md",
+    content: `# Web Research
+
+Why: For catalyst discovery, sentiment analysis, breaking news, regulatory
+filings, and qualitative context, WebSearch and WebFetch reach beyond the
+curated MCP data. The MCPs provide structured fundamentals (prices, ratios,
+financials); the web fills gaps where qualitative signals, primary sources,
+and recent narratives matter.
+
+You have \`WebSearch\` and \`WebFetch\` available. Use them when they materially
+improve a decision; skip them when the MCPs already have what you need.
+
+## When to use
+
+- **Catalyst discovery**: earnings surprises, FDA decisions, M&A announcements,
+  central bank speeches, geopolitical events, lawsuit verdicts. The news MCP
+  (\`mcp__news__list_recent\`) is the starting point — escalate to web when you
+  need depth on a story it surfaces, or when the news MCP missed something.
+- **Sentiment and narrative**: how is a company / sector being discussed today,
+  what's the consensus take vs contrarian view, what are analysts saying after
+  a print.
+- **Primary sources**: SEC filings (10-K, 10-Q, 8-K, 13F), press releases,
+  central bank statements, regulatory documents. WebFetch a known URL is
+  often more reliable than a search for fundamental context.
+- **Specialized research**: industry deep-dives, expert analysis on a specific
+  situation, technical breakdowns of a product or technology.
+- **Verification**: cross-checking a thesis-critical claim against multiple
+  independent sources before committing capital.
+
+## When NOT to use
+
+- Prices, market caps, P/E ratios, EPS, financial statements → use
+  \`mcp__market-data__get_quote\` and friends. These are authoritative there.
+- Historical price data → \`get_quote_history\` from market-data MCP.
+- Routine news headlines → start with \`mcp__news__list_recent\`. Only
+  WebSearch when the MCP doesn't have it or you need depth.
+
+## How to use well
+
+- For each web claim you intend to cite, **WebFetch the source page** rather
+  than trusting the search snippet alone — snippets can be stale, biased, or
+  out of context.
+- Prefer **primary sources** (company press releases, SEC filings, central
+  bank statements) over secondary commentary when both are available.
+- When sources conflict, **surface the conflict** in your analysis rather
+  than silently picking one — that's information the user needs.
+- Cite the **source URL in your analysis markdown** so the user (and future
+  sessions reading the journal) can verify.
+- Judge source credibility yourself — there is no domain allowlist. Treat
+  random blogs differently than Bloomberg / Reuters / FT / SEC.gov / company
+  IR pages. Skepticism scales with how unusual the claim is.
+
+## Applies to
+
+All session modes. Particularly valuable in:
+- Pre-market discovery (catalyst sweep before the open)
+- News-reaction sessions (depth on a story flagged by news MCP)
+- Earnings season (transcripts, post-print analyst takeaways)
+- Special sessions (FOMC commentary, CPI reaction, regulatory events)
+- Thesis construction for any new position (catalyst verification)
+
+When you use WebSearch/WebFetch in a session, mention the sources you
+consulted in the session handoff so the next session knows what external
+context informed your decisions.
 `,
   },
 ];
