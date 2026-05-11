@@ -187,6 +187,11 @@ export async function listFundNames(): Promise<string[]> {
   return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 
+/** Return true if a fund with the given name exists on disk. */
+export function fundExists(fundName: string): boolean {
+  return existsSync(fundPaths(fundName).config);
+}
+
 /** Validate fund name: alphanumeric, hyphens, underscores only */
 export function validateFundName(name: string): string {
   const trimmed = name.trim();
