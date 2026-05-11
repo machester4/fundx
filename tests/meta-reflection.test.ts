@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { lastConsolidationStateSchema } from "../src/types.js";
 import { fundPaths } from "../src/paths.js";
 import { writeFileAtomic } from "../src/state.js";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { listHandoffsSince } from "../src/services/handoff-archive.service.js";
+import { mkdtemp, readFile, rm, mkdir, writeFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -78,6 +79,48 @@ describe("writeFileAtomic", () => {
       const got = await readFile(target, "utf-8");
       expect(got).toBe("v2");
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+async function setupFundDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "fundx-test-"));
+  process.env.FUNDX_HOME = dir;
+  return dir;
+}
+
+describe("listHandoffsSince", () => {
+  it("returns empty array when archive dir does not exist", async () => {
+    const dir = await setupFundDir();
+    try {
+      const result = await listHandoffsSince("fund-x", "1970-01-01T00:00:00.000Z");
+      expect(result).toEqual([]);
+    } finally {
+      delete process.env.FUNDX_HOME;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns handoffs newer than cursor, sorted by mtime ascending", async () => {
+    const dir = await setupFundDir();
+    try {
+      const archive = join(dir, "funds", "fund-x", "state", "handoffs");
+      await mkdir(archive, { recursive: true });
+      const olderPath = join(archive, "2026-04-01T00-00-00_pre_market.md");
+      const newerPath = join(archive, "2026-05-01T00-00-00_post_market.md");
+      await writeFile(olderPath, "older");
+      await writeFile(newerPath, "newer");
+      const olderTs = new Date("2026-04-01T00:00:00Z");
+      const newerTs = new Date("2026-05-01T00:00:00Z");
+      await utimes(olderPath, olderTs, olderTs);
+      await utimes(newerPath, newerTs, newerTs);
+
+      const result = await listHandoffsSince("fund-x", "2026-04-15T00:00:00.000Z");
+      expect(result.map((h) => h.path)).toEqual([newerPath]);
+      expect(result[0].mtime.toISOString()).toBe("2026-05-01T00:00:00.000Z");
+    } finally {
+      delete process.env.FUNDX_HOME;
       await rm(dir, { recursive: true, force: true });
     }
   });

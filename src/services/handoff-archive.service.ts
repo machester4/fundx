@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fundPaths } from "../paths.js";
 
@@ -47,4 +47,40 @@ export async function archiveHandoffIfExists(
     );
     return null;
   }
+}
+
+export interface HandoffArchiveEntry {
+  path: string;
+  mtime: Date;
+}
+
+/** List archived handoff files whose mtime is strictly greater than cursorIso.
+ *  Returns sorted by mtime ascending (oldest first). Returns [] if the archive
+ *  directory does not exist. */
+export async function listHandoffsSince(
+  fundName: string,
+  cursorIso: string,
+): Promise<HandoffArchiveEntry[]> {
+  const paths = fundPaths(fundName);
+  let entries: string[];
+  try {
+    entries = await readdir(paths.state.handoffsDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return [];
+    throw err;
+  }
+
+  const cursor = new Date(cursorIso).getTime();
+  const matches: HandoffArchiveEntry[] = [];
+  for (const name of entries) {
+    if (!name.endsWith(".md")) continue;
+    const fullPath = join(paths.state.handoffsDir, name);
+    const st = await stat(fullPath);
+    if (st.mtimeMs > cursor) {
+      matches.push({ path: fullPath, mtime: new Date(st.mtimeMs) });
+    }
+  }
+  matches.sort((a, b) => a.mtime.getTime() - b.mtime.getTime());
+  return matches;
 }
