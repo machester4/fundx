@@ -40,7 +40,7 @@ export function sessionModePrefix(mode: SessionMode): string {
   if (mode === "interactive-ask") {
     return "Session mode: interactive ask. Read-only one-shot question. The context above contains the fund state — answer from context, calling MCPs only for fresher data. Do not execute trades or modify state files.";
   }
-  return "Session mode: autonomous scheduled. Follow the session-init rule's Orient sequence (read handoff + state files + write Session Contract) before any analysis.";
+  return "Session mode: autonomous scheduled. Follow the session-init rule to orient yourself using the state snapshot provided, then write your Session Contract before any analysis.";
 }
 
 // ── Time Helpers ─────────────────────────────────────────────
@@ -351,7 +351,7 @@ export async function buildFundContext(
 
   try {
     const portfolio = await readPortfolio(fundName);
-    sections.push(`### Portfolio`);
+    sections.push(`<portfolio_state>`);
     sections.push(`Cash: $${portfolio.cash.toFixed(2)}`);
     sections.push(`Total Value: $${portfolio.total_value.toFixed(2)}`);
     sections.push(`Positions: ${portfolio.positions.length}`);
@@ -363,22 +363,24 @@ export async function buildFundContext(
         );
       }
     }
+    sections.push(`</portfolio_state>`);
     sections.push("");
   } catch {
-    sections.push("### Portfolio: unavailable\n");
+    sections.push("<portfolio_state>unavailable</portfolio_state>\n");
   }
 
   try {
     const tracker = await readTracker(fundName);
-    sections.push(`### Objective Progress`);
+    sections.push(`<objective_progress>`);
     sections.push(`Progress: ${tracker.progress_pct.toFixed(1)}%`);
     sections.push(`Status: ${tracker.status}`);
     sections.push(
       `Value: $${tracker.current_value.toFixed(2)} (initial: $${tracker.initial_capital.toFixed(2)})`,
     );
+    sections.push(`</objective_progress>`);
     sections.push("");
   } catch {
-    sections.push("### Objective: unavailable\n");
+    sections.push("<objective_progress>unavailable</objective_progress>\n");
   }
 
   // ── Watchlist section ─────────────────────────────────────────────
@@ -397,8 +399,9 @@ export async function buildFundContext(
       });
 
       if (entries.length === 0) {
-        sections.push("### Watchlist");
+        sections.push("<watchlist>");
         sections.push("empty — run `screen_run` to populate");
+        sections.push("</watchlist>");
         sections.push("");
       } else {
         const sorted = [...entries].sort((a, b) => {
@@ -413,8 +416,8 @@ export async function buildFundContext(
 
         const header =
           entries.length > 5
-            ? `### Watchlist — top 5 of ${entries.length} (by peak_score)`
-            : `### Watchlist (by peak_score)`;
+            ? `<watchlist top="5" total="${entries.length}" sort="peak_score">`
+            : `<watchlist sort="peak_score">`;
         sections.push(header);
         for (const e of top) {
           const days = Math.floor((Date.now() - e.first_surfaced_at) / 86400000);
@@ -427,14 +430,16 @@ export async function buildFundContext(
         if (entries.length > 5) {
           sections.push(`  (${entries.length - 5} more candidates available via screener.watchlist_query)`);
         }
+        sections.push("</watchlist>");
         sections.push("");
       }
     } finally {
       db.close();
     }
   } catch (err) {
-    sections.push("### Watchlist: unavailable");
+    sections.push("<watchlist>unavailable");
     sections.push(`(${(err as Error).message})`);
+    sections.push("</watchlist>");
     sections.push("");
   }
 
@@ -459,8 +464,9 @@ export async function buildFundContext(
   } catch { /* file missing or unreadable — skip */ }
 
   if (freshness.length > 0) {
-    sections.push("### Data freshness");
+    sections.push("<data_freshness>");
     for (const f of freshness) sections.push(`  - ${f}`);
+    sections.push("</data_freshness>");
     sections.push("");
   }
 
@@ -469,7 +475,7 @@ export async function buildFundContext(
     try {
       const summary = getTradeSummary(db, fundName);
       if (summary.total_trades > 0) {
-        sections.push(`### Trade Summary`);
+        sections.push(`<trade_summary>`);
         sections.push(`Total closed trades: ${summary.total_trades}`);
         sections.push(
           `Win rate: ${((summary.winning_trades / summary.total_trades) * 100).toFixed(0)}%`,
@@ -477,6 +483,7 @@ export async function buildFundContext(
         sections.push(`Total P&L: $${summary.total_pnl.toFixed(2)}`);
         sections.push(`Best trade: $${summary.best_trade_pnl.toFixed(2)}`);
         sections.push(`Worst trade: $${summary.worst_trade_pnl.toFixed(2)}`);
+        sections.push(`</trade_summary>`);
         sections.push("");
       }
 
@@ -538,7 +545,7 @@ export async function runChatTurn(
   const cwd = fundName ? fundPaths(fundName).root : WORKSPACE;
 
   const readonlyNote = opts.readonly
-    ? "\nIMPORTANT: This is a READ-ONLY session. Do NOT execute trades or modify state files."
+    ? "\nThis is a read-only session. Do not execute trades or modify state files."
     : "";
 
   const textPrompt = sessionId
@@ -554,14 +561,16 @@ export async function runChatTurn(
         "",
         context,
         "",
-        "## User Message",
+        "<user_message>",
         message,
+        "</user_message>",
       ].join("\n")
     : [
         context,
         "",
-        "## User Message",
+        "<user_message>",
         message,
+        "</user_message>",
       ].join("\n");
 
   // When images are attached, build a multimodal prompt via AsyncIterable<SDKUserMessage>

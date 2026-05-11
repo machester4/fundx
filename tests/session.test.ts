@@ -366,21 +366,19 @@ describe("runFundSession with agents", () => {
     expect(opts.agents["risk-guardian"]).toBeDefined();
   });
 
-  it("adds debate skills prompt when useDebateSkills is true", async () => {
+  it("adds deeper-analysis nudge when useDebateSkills is true", async () => {
     await runFundSession("test-fund", "pre_market", { useDebateSkills: true });
 
     const opts = mockRunAgentQuery.mock.calls[0][0];
-    expect(opts.prompt).toContain("Investment Debate");
-    expect(opts.prompt).toContain("Risk Assessment");
-    expect(opts.prompt).toContain("thorough analysis");
+    expect(opts.prompt).toContain("extra time budget for deeper analysis");
+    expect(opts.prompt).toContain("multiple perspectives");
   });
 
-  it("does not add debate skills prompt by default", async () => {
+  it("does not add deeper-analysis nudge by default", async () => {
     await runFundSession("test-fund", "pre_market");
 
     const opts = mockRunAgentQuery.mock.calls[0][0];
-    expect(opts.prompt).not.toContain("Investment Debate");
-    expect(opts.prompt).not.toContain("thorough analysis");
+    expect(opts.prompt).not.toContain("extra time budget for deeper analysis");
   });
 
   it("prompt references session-init rule", async () => {

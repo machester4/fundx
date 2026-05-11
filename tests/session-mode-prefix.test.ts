@@ -12,8 +12,8 @@ describe("sessionModePrefix", () => {
   it("returns the autonomous-mode line for autonomous-scheduled", () => {
     const out = sessionModePrefix("autonomous-scheduled");
     expect(out).toMatch(/^Session mode: autonomous scheduled\b/);
-    expect(out).toContain("Follow the session-init rule");
-    expect(out).toContain("Orient sequence");
+    expect(out).toContain("session-init rule");
+    expect(out).toContain("state snapshot");
   });
 
   it("returns a single-line string with no embedded newlines", () => {

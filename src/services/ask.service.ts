@@ -93,18 +93,19 @@ export async function runAskQuery(
     ``,
     `You are answering a question about ${isCrossFund ? "multiple funds" : `the fund '${targetFunds[0]}'`}.`,
     ``,
-    `## Question`,
-    question,
-    ``,
-    `## Context`,
+    `<context>`,
     context,
+    `</context>`,
     ``,
     isCrossFund
       ? `Compare and analyze across all funds where relevant. Highlight differences in strategy, performance, and risk.`
       : `Focus your answer on this specific fund's data, history, and context.`,
     ``,
     `Be concise and actionable. Use specific numbers from the context.`,
-    `If you need more data, use the MCP market-data tools.`,
+    ``,
+    `<user_question>`,
+    question,
+    `</user_question>`,
   ].join("\n");
 
   const result = await runAgentQuery({

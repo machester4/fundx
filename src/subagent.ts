@@ -22,7 +22,7 @@ export function buildAnalystAgents(
     "market-research": {
       description:
         "Senior market researcher — analyzes macro environment, sentiment, news catalysts, AND technical setup (price action, trend, volume, momentum) for the fund's holdings and watchlist. Combines former market-analyst + technical-analyst into one assessment.",
-      tools: ["Read", "Write", "WebSearch", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "WebSearch", "WebFetch"],
       prompt: [
         `You are the Senior Market Researcher for fund '${fundName}'.`,
         ``,
@@ -186,7 +186,7 @@ export function buildAnalystAgents(
     "risk-guardian": {
       description:
         "Risk guardian — validates proposed trades against fund constraints, concentration limits, and drawdown budget. Returns APPROVED or REJECTED verdict. This is a hard gate, not advisory.",
-      tools: ["Read", "Write", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write"],
       prompt: [
         `You are the Risk Guardian for fund '${fundName}'.`,
         ``,
@@ -254,9 +254,10 @@ export function buildAnalystAgents(
         `"The trade looks reasonable and within general risk parameters."`,
         `</example>`,
         ``,
-        `Read portfolio.json, objective_tracker.json, and risk constraints from CLAUDE.md.`,
-        `Use broker-local MCP tools to check current positions and account status.`,
+        `Use broker-local MCP tools (\`get_account\`, \`get_positions\`) to read current positions and account status — do not Read state files directly.`,
         `Use market-data MCP tools to fetch price data for correlation and stress analysis.`,
+        ``,
+        `Never cite a price, ratio, drawdown number, or correlation value without retrieving it from a tool this session. If data is unavailable, state that explicitly rather than estimating from memory.`,
         ``,
         `## Persist Your Validation`,
         ``,
@@ -291,7 +292,7 @@ export function buildAnalystAgents(
     "trade-evaluator": {
       description:
         "Skeptical reviewer of proposed trades — evaluates thesis quality, checks for cognitive biases, and validates timing rationale. Invoke after forming a trade thesis but before risk-guardian.",
-      tools: ["Read", "Write", "Bash", "Grep", "Glob"],
+      tools: ["Read", "Write", "WebSearch", "WebFetch"],
       prompt: [
         `You are the Trade Evaluator for fund '${fundName}'.`,
         ``,

@@ -53,7 +53,7 @@ describe("buildFundContext — watchlist section", () => {
       watchlist: [],
     });
     const ctx = await buildFundContext(handle.fundName);
-    expect(ctx).toContain("### Watchlist");
+    expect(ctx).toContain("<watchlist>");
     expect(ctx).toMatch(/empty — run `screen_run` to populate/);
   });
 
@@ -69,7 +69,7 @@ describe("buildFundContext — watchlist section", () => {
       ],
     });
     const ctx = await buildFundContext(handle.fundName);
-    expect(ctx).toContain("### Watchlist (by peak_score)");
+    expect(ctx).toContain('<watchlist sort="peak_score">');
     expect(ctx).not.toContain("top 5 of");
     expect(ctx).toContain("NVDA");
     expect(ctx).toContain("[candidate]");
@@ -97,7 +97,7 @@ describe("buildFundContext — watchlist section", () => {
       watchlist,
     });
     const ctx = await buildFundContext(handle.fundName);
-    expect(ctx).toContain("### Watchlist — top 5 of 8 (by peak_score)");
+    expect(ctx).toContain('<watchlist top="5" total="8" sort="peak_score">');
     expect(ctx).toContain("(3 more candidates available via screener.watchlist_query)");
     // First ticker T00 should appear, last ticker T07 should NOT appear in top 5
     expect(ctx).toContain("T00");
@@ -119,7 +119,7 @@ describe("buildFundContext — data freshness section", () => {
       watchlist: [],
     });
     const ctx = await buildFundContext(handle.fundName);
-    expect(ctx).toContain("### Data freshness");
+    expect(ctx).toContain("<data_freshness>");
     expect(ctx).toMatch(/portfolio: updated \d+[smhd] ago/);
     expect(ctx).toMatch(/tracker: updated \d+[smhd] ago/);
   });

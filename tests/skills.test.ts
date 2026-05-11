@@ -216,8 +216,10 @@ describe("WORKSPACE_SKILL", () => {
   });
 
   it("includes creation steps", () => {
-    expect(WORKSPACE_SKILL.content).toContain("## Process");
+    expect(WORKSPACE_SKILL.content).toContain("## Technique");
     expect(WORKSPACE_SKILL.content).toContain("## When to Use");
+    expect(WORKSPACE_SKILL.content).toContain("## When NOT to Use");
+    expect(WORKSPACE_SKILL.content).toContain("## Output Format");
   });
 });
 

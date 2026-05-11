@@ -800,7 +800,7 @@ with reasoning.
     name: "Opportunity Screening",
     dirName: "opportunity-screening",
     description:
-      "Use the screener MCP to find and prioritise new trade candidates from the watchlist. Triggered at Orient and on user request.",
+      "Use the screener MCP to find and prioritise new trade candidates from the watchlist when the portfolio has open capacity or the user asks for ideas.",
     content: `# Opportunity Screening
 
 ## When to Use
@@ -872,12 +872,25 @@ export const WORKSPACE_SKILL: Skill = {
 ## When to Use
 When the user describes an investment goal, strategy, or objective and wants to set up a fund.
 
-## Process
+## When NOT to Use
+- The user is asking about an existing fund (rename, modify, query state) — use the per-fund chat instead
+- The user wants to clone a fund or apply a template — direct them to \`fundx fund clone\` or \`fundx template\` instead
+- The user is exploring possibilities or asking comparison questions without a clear commitment to create — clarify intent first
+
+## Technique
 1. Ask clarifying questions if any of these are missing: initial capital, time horizon, risk tolerance, target assets
 2. Write the complete \`fund_config.yaml\` to \`${WORKSPACE}/funds/<name>/fund_config.yaml\`
 3. Create required subdirectories: \`state/\`, \`analysis/\`, \`scripts/\`, \`reports/\`, \`.claude/\`
 4. The app auto-detects the new fund and completes initialization (state files, CLAUDE.md)
 5. Tell the user: "Type \`/fund <name>\` to start chatting with your new fund's AI manager."
+
+## Output Format
+
+After successfully writing the config and creating directories, confirm with the user:
+- The fund name and directory path created
+- A one-line summary of the objective and risk profile you encoded
+- Instruct them to run \`fundx fund upgrade --name <name>\` to initialize the per-fund CLAUDE.md and skills/rules
+- Suggest the first session command they can run (typically \`fundx session run --fund <name> --type pre_market\` or just \`fundx --fund <name>\` to chat)
 
 ## fund_config.yaml Schema
 
@@ -1006,8 +1019,14 @@ export const FUND_RULES: { fileName: string; content: string }[] = [
     fileName: "state-consistency.md",
     content: `# State & Config Consistency
 
-When the user provides information that changes fund parameters (capital, risk limits,
-allowed assets, objective, etc.), you MUST update ALL affected files — not just one.
+Why: Partial state updates cause silent failures — the daemon's stop-loss monitor
+and dashboard read from different files, and a mismatch (e.g., new position only in
+portfolio.json but not reflected in tracker) shows wrong P&L for days until someone
+spots it.
+
+When fund parameters change (capital, risk limits, allowed assets, objective, etc.),
+update all affected files in the same response. Don't leave the fund in a half-updated
+state.
 
 ## Files that must stay in sync
 
@@ -1186,7 +1205,8 @@ that makes the objective unreachable.
 - Never treat unrealized gains as a cushion to take more risk
 - Never hold a position past an invalidation trigger you identified in the thesis
 
-See the Drawdown Recovery Table in CLAUDE.md frameworks section for the full loss-recovery math.
+A 50% drawdown requires a 100% gain to recover; preservation of capital is the
+foundation of long-term compounding.
 `,
   },
   {
@@ -1410,7 +1430,18 @@ journal beyond the top 10, or older handoffs in archive).
     fileName: "session-completion.md",
     content: `# Session Completion — Verification Required
 
-Before ending any session, verify ALL of the following:
+Why: An incomplete handoff breaks continuity for the next session — the agent that
+picks up the work has no idea what was decided or why. One extra turn of verification
+costs less than a session that has to re-derive context from scratch.
+
+## Applies to
+
+Autonomous scheduled sessions. In interactive chat or ask the user controls when
+the conversation ends, so a rigid checklist doesn't apply — though the underlying
+hygiene (don't claim things you didn't verify, keep handoff fresh if you wrote
+trades) still matters.
+
+Before ending an autonomous session, verify all of the following:
 
 1. **Data-backed claims**: Every recommendation or assessment made this session has
    supporting data retrieved from a tool call THIS session. No claims from memory or
@@ -1626,6 +1657,20 @@ All session modes. Particularly valuable in:
 When you use WebSearch/WebFetch in a session, mention the sources you
 consulted in the session handoff so the next session knows what external
 context informed your decisions.
+
+<example type="good">
+"FDA issued a complete response letter for MRNA's RSV vaccine candidate
+(WebFetch: https://investors.modernatx.com/news-releases/news-release-details/...).
+Filing notes safety concerns in the over-65 cohort. Event-driven bearish
+catalyst — flagging position for review and reducing size in next session."
+</example>
+
+<example type="bad">
+"Moderna shocked the market with a vaccine setback today. The stock is
+expected to fall on this news."
+(No source retrieved, no URL, no verification of "shocked" or "expected to
+fall". Recalled from training data without grounding.)
+</example>
 `,
   },
 ];

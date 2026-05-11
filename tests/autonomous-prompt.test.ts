@@ -50,18 +50,17 @@ describe("buildAutonomousPrompt", () => {
     expect(withNull).not.toContain("## Universe");
   });
 
-  it("includes debate skills paragraph when useDebateSkills=true", () => {
+  it("includes deeper-analysis nudge when useDebateSkills=true", () => {
     const out = buildAutonomousPrompt({ ...baseInput, useDebateSkills: true });
-    expect(out).toContain("prioritize thorough analysis");
-    expect(out).toContain("Investment Debate and Risk Assessment skills");
-    expect(out).toContain("analyst sub-agents (via the Task tool)");
+    expect(out).toContain("extra time budget for deeper analysis");
+    expect(out).toContain("multiple perspectives");
   });
 
-  it("omits debate skills paragraph when useDebateSkills=false or undefined", () => {
+  it("omits deeper-analysis nudge when useDebateSkills=false or undefined", () => {
     const withFalse = buildAutonomousPrompt({ ...baseInput, useDebateSkills: false });
     const withUndefined = buildAutonomousPrompt(baseInput);
-    expect(withFalse).not.toContain("prioritize thorough analysis");
-    expect(withUndefined).not.toContain("prioritize thorough analysis");
+    expect(withFalse).not.toContain("extra time budget for deeper analysis");
+    expect(withUndefined).not.toContain("extra time budget for deeper analysis");
   });
 
   it("uses today's date by default when `today` is not provided", () => {

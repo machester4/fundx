@@ -197,10 +197,7 @@ export function buildAutonomousPrompt(input: BuildAutonomousPromptInput): string
   }
   if (input.useDebateSkills) {
     lines.push(
-      `This session should prioritize thorough analysis. Before any trading decisions,`,
-      `apply your Investment Debate and Risk Assessment skills from your CLAUDE.md.`,
-      `Use your analyst sub-agents (via the Task tool) to gather data from multiple`,
-      `perspectives before making decisions.`,
+      `This session has extra time budget for deeper analysis — gather multiple perspectives before any trade decisions.`,
       ``,
     );
   }
