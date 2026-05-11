@@ -219,3 +219,38 @@ describe("consolidation state CRUD", () => {
     }
   });
 });
+
+describe("buildMetaReflectionPrompt", () => {
+  it("includes all required envelope tags and routes to memory files", async () => {
+    const { buildMetaReflectionPrompt } = await import(
+      "../src/services/meta-reflection.service.js"
+    );
+
+    const prompt = buildMetaReflectionPrompt({
+      fundName: "growth",
+      objective: "Grow capital 2x",
+      portfolioSummary: "3 positions, $35,000 cash, $40,500 total",
+      memoryStats: {
+        marketLessons: { entries: 12, lastUpdate: "2026-05-04" },
+        tradingPatterns: { entries: 5, lastUpdate: "2026-05-04" },
+        fundNotes: { entries: 3, lastUpdate: "2026-04-20" },
+      },
+      lastConsolidationIso: "2026-05-04T18:00:00.000Z",
+      handoffsConcat: "## Handoff 1\n\nSomething important happened\n",
+      journalRows: "AAPL | buy | 2026-05-08 | thesis ...",
+      currentMemory:
+        "(market-lessons content)\n\n(trading-patterns content)\n\n(fund-notes content)",
+    });
+
+    expect(prompt).toContain("Session mode: autonomous scheduled");
+    expect(prompt).toContain("<state_snapshot>");
+    expect(prompt).toContain("Fund: growth");
+    expect(prompt).toContain("<handoffs_to_process>");
+    expect(prompt).toContain("<journal_entries_to_process>");
+    expect(prompt).toContain("<current_memory>");
+    expect(prompt).toContain("<task>");
+    expect(prompt).toContain("market-lessons.md");
+    expect(prompt).toContain("trading-patterns.md");
+    expect(prompt).toContain("fund-notes.md");
+  });
+});
