@@ -613,7 +613,7 @@ export const sessionLogV2Schema = sessionLogSchema.extend({
   num_turns: z.number().optional(),
   session_id: z.string().optional(),
   status: z
-    .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout", "skipped_daily_cap"])
+    .enum(["success", "error_max_turns", "error_max_budget", "error", "timeout", "skipped_daily_cap", "watchdog_killed"])
     .optional(),
   budget_resolved: budgetSchema.optional(),
   handoff_written: z.boolean().optional(),

@@ -58,7 +58,7 @@ export interface AgentQueryResult {
   /** Session ID (can be used for resumption) */
   session_id: string;
   /** Outcome status */
-  status: "success" | "error_max_turns" | "error_max_budget" | "timeout" | "error";
+  status: "success" | "error_max_turns" | "error_max_budget" | "timeout" | "error" | "watchdog_killed";
   /** Error message if status is not "success" */
   error?: string;
   /** Ordered list of tool invocations with elapsed time in seconds */

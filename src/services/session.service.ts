@@ -23,6 +23,30 @@ import type { HookOutput } from "./verdict-tracker.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
+const WATCHDOG_HARD_MS = 20 * 60 * 1000; // 20 minutes
+
+export interface WatchdogInput {
+  now: number;
+  startedAtMs: number;
+  hardCeilingMs: number;
+  queryActive: boolean;
+}
+
+export interface WatchdogResult {
+  shouldKill: boolean;
+  elapsedMs: number;
+}
+
+/** Pure: decide whether the wall-clock watchdog should kill the session.
+ *  Backup mechanism for when SDK timeoutMs/AbortController fails to fire
+ *  (e.g., MCP server in deadlock). */
+export function evaluateWatchdog(input: WatchdogInput): WatchdogResult {
+  const elapsedMs = input.now - input.startedAtMs;
+  return {
+    shouldKill: input.queryActive && elapsedMs > input.hardCeilingMs,
+    elapsedMs,
+  };
+}
 
 /** Hardcoded per-session-type defaults — last layer of the budget cascade
  *  before the global FALLBACK_DEFAULT. Conservative on the high side so a
@@ -341,19 +365,45 @@ export async function runFundSession(
 
   const verdictTracker = new VerdictTracker();
 
+  let queryActive = true;
+  let watchdogFired = false;
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+
+  const watchdogPromise = new Promise<never>((_, reject) => {
+    watchdogTimer = setInterval(() => {
+      const r = evaluateWatchdog({
+        now: Date.now(),
+        startedAtMs,
+        hardCeilingMs: WATCHDOG_HARD_MS,
+        queryActive,
+      });
+      if (r.shouldKill) {
+        watchdogFired = true;
+        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+        reject(new Error(`watchdog_killed after ${Math.round(r.elapsedMs / 1000)}s`));
+      }
+    }, 30_000); // check every 30s
+  });
+
   let result;
   try {
-    result = await runAgentQuery({
-      fundName,
-      prompt,
-      model,
-      maxTurns: effectiveMaxTurns,
-      maxBudgetUsd: effectiveMaxBudgetUsd,
-      timeoutMs: timeout,
-      agents,
-      resumeSessionId: activeSession?.session_id,
-      ...buildTrackerHookOptions(verdictTracker, handoffTracker),
-    });
+    result = await Promise.race([
+      runAgentQuery({
+        fundName,
+        prompt,
+        model,
+        maxTurns: effectiveMaxTurns,
+        maxBudgetUsd: effectiveMaxBudgetUsd,
+        timeoutMs: timeout,
+        agents,
+        resumeSessionId: activeSession?.session_id,
+        ...buildTrackerHookOptions(verdictTracker, handoffTracker),
+      }).finally(() => {
+        queryActive = false;
+        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+      }),
+      watchdogPromise,
+    ]);
 
     // If resumption failed (expired session), retry without resume
     if (
@@ -375,11 +425,32 @@ export async function runFundSession(
       });
     }
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    await notifySession(
-      `\u274C <b>${displayName}</b> — ${sessionType} FAILED\n<i>${escapeHtml(errMsg.slice(0, 400))}</i>`,
-    );
-    throw err;
+    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+    if (watchdogFired) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await notifySession(
+        `\u274C <b>${displayName}</b> — ${sessionType} <b>WATCHDOG KILLED</b>\n<i>${escapeHtml(errMsg)}</i>`,
+      );
+      result = {
+        output: "",
+        cost_usd: 0,
+        duration_ms: Date.now() - startedAtMs,
+        num_turns: 0,
+        usage: {},
+        session_id: "",
+        status: "watchdog_killed" as const,
+        error: errMsg,
+        toolHistory: [],
+        tokens_in: 0,
+        tokens_out: 0,
+      };
+    } else {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await notifySession(
+        `\u274C <b>${displayName}</b> — ${sessionType} FAILED\n<i>${escapeHtml(errMsg.slice(0, 400))}</i>`,
+      );
+      throw err;
+    }
   }
 
   const log: SessionLogV2 = {
