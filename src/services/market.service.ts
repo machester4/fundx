@@ -3,8 +3,46 @@ import { loadGlobalConfig } from "../config.js";
 import { queryArticles } from "./news.service.js";
 import type { MarketIndexSnapshot, NewsHeadline, SectorSnapshot, DashboardMarketData, DailyBar, FmpScreenerFilters } from "../types.js";
 import { SP500_FALLBACK } from "../constants/sp500.js";
+import { withRetry } from "./retry.service.js";
 
 const yf = new YahooFinance();
+
+// ── FMP retry helper ─────────────────────────────────────────
+
+const RETRYABLE_FMP_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+/** Fetch wrapper with backoff retry for transient FMP failures.
+ *  Returns the final Response (even if non-OK after exhausting retries),
+ *  so callers can decide fallback behavior (e.g., switch to Yahoo Finance). */
+export async function fetchFmpWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  let lastResp: Response | null = null;
+  try {
+    return await withRetry(
+      async () => {
+        const resp = await fetch(url, init);
+        if (RETRYABLE_FMP_STATUSES.has(resp.status)) {
+          lastResp = resp;
+          throw new Error(`FMP ${resp.status}`);
+        }
+        return resp;
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 1000,
+        maxDelayMs: 8000,
+        jitter: true,
+        shouldRetry: (err) => err instanceof Error && err.message.startsWith("FMP "),
+        onRetry: (attempt, err, delayMs) => {
+          console.warn(`[retry] fmp ${url.replace(/[?&]apikey=[^&]+/, "")} attempt=${attempt} delay=${delayMs}ms err=${(err as Error).message}`);
+        },
+      },
+    );
+  } catch (err) {
+    // After exhausting retries, return the last Response so callers can choose fallback
+    if (lastResp) return lastResp;
+    throw err;
+  }
+}
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -79,11 +117,11 @@ async function fetchFmpIndices(apiKey: string): Promise<MarketIndexSnapshot[]> {
 
   // Fetch quotes and sparkline bars in parallel
   const [quotesResult, ...barResults] = await Promise.all([
-    fetch(`${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`, {
+    fetchFmpWithRetry(`${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`, {
       signal: AbortSignal.timeout(5000),
     }),
     ...symbols.map((s) =>
-      fetch(`${FMP_BASE}/historical-chart/15min/${s}?apikey=${apiKey}`, {
+      fetchFmpWithRetry(`${FMP_BASE}/historical-chart/15min/${s}?apikey=${apiKey}`, {
         signal: AbortSignal.timeout(5000),
       }).catch(() => null),
     ),
@@ -128,7 +166,7 @@ async function fetchFmpIndices(apiKey: string): Promise<MarketIndexSnapshot[]> {
 
 async function fetchFmpNews(apiKey: string, limit = 5): Promise<NewsHeadline[]> {
   try {
-    const resp = await fetch(
+    const resp = await fetchFmpWithRetry(
       `${FMP_BASE}/stock_news?limit=${limit}&apikey=${apiKey}`,
       { signal: AbortSignal.timeout(5000) },
     );
@@ -161,7 +199,7 @@ async function fetchFmpNews(apiKey: string, limit = 5): Promise<NewsHeadline[]> 
 
 async function fetchFmpMarketClock(apiKey: string): Promise<{ isOpen: boolean }> {
   try {
-    const resp = await fetch(`${FMP_BASE}/is-the-market-open?apikey=${apiKey}`, {
+    const resp = await fetchFmpWithRetry(`${FMP_BASE}/is-the-market-open?apikey=${apiKey}`, {
       signal: AbortSignal.timeout(3000),
     });
 
@@ -180,7 +218,7 @@ async function fetchFmpMarketClock(apiKey: string): Promise<{ isOpen: boolean }>
 async function fetchFmpSectors(apiKey: string): Promise<SectorSnapshot[]> {
   const symbols = Object.keys(SECTOR_ETFS);
   try {
-    const resp = await fetch(
+    const resp = await fetchFmpWithRetry(
       `${FMP_BASE}/quote/${symbols.join(",")}?apikey=${apiKey}`,
       { signal: AbortSignal.timeout(5000) },
     );
