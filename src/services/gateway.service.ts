@@ -3,6 +3,52 @@ import { loadGlobalConfig } from "../config.js";
 import { listFundNames, loadFundConfig, saveFundConfig } from "./fund.service.js";
 import { readPortfolio, readTracker, readSessionLog } from "../state.js";
 import type { GlobalConfig } from "../types.js";
+import { withRetry } from "./retry.service.js";
+
+// ── Telegram retry helper ────────────────────────────────────
+
+const RETRYABLE_TG_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+/** Send a Telegram message with retry backoff on transient failures (429/5xx).
+ *  4xx (other than 429) are config errors and not retried.
+ *  Rethrows after exhausting attempts — callers should NOT depend on Telegram
+ *  delivery for critical paths. */
+export async function telegramSendWithRetry(
+  url: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  await withRetry(
+    async () => {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (RETRYABLE_TG_STATUSES.has(resp.status)) {
+        throw new Error(`Telegram ${resp.status}`);
+      }
+      const data = (await resp.json()) as { ok: boolean; description?: string };
+      if (!data.ok) {
+        throw new Error(`Telegram non-retryable: ${data.description ?? "unknown"}`);
+      }
+    },
+    {
+      maxAttempts: 3,
+      baseDelayMs: 500,
+      maxDelayMs: 4000,
+      jitter: true,
+      shouldRetry: (err) =>
+        err instanceof Error &&
+        err.message.startsWith("Telegram ") &&
+        !err.message.includes("non-retryable"),
+      onRetry: (attempt, err, delayMs) => {
+        console.warn(
+          `[retry] telegram attempt=${attempt} delay=${delayMs}ms err=${(err as Error).message}`,
+        );
+      },
+    },
+  );
+}
 
 // ── Bot instance (module-level for use in daemon) ────────────
 
@@ -373,14 +419,10 @@ export async function sendTelegramNotification(
   const chunks = splitMessage(message, TELEGRAM_MAX_LENGTH);
 
   for (const chunk of chunks) {
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: globalConfig.telegram.chat_id,
-        text: chunk,
-        parse_mode: parseMode,
-      }),
+    await telegramSendWithRetry(url, {
+      chat_id: globalConfig.telegram.chat_id,
+      text: chunk,
+      parse_mode: parseMode,
     });
   }
 }

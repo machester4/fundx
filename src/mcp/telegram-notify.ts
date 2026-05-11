@@ -1,10 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { withRetry } from "../services/retry.service.js";
 
 // ── Telegram REST client ─────────────────────────────────────
 
 const TELEGRAM_API = "https://api.telegram.org";
+const RETRYABLE_TG_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 function getBotToken(): string {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -24,16 +26,38 @@ async function telegramRequest(
 ): Promise<unknown> {
   const token = getBotToken();
   const url = `${TELEGRAM_API}/bot${token}/${method}`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  const data = (await resp.json()) as { ok: boolean; description?: string; result?: unknown };
-  if (!data.ok) {
-    throw new Error(`Telegram API error: ${data.description ?? "unknown error"}`);
-  }
-  return data.result;
+  return withRetry(
+    async () => {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      if (RETRYABLE_TG_STATUSES.has(resp.status)) {
+        throw new Error(`Telegram ${resp.status}`);
+      }
+      const data = (await resp.json()) as { ok: boolean; description?: string; result?: unknown };
+      if (!data.ok) {
+        throw new Error(`Telegram non-retryable: ${data.description ?? "unknown error"}`);
+      }
+      return data.result;
+    },
+    {
+      maxAttempts: 3,
+      baseDelayMs: 500,
+      maxDelayMs: 4000,
+      jitter: true,
+      shouldRetry: (err) =>
+        err instanceof Error &&
+        err.message.startsWith("Telegram ") &&
+        !err.message.includes("non-retryable"),
+      onRetry: (attempt, err, delayMs) => {
+        console.warn(
+          `[retry] telegram-mcp ${method} attempt=${attempt} delay=${delayMs}ms err=${(err as Error).message}`,
+        );
+      },
+    },
+  );
 }
 
 // ── Notification flag helpers ────────────────────────────────
