@@ -93,19 +93,11 @@ vi.mock("../../src/config.js", () => ({
   })),
 }));
 
-// ── Mock journal.js ───────────────────────────────────────────────────────────
-//    The real journal schema uses `timestamp`/`closed_at`/`price` columns, but
-//    loadJournalSince (in meta-reflection.service.ts) queries `entry_date`,
-//    `exit_date`, `entry_price`, `exit_price` — columns that don't exist.
-//    This is a schema mismatch bug in loadJournalSince (see DONE_WITH_CONCERNS
-//    note in the commit message). Mocking here lets the integration test pass
-//    while the bug is tracked separately.
-vi.mock("../../src/journal.js", () => ({
-  openJournal: vi.fn(() => ({
-    prepare: () => ({ all: () => [] }),
-    close: () => undefined,
-  })),
-}));
+// ── journal.js is NOT mocked ──────────────────────────────────────────────────
+//    openJournal() uses fundPaths() which is redirected to the tmpdir via
+//    FUNDX_HOME. It auto-creates an empty SQLite DB with the correct schema on
+//    first access. loadJournalSince now queries the real column names
+//    (timestamp, closed_at, price, close_price) so no mock is needed.
 
 // ── Imports after mocks ───────────────────────────────────────────────────────
 import {

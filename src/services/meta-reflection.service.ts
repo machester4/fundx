@@ -222,23 +222,23 @@ function loadJournalSince(
   fundName: string,
   cursorIso: string,
 ): { rows: string; count: number } {
-  const cursorDate = cursorIso.slice(0, 10);
   const db = openJournal(fundName);
   try {
     const rows = db
       .prepare(
-        "SELECT symbol, side, entry_date, exit_date, entry_price, exit_price, pnl_pct," +
+        "SELECT symbol, side, timestamp, closed_at, price, close_price, pnl_pct," +
           " substr(reasoning, 1, 200) AS reasoning," +
           " substr(lessons_learned, 1, 200) AS lessons_learned" +
           " FROM trades" +
-          " WHERE entry_date >= ? OR exit_date >= ?" +
-          " ORDER BY COALESCE(exit_date, entry_date) ASC",
+          " WHERE fund = ?" +
+          "   AND (timestamp >= ? OR closed_at >= ?)" +
+          " ORDER BY COALESCE(closed_at, timestamp) ASC",
       )
-      .all(cursorDate, cursorDate) as Array<Record<string, unknown>>;
+      .all(fundName, cursorIso, cursorIso) as Array<Record<string, unknown>>;
     const formatted = rows
       .map(
         (r) =>
-          `${r.symbol} | ${r.side} | entry ${r.entry_date} @ ${r.entry_price} | exit ${r.exit_date ?? "open"} @ ${r.exit_price ?? "-"} | pnl ${r.pnl_pct ?? "-"}% | thesis: ${r.reasoning ?? ""} | lessons: ${r.lessons_learned ?? ""}`,
+          `${r.symbol} | ${r.side} | entry ${r.timestamp} @ ${r.price} | exit ${r.closed_at ?? "open"} @ ${r.close_price ?? "-"} | pnl ${r.pnl_pct ?? "-"}% | thesis: ${r.reasoning ?? ""} | lessons: ${r.lessons_learned ?? ""}`,
       )
       .join("\n");
     return { rows: formatted || "(no journal entries since cursor)", count: rows.length };
