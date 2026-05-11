@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Box, Text, useApp } from "ink";
 import { z } from "zod";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
 import {
   loadEvalCases,
   filterCases,
@@ -19,7 +18,6 @@ import {
 } from "../services/chat.service.js";
 import { runAskQuery } from "../services/ask.service.js";
 import { runMetaReflection } from "../services/meta-reflection.service.js";
-import { fundPaths } from "../paths.js";
 import type { EvalCaseResult } from "../types.js";
 
 export const description = "Run the prompt evaluation suite against the chat surface";
@@ -141,27 +139,13 @@ export default function EvalCommand({ options: opts }: Props) {
                 };
               },
               runMetaReflectionEval: async (fundName, _runOpts) => {
-                // runMetaReflection returns void; we capture cost from session_log.jsonl
-                // is not trivially accessible, so we return 0 cost — the session_log
-                // carries authoritative cost separately.
-                const startedAt = Date.now();
+                // runMetaReflection returns void. The runner reads memory files via
+                // readMemoryFilesForJudge and overwrites result.response for the judge,
+                // so there is no need to capture output here.
                 await runMetaReflection(fundName);
-                // Read resulting memory files so the runner can inject them into
-                // final_response for the LLM judge.
-                const paths = fundPaths(fundName);
-                const memFiles = ["market-lessons.md", "trading-patterns.md", "fund-notes.md"];
-                const parts: string[] = [];
-                for (const name of memFiles) {
-                  try {
-                    const content = await readFile(join(paths.memory, name), "utf-8");
-                    parts.push(`=== ${name} ===\n${content}`);
-                  } catch {
-                    parts.push(`=== ${name} ===\n(file not created)`);
-                  }
-                }
                 return {
                   sessionId: "",
-                  response: parts.join("\n\n"),
+                  response: "",
                   costUsd: 0,
                   numTurns: 0,
                   tokensIn: 0,

@@ -5,15 +5,11 @@ runs: 1
 threshold: 1
 fund_state:
   base: growth-with-handoffs
+# NOTE: must_invoke/must_not_invoke/max_turns are not evaluated for meta_reflection
+# surface because runMetaReflection returns void and tool_history is not captured
+# (toolHistory: [], numTurns: 0). The judge dimensions below are the primary quality
+# signal.
 expect:
-  must_invoke:
-    - Read
-    - Write
-  must_not_invoke:
-    - mcp__broker-local__place_order
-    - mcp__broker-local__cancel_order
-    - mcp__telegram-notify__send_trade_alert
-  max_turns: 20
   judge:
     dims:
       specificity: 3
