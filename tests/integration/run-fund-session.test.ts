@@ -271,4 +271,28 @@ describe("integration: runFundSession (mocked SDK)", () => {
       expect(() => JSON.parse(line)).not.toThrow();
     }
   });
+
+  it("watchdog kills a hung session and writes status=watchdog_killed", async () => {
+    // Override runAgentQuery for this test only: never resolves.
+    // Watchdog will fire after _testOnly_watchdog.hardMs.
+    const { runAgentQuery } = await import("../../src/agent.js");
+    vi.mocked(runAgentQuery).mockImplementationOnce(() => new Promise(() => {
+      // never resolves — simulates SDK / MCP deadlock
+    }));
+
+    await runFundSession(FUND_NAME, "mid_session", {
+      _testOnly_watchdog: { hardMs: 150, pollMs: 40 },
+    });
+
+    const sessionLogJsonl = join(tmpRoot, "funds", FUND_NAME, "state", "session_log.jsonl");
+    const raw = await readFile(sessionLogJsonl, "utf-8");
+    const lines = raw.trim().split("\n").filter(Boolean);
+    const last = JSON.parse(lines[lines.length - 1]!);
+
+    expect(last.status).toBe("watchdog_killed");
+    expect(last.fund).toBe(FUND_NAME);
+    expect(last.session_type).toBe("mid_session");
+    expect(last.cost_usd).toBe(0);
+    expect(last.num_turns).toBe(0);
+  }, 5000);
 });

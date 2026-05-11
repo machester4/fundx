@@ -276,7 +276,17 @@ async function notifySession(message: string): Promise<void> {
 export async function runFundSession(
   fundName: string,
   sessionType: string,
-  options?: { focus?: string; useDebateSkills?: boolean; maxTurns?: number; maxDurationMinutes?: number },
+  options?: {
+    focus?: string;
+    useDebateSkills?: boolean;
+    maxTurns?: number;
+    maxDurationMinutes?: number;
+    /** Test-only override for the watchdog hard ceiling + poll interval.
+     *  Production callers should never set this; the default 20min ceiling /
+     *  30s poll applies. Tests inject small values to verify the watchdog
+     *  wiring without waiting minutes. */
+    _testOnly_watchdog?: { hardMs: number; pollMs?: number };
+  },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
   const globalConfig = await loadGlobalConfig();
@@ -368,6 +378,8 @@ export async function runFundSession(
   /** Wrap a single runAgentQuery call with a wall-clock watchdog.
    *  Both the initial call and the SESSION_EXPIRED retry use this helper so
    *  neither can run forever if the SDK timeoutMs/AbortController fails. */
+  const watchdogHardMs = options?._testOnly_watchdog?.hardMs ?? WATCHDOG_HARD_MS;
+  const watchdogPollMs = options?._testOnly_watchdog?.pollMs ?? 30_000;
   const runWithWatchdog = async (queryArgs: Parameters<typeof runAgentQuery>[0]) => {
     let queryActive = true;
     let watchdogFired = false;
@@ -378,7 +390,7 @@ export async function runFundSession(
         const r = evaluateWatchdog({
           now: Date.now(),
           startedAtMs,
-          hardCeilingMs: WATCHDOG_HARD_MS,
+          hardCeilingMs: watchdogHardMs,
           queryActive,
         });
         if (r.shouldKill) {
@@ -386,7 +398,7 @@ export async function runFundSession(
           if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
           reject(new Error(`watchdog_killed after ${Math.round(r.elapsedMs / 1000)}s`));
         }
-      }, 30_000); // check every 30s
+      }, watchdogPollMs);
     });
 
     try {
