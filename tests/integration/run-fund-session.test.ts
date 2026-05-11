@@ -246,7 +246,7 @@ describe("integration: runFundSession (mocked SDK)", () => {
     expect(last.cost_usd).toBe(0.05);
     expect(last.num_turns).toBe(8);
 
-    // 3. daily_cap_state.json absent — cap not breached ($0.05 < default $5)
+    // 3. daily_cap_state.json absent — cap not breached ($0.05 < default $20)
     const dailyCapState = join(
       tmpRoot,
       "funds",

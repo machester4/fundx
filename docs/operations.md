@@ -42,7 +42,7 @@ Edit `~/.fundx/funds/<name>/fund_config.yaml`:
 
 ```yaml
 budget:
-  dailyCapUsd: 10  # default 5
+  dailyCapUsd: 10  # default 20 (raised in Phase 5c)
 ```
 
 No restart needed — the next session reads the updated config.
