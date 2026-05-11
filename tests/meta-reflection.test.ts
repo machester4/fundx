@@ -220,6 +220,15 @@ describe("consolidation state CRUD", () => {
   });
 });
 
+describe("runFundSession promptBuilder override", () => {
+  it("accepts a promptBuilder function in its options shape", () => {
+    const builder: (ctx: { today: string }) => string = (ctx) =>
+      "prompt for " + ctx.today;
+    expect(typeof builder).toBe("function");
+    expect(builder({ today: "2026-05-11" })).toBe("prompt for 2026-05-11");
+  });
+});
+
 describe("buildMetaReflectionPrompt", () => {
   it("includes all required envelope tags and routes to memory files", async () => {
     const { buildMetaReflectionPrompt } = await import(

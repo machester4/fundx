@@ -278,6 +278,11 @@ export async function runFundSession(
     useDebateSkills?: boolean;
     maxTurns?: number;
     maxDurationMinutes?: number;
+    /** Override the default autonomous prompt builder. When provided, the
+     *  caller is responsible for emitting the session-mode prefix and any
+     *  state snapshot. Used by meta-reflection sessions which need a
+     *  different prompt envelope (handoffs + journal + current memory). */
+    promptBuilder?: (ctx: { today: string }) => string;
     /** Test-only override for the watchdog hard ceiling + poll interval.
      *  Production callers should never set this; the default 20min ceiling /
      *  30s poll applies. Tests inject small values to verify the watchdog
@@ -344,15 +349,17 @@ export async function runFundSession(
 
   const stateSnapshot = await buildStateSnapshot(fundName);
 
-  const prompt = buildAutonomousPrompt({
-    fundName,
-    sessionType,
-    focus,
-    universeBlock,
-    useDebateSkills: options?.useDebateSkills,
-    today,
-    stateSnapshot,
-  });
+  const prompt = options?.promptBuilder
+    ? options.promptBuilder({ today })
+    : buildAutonomousPrompt({
+        fundName,
+        sessionType,
+        focus,
+        universeBlock,
+        useDebateSkills: options?.useDebateSkills,
+        today,
+        stateSnapshot,
+      });
 
   const model = config.claude.model || undefined;
   const budget = resolveBudget(config, globalConfig, sessionType);
