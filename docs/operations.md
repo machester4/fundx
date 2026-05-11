@@ -88,6 +88,29 @@ silently suppress the next one even after clearing this file. Either wait
 30 minutes from the last alert, or restart the daemon (`fundx stop && fundx start`)
 to reset the in-memory dedup map.
 
+## Heartbeat smoke test (manual)
+
+Validates the supervisor → daemon heartbeat alert path end-to-end. Run after
+any daemon restart for an unrelated reason — no need to trigger one solely
+for this.
+
+**Prereqs:** Daemon running, Telegram gateway connected.
+
+1. `fundx stop && fundx start`
+2. Find the daemon PID: `cat ~/.fundx/daemon.pid | jq .pid`
+3. `kill -STOP <pid>` to freeze the daemon's event loop
+4. Wait 4 minutes (heartbeat goes stale at 3 min; supervisor checks every 60s)
+5. Confirm Telegram alert "Daemon heartbeat stale" arrived
+6. `kill -CONT <pid>` to resume the daemon
+7. Wait 60 seconds
+8. Confirm Telegram alert "Daemon heartbeat recovered" arrived
+9. Verify `~/.fundx/daemon.heartbeat` mtime is fresh: `stat ~/.fundx/daemon.heartbeat`
+
+**If the alert does not arrive:**
+- Check supervisor logs: `tail -200 ~/.fundx/daemon.log | grep heartbeat`
+- Check Telegram chat-id is correct in `~/.fundx/config.yaml`
+- Check `notifyDaemonEvent` is not being suppressed by quiet hours
+
 ## When to escalate (manual debug needed)
 
 - **Daemon crash loop** ("Max restarts exceeded"): something is crashing on
