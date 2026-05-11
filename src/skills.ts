@@ -896,6 +896,61 @@ Produce a section titled **Opportunity shortlist** with one block per candidate:
 \`\`\`
 `,
   },
+  {
+    name: "Memory Consolidation",
+    dirName: "memory-consolidation",
+    description:
+      "Distill recent handoffs and journal entries into lessons appended to memory/*.md. Use only during meta_reflection sessions, never during trading sessions.",
+    content: `# Memory Consolidation
+
+## When to Use
+Only during sessions started with type \`meta_reflection\`. The session input contains
+\`<handoffs_to_process>\`, \`<journal_entries_to_process>\`, and \`<current_memory>\`.
+
+## When NOT to Use
+- Trading sessions (pre_market / mid_session / post_market / news_reaction): they use
+  session-reflection at end-of-session for per-session writes.
+- If \`<handoffs_to_process>\` and \`<journal_entries_to_process>\` are both empty: the
+  orchestrator should have skipped the SDK call; nothing to do.
+
+## Technique
+1. Read \`<current_memory>\` first to understand what is already recorded.
+2. Scan handoffs chronologically. For each, look for:
+   - Regime-conditioned outcomes ("X strategy worked/failed in regime Y")
+   - Setup invalidations ("X pattern broke down because Y")
+   - Sector/sub-sector behavior tied to specific catalysts
+   - Sizing decisions that paid off or backfired
+   - Calibration evidence ("predicted X, actual Y")
+3. Cross-check journal entries: look for repeated themes across multiple trades
+   that wouldn't be obvious from one handoff.
+4. Aggressive deduplication: if the lesson is already in \`<current_memory>\`, skip it.
+5. Quality over quantity: it is acceptable (and preferable) to write zero new lessons
+   if nothing genuinely new emerged. An average week should produce 2-5 new lessons.
+
+## Anti-patterns
+- "This week the market was volatile." — not specific, not actionable.
+- "AAPL went up." — observation, not lesson.
+- Re-statement of an existing memory entry with different wording — duplication.
+- Generic platitudes ("manage risk", "stick to the plan") — already encoded in skills/rules.
+
+## Output Format
+Use the Write tool to append entries to the appropriate file under \`memory/\`:
+
+\`\`\`markdown
+## YYYY-MM-DD — Concise Title
+
+Body: 1-3 sentences with specific data points (prices, ratios, dates, indicators).
+End with the lesson made explicit.
+\`\`\`
+
+Routing:
+- \`memory/market-lessons.md\` — regime/sector/macro patterns
+- \`memory/trading-patterns.md\` — setup/timing/sizing patterns
+- \`memory/fund-notes.md\` — fund-strategy reflections
+
+Do not modify entries already in the files. Append only.
+`,
+  },
 ];
 
 // ── Workspace skill ────────────────────────────────────────────

@@ -30,8 +30,8 @@ beforeEach(() => {
 });
 
 describe("BUILTIN_SKILLS", () => {
-  it("has 9 fund trading skills", () => {
-    expect(BUILTIN_SKILLS).toHaveLength(9);
+  it("has 10 fund trading skills", () => {
+    expect(BUILTIN_SKILLS).toHaveLength(10);
   });
 
   it("each skill has required fields", () => {
@@ -191,6 +191,18 @@ describe("BUILTIN_SKILLS", () => {
     expect(skill!.content).toContain("Survival Question");
     expect(skill!.content).toContain("barbell");
   });
+
+  it("includes Memory Consolidation skill with meta_reflection sessions", () => {
+    const skill = BUILTIN_SKILLS.find((s) => s.dirName === "memory-consolidation");
+    expect(skill).toBeDefined();
+    expect(skill!.name).toMatch(/Memory Consolidation/i);
+    expect(skill!.description).toMatch(/distill|consolidat/i);
+    expect(skill!.content).toContain("## When to Use");
+    expect(skill!.content).toContain("## When NOT to Use");
+    expect(skill!.content).toContain("## Technique");
+    expect(skill!.content).toContain("## Output Format");
+    expect(skill!.content).toContain("meta_reflection");
+  });
 });
 
 describe("WORKSPACE_SKILL", () => {
@@ -216,9 +228,9 @@ describe("WORKSPACE_SKILL", () => {
 });
 
 describe("getAllSkillNames", () => {
-  it("returns names of all 9 fund skills", () => {
+  it("returns names of all 10 fund skills", () => {
     const names = getAllSkillNames();
-    expect(names).toHaveLength(9);
+    expect(names).toHaveLength(10);
     expect(names).toContain("Investment Thesis");
     expect(names).toContain("Risk Assessment");
     expect(names).toContain("Universe Management");
@@ -228,6 +240,7 @@ describe("getAllSkillNames", () => {
     expect(names).toContain("Session Reflection");
     expect(names).toContain("Portfolio Review");
     expect(names).toContain("Opportunity Screening");
+    expect(names).toContain("Memory Consolidation");
   });
 });
 
@@ -248,7 +261,7 @@ describe("ensureSkillFiles", () => {
   it("creates a subdirectory per skill", async () => {
     await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
     // Each skill should create its own subdirectory
-    expect(mockedMkdir).toHaveBeenCalledTimes(9);
+    expect(mockedMkdir).toHaveBeenCalledTimes(10);
     for (const skill of BUILTIN_SKILLS) {
       expect(mockedMkdir).toHaveBeenCalledWith(
         expect.stringContaining(skill.dirName),
@@ -259,7 +272,7 @@ describe("ensureSkillFiles", () => {
 
   it("writes SKILL.md inside each skill directory", async () => {
     await ensureSkillFiles("/test/.claude", BUILTIN_SKILLS);
-    expect(mockedWriteFile).toHaveBeenCalledTimes(9);
+    expect(mockedWriteFile).toHaveBeenCalledTimes(10);
     const writtenPaths = mockedWriteFile.mock.calls.map((c) => c[0] as string);
     for (const skill of BUILTIN_SKILLS) {
       expect(writtenPaths.some((p) => p.endsWith(`${skill.dirName}/SKILL.md`))).toBe(true);
@@ -277,9 +290,9 @@ describe("ensureSkillFiles", () => {
 });
 
 describe("ensureFundSkillFiles", () => {
-  it("writes all 9 fund skills", async () => {
+  it("writes all 10 fund skills", async () => {
     await ensureFundSkillFiles("/test/fund/.claude");
-    expect(mockedWriteFile).toHaveBeenCalledTimes(9);
+    expect(mockedWriteFile).toHaveBeenCalledTimes(10);
   });
 });
 
