@@ -194,54 +194,89 @@ Only after all checks pass, specify the exact order:
 - Stop-loss price and type
 - Take-profit level (if applicable)
 
-## Output
+## Output Format
 Structured checklist: EV calculation (with drawdown recovery context), dual-method size
 validation, and final order specification or rejection with reason.
 
-## Universe awareness
+## Pre-trade universe check
 
-Before calling \`place_order\` (buy side), validate the ticker via the \`check_universe\` tool on the broker-local MCP. If \`in_universe: false\` and \`exclude_hard_block: false\`, you may proceed by including \`out_of_universe_reason\` (>= 20 chars, material and time-sensitive) in the trade call. If \`exclude_hard_block: true\`, do not attempt the trade — excluded tickers and sectors are set by the mandate and cannot be overridden.
+Before any BUY order, validate the ticker via the universe-management skill's
+\`check_universe\` step. Excluded tickers (hard-blocked by the fund's mandate) cannot be
+traded; out-of-universe tickers require a material catalyst justification. See the
+universe-management skill for the full validation flow.
+`,
+  },
+  {
+    name: "Universe Management",
+    dirName: "universe-management",
+    description:
+      "Validate tickers against the fund's universe before buying, and modify the universe (preset, filters, include/exclude lists) when the user asks.",
+    content: `# Universe Management
 
-Use \`list_universe({ sector })\` when you need to survey what's available in a particular area of your universe.
+## When to Use
+- Before placing a BUY order — validate the ticker via \`check_universe\` (broker-local MCP)
+- When the user asks to change the fund's universe (switch preset, exclude tickers/sectors, add tickers, change filters)
+- When you need to survey what tickers are available in a sector you're considering
+
+## When NOT to Use
+- Routine price or fundamentals lookups → use the \`market-data\` MCP instead
+- SELL orders — universe rules apply to acquisition, not exit
+- Mutating other fund parameters (risk limits, objective, capital) — those need \`fund_config.yaml\` edits with user approval, not \`update_universe\`
+
+## Technique
+
+### Pre-trade ticker validation
+
+Before any \`place_order\` BUY, call \`check_universe({ ticker })\` on the broker-local MCP:
+
+- \`in_universe: true\` → proceed with the order
+- \`in_universe: false, exclude_hard_block: false\` → may proceed by including \`out_of_universe_reason\` (>= 20 chars, material and time-sensitive) in the \`place_order\` call
+- \`exclude_hard_block: true\` → do not trade. Excluded tickers/sectors are set by the mandate and cannot be overridden
 
 <example type="good">
-check_universe({ ticker: "CRWD" }) returned in_universe: true, base_match: true. Proceeding with place_order.
+check_universe({ ticker: "CRWD" }) returned in_universe: true, base_match: true.
+Proceeding with place_order.
 </example>
 
 <example type="good">
 check_universe({ ticker: "NVDA" }) returned in_universe: false, requires_justification: true (NVDA is outside nasdaq100 — hypothetical).
-Thesis: "NVDA announced Q1 beat with forward guidance +$2B above consensus, and the options-implied move is 5% vs historical average 3% — event-driven catalyst within 72h."
+Thesis: "Q1 beat with forward guidance +$2B above consensus, options-implied move 5% vs historical average 3% — event-driven catalyst within 72h."
 Passing this thesis as out_of_universe_reason to place_order.
 </example>
 
 <example type="bad">
-Skipping check_universe because I'm confident AAPL is in sp500.
+Skipping check_universe because I'm confident AAPL is in sp500. (Always check — the
+universe may have been narrowed by include/exclude filters since the preset was set.)
 </example>
+
+### Surveying the universe
+
+- \`list_universe({ sector })\` — see what's available in a particular sector
+- \`list_universe({ verbose: true })\` — see the current universe configuration (preset/filters, include lists, exclude lists). Use this BEFORE mutating to read current state.
 
 ### Modifying the universe
 
-If the user asks to change the fund's universe (e.g., "switch to Nasdaq 100", "exclude TSLA", "only tech stocks"), use the \`update_universe\` tool on the broker-local MCP. Never edit \`fund_config.yaml\` directly — the tool validates the change, writes atomically, invalidates the cache, and regenerates CLAUDE.md.
+When the user asks to change the fund's universe, use \`update_universe\` (broker-local MCP). Never edit \`fund_config.yaml\` directly — the tool validates the change, writes atomically, invalidates the cache, and regenerates CLAUDE.md.
 
 **Tool semantics:**
 - \`mode.preset\` and \`mode.filters\` are mutually exclusive. Passing one switches modes.
-- \`include_tickers\`, \`exclude_tickers\`, \`exclude_sectors\` REPLACE their current lists. To ADD one ticker, first call \`list_universe({ verbose: true })\` to read the current lists, then pass the full new list (existing + added).
+- \`include_tickers\`, \`exclude_tickers\`, \`exclude_sectors\` REPLACE their current lists. To ADD one ticker, first read the current list via \`list_universe({ verbose: true })\`, then pass the full new list (existing + added).
 - Omitted fields stay unchanged.
 - The tool validates and resolves the new universe; check \`output.warnings\` and \`output.resolved.count\` to confirm the change is safe.
 
 <example type="good">
 User: "Exclude TSLA from my universe."
-Me:
 1. list_universe({ verbose: true }) → returns current exclude_tickers: ["FOO"]
 2. update_universe({ exclude_tickers: ["FOO", "TSLA"] }) → validates, writes, returns warnings=[]
 </example>
 
 <example type="good">
 User: "Switch to Nasdaq 100."
-Me: update_universe({ mode: { preset: "nasdaq100" } }) → check output.resolved.count > 0 and output.warnings empty
+update_universe({ mode: { preset: "nasdaq100" } }) → check output.resolved.count > 0 and output.warnings empty
 </example>
 
 <example type="bad">
-update_universe({ exclude_tickers: ["TSLA"] }) without first reading the current list — this REPLACES, so any existing exclusions are lost silently.
+update_universe({ exclude_tickers: ["TSLA"] }) without first reading the current list — REPLACES silently, so any existing exclusions are lost.
 </example>
 
 <example type="bad">
@@ -250,7 +285,7 @@ Editing fund_config.yaml directly with Write/Edit tools — bypasses validation 
 
 ### Preview before committing (dry_run)
 
-When the user asks for a drastic change (switching preset, excluding many sectors), preview first:
+For drastic changes (switching preset, excluding many sectors), preview first:
 
 \`\`\`
 update_universe({ mode: { preset: "nasdaq100" }, dry_run: true })
@@ -258,6 +293,12 @@ update_universe({ mode: { preset: "nasdaq100" }, dry_run: true })
 \`\`\`
 
 If \`warnings\` is empty and \`resolved.count\` looks right, re-run WITHOUT \`dry_run\` to commit. Otherwise report the preview to the user and let them decide.
+
+## Output Format
+
+- **Pre-trade check**: report \`in_universe\`, \`base_match\`, and any required justification. If proceeding with an out-of-universe ticker, quote the justification verbatim.
+- **Survey** (\`list_universe\`): report the count and a representative sample (top 10 by alphabetical or sector).
+- **Modification** (\`update_universe\`): report the diff (before → after), \`resolved.count\`, and any \`warnings\`. If \`dry_run\` was used, explicitly confirm whether to commit.
 `,
   },
   {
