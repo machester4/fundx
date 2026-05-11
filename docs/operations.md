@@ -123,3 +123,21 @@ for this.
 - **JSONL file growing unexpectedly large**: daily cron prune may not be
   running. Check daemon.log for cron errors. Manual prune:
   `node -e "import('./dist/services/session-history.service.js').then(m => m.pruneSessionLogJsonl('<fund>', 90))"`
+
+## Meta-reflection (weekly memory consolidation)
+
+The daemon runs `meta_reflection` per active fund every Sunday at 18:00 UTC. It distills recent handoffs and journal entries into `memory/*.md`.
+
+### Verifying it ran
+
+Per fund, look at `state/last_consolidation.json` — should show `last_run_iso` within the past week and `status: "success"` (or `"no_data"` if the fund had no new activity). Memory files (`memory/*.md`) should grow over time across weeks. The `state/session_log.jsonl` should contain a `session_type: "meta_reflection"` entry from last Sunday.
+
+### Backfill on existing funds
+
+For funds with a large handoff archive that pre-dates the feature, run `fundx fund consolidate <name>`. The first run processes everything; subsequent weekly runs only see new handoffs. Watch cost in `state/last_consolidation.json` after the first run.
+
+### Failure modes
+
+- `status: "error"` — the cursor is NOT advanced, next Sunday will retry. Inspect the `error` field. If error is persistent (3 consecutive weeks), force-advance by deleting `state/last_consolidation.json` (next run starts from epoch) or by editing `cursor_iso` to a recent timestamp.
+- `status: "skipped_daily_cap"` — the fund's daily cap is exhausted. The Sunday slot is normally idle (market closed); investigate whether another job ran heavy on that day.
+- `status: "no_data"` — expected when a fund had no new sessions or trades since the last consolidation. Not a failure.

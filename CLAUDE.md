@@ -315,6 +315,8 @@ When adding a new mode (or extending an existing one):
 4. Add a unit test in `tests/session-mode-prefix.test.ts` for the new branch
 5. Add a content assertion in `tests/skills.test.ts` that `session-init.md` references the new mode
 
+**Meta-reflection session** (`meta_reflection`): a non-trading session triggered weekly by the daemon (Sunday 18:00 UTC) per active fund. It loads handoffs from `state/handoffs/` and trade journal entries since `state/last_consolidation.json`'s cursor, then distills new lessons via the `memory-consolidation` skill and appends them to `memory/*.md` files. Append-only with a hard cap (50 / 50 / 30 entries per file). Skip path on no new data; cursor preserved on error. Manual trigger via `fundx fund consolidate <name>` for backfill or ad-hoc runs.
+
 ### Prompt Testing
 - After modifying any skill, rule, or template in `src/skills.ts` or `src/template.ts`:
   1. Run `pnpm build` to compile
@@ -413,6 +415,7 @@ When implementing fund logic, support these objective types:
 - `objective_tracker.json` — Progress toward fund goal
 - `trade_journal.sqlite` — All trades with reasoning, outcomes, embeddings
 - `session_log.json` — Last session metadata
+- `state/last_consolidation.json` — Tracker for the weekly `meta_reflection` session: cursor (mtime of newest handoff already consolidated), last run timestamp, status (`success`/`no_data`/`skipped_daily_cap`/`error`), counts, and cost. Read by `runMetaReflection` to decide what to process.
 
 ## Development Roadmap (Priority Order)
 
