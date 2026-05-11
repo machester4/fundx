@@ -308,6 +308,11 @@ export const globalConfigSchema = z.object({
     })
     .optional(),
   news: newsConfigSchema.optional(),
+  daemon: z
+    .object({
+      tick_interval_ms: z.number().int().positive().optional(),
+    })
+    .optional(),
   budget: fundBudgetConfigSchema,
 });
 

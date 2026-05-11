@@ -625,7 +625,9 @@ export async function startDaemon(): Promise<void> {
   await rotateLogIfNeeded();
   await checkMissedSessions();
 
-  cron.schedule("* * * * *", async () => {
+  const globalConfig = await loadGlobalConfig();
+
+  const tickFn = async () => {
     // Backpressure: skip if previous tick is still running
     if (isProcessing) {
       await log("Cron tick skipped (previous tick still processing)");
@@ -886,7 +888,17 @@ export async function startDaemon(): Promise<void> {
     } finally {
       isProcessing = false;
     }
-  }, { timezone: "UTC" });
+  };
+
+  const tickIntervalMs = globalConfig.daemon?.tick_interval_ms;
+  if (tickIntervalMs && tickIntervalMs > 0 && tickIntervalMs < 60_000) {
+    // Test-only fast tick (config option, never set in production).
+    // Note: this skips the cron expression layer, so trading-day/time matching
+    // still happens inside tickFn based on real Date.now().
+    setInterval(tickFn, tickIntervalMs);
+  } else {
+    cron.schedule("* * * * *", tickFn, { timezone: "UTC" });
+  }
 
   // SWS token expiry check — daily at 09:00
   cron.schedule("0 9 * * *", () => {
