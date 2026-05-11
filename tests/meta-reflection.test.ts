@@ -3,6 +3,7 @@ import { lastConsolidationStateSchema } from "../src/types.js";
 import { fundPaths } from "../src/paths.js";
 import { writeFileAtomic } from "../src/state.js";
 import { listHandoffsSince } from "../src/services/handoff-archive.service.js";
+import { enforceMemoryCap } from "../src/services/meta-reflection.service.js";
 import { mkdtemp, readFile, rm, mkdir, writeFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -121,6 +122,64 @@ describe("listHandoffsSince", () => {
       expect(result[0].mtime.toISOString()).toBe("2026-05-01T00:00:00.000Z");
     } finally {
       delete process.env.FUNDX_HOME;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const SEED = "---\ndescription: Market patterns and lessons learned by the AI agent\n---\n\n";
+
+const ENTRY = (date: string, title: string) =>
+  "## " + date + " — " + title + "\n\nBody for " + title + ".\n\n";
+
+describe("enforceMemoryCap", () => {
+  it("is a no-op when entries are under the cap", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fundx-test-"));
+    try {
+      const file = join(dir, "market-lessons.md");
+      const content = SEED + ENTRY("2026-05-01", "A") + ENTRY("2026-05-08", "B");
+      await writeFile(file, content);
+      await enforceMemoryCap(file, 10);
+      const got = await readFile(file, "utf-8");
+      expect(got).toBe(content);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drops oldest entries when over cap, preserving frontmatter", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fundx-test-"));
+    try {
+      const file = join(dir, "market-lessons.md");
+      const content =
+        SEED +
+        ENTRY("2026-04-01", "Old1") +
+        ENTRY("2026-04-08", "Old2") +
+        ENTRY("2026-05-01", "Newer1") +
+        ENTRY("2026-05-08", "Newer2");
+      await writeFile(file, content);
+      await enforceMemoryCap(file, 2);
+      const got = await readFile(file, "utf-8");
+      expect(got).toContain("description: Market patterns");
+      expect(got).not.toContain("Old1");
+      expect(got).not.toContain("Old2");
+      expect(got).toContain("Newer1");
+      expect(got).toContain("Newer2");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves seed-only files (no entries)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fundx-test-"));
+    try {
+      const file = join(dir, "market-lessons.md");
+      const content = SEED + "(No observations yet.)\n";
+      await writeFile(file, content);
+      await enforceMemoryCap(file, 10);
+      const got = await readFile(file, "utf-8");
+      expect(got).toBe(content);
+    } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
