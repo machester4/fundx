@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { writeFileAtomic } from "../state.js";
+import { writeFileAtomic, writeJsonAtomic } from "../state.js";
+import { fundPaths } from "../paths.js";
+import { lastConsolidationStateSchema, type LastConsolidationState } from "../types.js";
 
 /** Drop oldest entries beyond `cap`. An "entry" starts with a line matching
  *  `^## YYYY-MM-DD — `. Frontmatter and any prelude text before the first entry
@@ -37,4 +39,29 @@ export async function enforceMemoryCap(filePath: string, cap: number): Promise<v
   const kept = entries.slice(entries.length - cap);
   const rebuilt = prelude + kept.join("");
   await writeFileAtomic(filePath, rebuilt);
+}
+
+/** Read the consolidation tracker for a fund.
+ *  Returns null if the file does not exist (first-run case). */
+export async function readConsolidationState(
+  fundName: string,
+): Promise<LastConsolidationState | null> {
+  const paths = fundPaths(fundName);
+  try {
+    const raw = await readFile(paths.state.lastConsolidation, "utf-8");
+    return lastConsolidationStateSchema.parse(JSON.parse(raw));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+/** Write the consolidation tracker atomically. */
+export async function writeConsolidationState(
+  fundName: string,
+  state: LastConsolidationState,
+): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.lastConsolidation, state);
 }

@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { lastConsolidationStateSchema } from "../src/types.js";
+import type { LastConsolidationState } from "../src/types.js";
 import { fundPaths } from "../src/paths.js";
 import { writeFileAtomic } from "../src/state.js";
 import { listHandoffsSince } from "../src/services/handoff-archive.service.js";
-import { enforceMemoryCap } from "../src/services/meta-reflection.service.js";
+import { enforceMemoryCap, readConsolidationState, writeConsolidationState } from "../src/services/meta-reflection.service.js";
 import { mkdtemp, readFile, rm, mkdir, writeFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -180,6 +181,40 @@ describe("enforceMemoryCap", () => {
       const got = await readFile(file, "utf-8");
       expect(got).toBe(content);
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("consolidation state CRUD", () => {
+  it("returns null when no tracker file exists", async () => {
+    const dir = await setupFundDir();
+    try {
+      const result = await readConsolidationState("fund-x");
+      expect(result).toBeNull();
+    } finally {
+      delete process.env.FUNDX_HOME;
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("round-trips a valid state", async () => {
+    const dir = await setupFundDir();
+    try {
+      const state: LastConsolidationState = {
+        cursor_iso: "2026-05-04T18:00:00.000Z",
+        last_run_iso: "2026-05-04T18:00:00.000Z",
+        status: "success",
+        n_handoffs_processed: 12,
+        n_journal_entries: 3,
+        n_lessons_written: 4,
+        cost_usd: 0.45,
+      };
+      await writeConsolidationState("fund-x", state);
+      const got = await readConsolidationState("fund-x");
+      expect(got).toEqual(state);
+    } finally {
+      delete process.env.FUNDX_HOME;
       await rm(dir, { recursive: true, force: true });
     }
   });
