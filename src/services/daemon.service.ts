@@ -968,6 +968,8 @@ export async function startDaemon(): Promise<void> {
         const fundNames = await listFundNames();
         for (const fundName of fundNames) {
           try {
+            const config = await loadFundConfig(fundName);
+            if (config.fund.status !== "active") continue;
             await runMetaReflection(fundName);
           } catch (err) {
             console.warn(

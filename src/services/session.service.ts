@@ -341,8 +341,12 @@ export async function runFundSession(
   }
   const universeBlock = renderUniverseBlock(universeResolution);
 
-  // Archive previous handoff to state/handoffs/<ts>_<type>.md (no-op on first session)
-  const archivedPath = await archiveHandoffIfExists(fundName, sessionType);
+  // Archive previous handoff to state/handoffs/<ts>_<type>.md (no-op on first session).
+  // Skip for meta_reflection: it writes to memory/*.md, not session-handoff.md, so archiving
+  // would mislabel the previous trading session's handoff as a meta_reflection artifact.
+  const archivedPath = sessionType === "meta_reflection"
+    ? null
+    : await archiveHandoffIfExists(fundName, sessionType);
   if (archivedPath) {
     console.log(`[handoff-archive] archived to ${archivedPath}`);
   }
@@ -568,7 +572,7 @@ export async function runFundSession(
     } catch { /* best effort */ }
   }
 
-  if (log.handoff_written === false && log.status === "success") {
+  if (log.handoff_written === false && log.status === "success" && sessionType !== "meta_reflection") {
     await notifySession(
       `⚠️ <b>${displayName}</b> — ${sessionType} ended successfully but did NOT write a handoff. Next session will read stale state.`,
     );
