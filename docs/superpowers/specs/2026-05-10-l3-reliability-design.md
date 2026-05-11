@@ -19,6 +19,10 @@ Increase harness reliability and autonomy under L3 supervision by:
 - Live broker integration, cross-fund autonomous rebalancing — L4 features.
 - Phase 1c soft-warning at 75% budget — dropped (the user prioritises continuity quality over cost reduction; raising the cap default + relying on hard-kill at 100% is sufficient).
 
+## Implementation deviations (2026-05-10)
+
+- **5a.1 Auth in-place refresh — DROPPED.** Code review of the WIP `reloadAuthToken` helper revealed the design assumption was wrong: `claude_code_oauth_token` does not exist in `globalConfigSchema` and is never written to `~/.fundx/config.yaml`. The token lives only in `process.env.CLAUDE_CODE_OAUTH_TOKEN`, inherited from the user's shell at `fundx start` time. There is no persistent source of truth from which to "reload". Persisting the OAuth token in plain YAML was rejected as a security tradeoff. The current `daemon.needs-restart` path remains (user re-runs `fundx start` after `claude` re-auth in their shell) — visible blip on token expiry, but infrequent (weeks-to-months cadence) and acceptable for L3. Self-healing scope shrinks from 4 → 3 primitives: watchdog, MCP transport retry, FMP/Telegram retries.
+
 ## Architecture & module layout
 
 The work touches four existing service files and adds two new pure helpers + a new integration test directory.
