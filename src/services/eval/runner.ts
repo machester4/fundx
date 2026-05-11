@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fundPaths } from "../../paths.js";
 import type {
   EvalCase,
   EvalCaseResult,
@@ -34,6 +37,14 @@ export interface RunnerDeps {
     question: string,
     opts: { model: string },
   ) => Promise<RunChatTurnResult>;
+  /** Required when any case has surface="meta_reflection". Runs one
+   *  meta-reflection cycle and returns the eval-compatible result shape.
+   *  The `response` field carries the post-run memory file contents for the
+   *  LLM judge to evaluate. */
+  runMetaReflectionEval?: (
+    fundName: string,
+    opts: { model: string },
+  ) => Promise<RunChatTurnResult>;
   buildFundContext: (
     fundName: string,
     opts?: { watchlistDbPath?: string },
@@ -45,6 +56,11 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
   if (caseDef.surface === "ask" && !deps.runAsk) {
     throw new Error(
       `Case "${caseDef.id}" has surface "ask" but RunnerDeps.runAsk was not provided`,
+    );
+  }
+  if (caseDef.surface === "meta_reflection" && !deps.runMetaReflectionEval) {
+    throw new Error(
+      `Case "${caseDef.id}" has surface "meta_reflection" but RunnerDeps.runMetaReflectionEval was not provided`,
     );
   }
   const startedAt = Date.now();
@@ -123,20 +139,33 @@ async function runOnce(
 ): Promise<EvalRunCapture> {
   const startedAt = Date.now();
   try {
-    const result = caseDef.surface === "ask"
-      ? await withTimeout(
-          deps.runAsk!(fundName, caseDef.prompt, { model: deps.model }),
-          deps.timeoutMs,
-        )
-      : await withTimeout(
-          deps.runChatTurn(fundName, undefined, caseDef.prompt, context, {
-            model: deps.model,
-            readonly: true,
-            mcpServers,
-            maxBudgetUsd: 0.5,
-          }),
-          deps.timeoutMs,
-        );
+    let result: RunChatTurnResult;
+    if (caseDef.surface === "ask") {
+      result = await withTimeout(
+        deps.runAsk!(fundName, caseDef.prompt!, { model: deps.model }),
+        deps.timeoutMs,
+      );
+    } else if (caseDef.surface === "meta_reflection") {
+      // Run the meta-reflection cycle, then read the resulting memory files
+      // so the LLM judge can evaluate what was actually written.
+      result = await withTimeout(
+        deps.runMetaReflectionEval!(fundName, { model: deps.model }),
+        deps.timeoutMs,
+      );
+      // Override response with memory file contents for the judge rubric.
+      const memoryContents = await readMemoryFilesForJudge(fundName);
+      result = { ...result, response: memoryContents };
+    } else {
+      result = await withTimeout(
+        deps.runChatTurn(fundName, undefined, caseDef.prompt!, context, {
+          model: deps.model,
+          readonly: true,
+          mcpServers,
+          maxBudgetUsd: 0.5,
+        }),
+        deps.timeoutMs,
+      );
+    }
     return {
       run_index: runIndex,
       passed: false,
@@ -165,6 +194,25 @@ async function runOnce(
       failures: [],
     };
   }
+}
+
+/** Read memory files post-run and concatenate their contents for the LLM judge.
+ *  Returns a formatted string the judge can assess against the rubric. */
+async function readMemoryFilesForJudge(fundName: string): Promise<string> {
+  const paths = fundPaths(fundName);
+  const files = ["market-lessons.md", "trading-patterns.md", "fund-notes.md"];
+  const parts: string[] = [];
+  for (const name of files) {
+    try {
+      const content = await readFile(join(paths.memory, name), "utf-8");
+      parts.push(`=== ${name} ===\n${content}`);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw err;
+      parts.push(`=== ${name} ===\n(file not created)`);
+    }
+  }
+  return parts.join("\n\n");
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

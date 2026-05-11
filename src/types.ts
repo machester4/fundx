@@ -905,12 +905,43 @@ export const evalFundStateSchema = z.object({
     screens: z.array(z.string()).default(["momentum-12-1"]),
     first_surfaced_days_ago: z.number().int().nonnegative().default(7),
   })).default([]),
+  /** Archived handoff files to seed into state/handoffs/ for meta_reflection evals. */
+  handoffs: z.array(z.object({
+    /** ISO timestamp used to derive the archive filename and mtime. */
+    timestamp: z.string(),
+    /** Session type label embedded in the filename (e.g. "pre_market"). */
+    session_type: z.string(),
+    /** Full markdown content of the handoff. */
+    content: z.string(),
+  })).default([]),
+  /** Closed trade rows to seed into the trade journal for meta_reflection evals. */
+  journal: z.array(z.object({
+    symbol: z.string(),
+    /** "buy" or "sell" */
+    side: z.string(),
+    timestamp: z.string(),
+    closed_at: z.string().optional(),
+    price: z.number(),
+    close_price: z.number().optional(),
+    pnl_pct: z.number().optional(),
+    reasoning: z.string().default(""),
+    lessons_learned: z.string().default(""),
+  })).default([]),
 });
 export type EvalFundState = z.infer<typeof evalFundStateSchema>;
 
 // ── LLM-judge schemas (Phase 3b) ────────────────────────────────
 
-export const judgeDimSchema = z.enum(["data_grounding", "task_completion"]);
+export const judgeDimSchema = z.enum([
+  "data_grounding",
+  "task_completion",
+  // meta_reflection judge dims
+  "specificity",
+  "non_duplication",
+  "routing",
+  "format",
+  "restraint",
+]);
 export type JudgeDim = z.infer<typeof judgeDimSchema>;
 
 export const judgeConfigSchema = z.object({
@@ -941,14 +972,20 @@ export type EvalAssertions = z.infer<typeof evalAssertionsSchema>;
 export const evalCaseSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/, "id must be lowercase kebab-case"),
   description: z.string(),
-  prompt: z.string().min(1),
+  /** User prompt to send. Optional only for surface=meta_reflection which has
+   *  no interactive user prompt — the session is driven by the prompt builder. */
+  prompt: z.string().min(1).optional(),
   language: z.enum(["es", "en"]).default("es"),
-  surface: z.enum(["chat", "ask"]).default("chat"),
+  surface: z.enum(["chat", "ask", "meta_reflection"]).default("chat"),
   fund_state: evalFundStateSchema,
   expect: evalAssertionsSchema,
   runs: z.number().int().min(1).max(10).default(3),
   threshold: z.number().int().min(1).default(2),
-}).refine((c) => c.threshold <= c.runs, { message: "threshold must be ≤ runs" });
+}).refine((c) => c.threshold <= c.runs, { message: "threshold must be ≤ runs" })
+  .refine(
+    (c) => c.surface === "meta_reflection" || (c.prompt !== undefined && c.prompt.length > 0),
+    { message: "prompt is required for surface chat and ask" },
+  );
 export type EvalCase = z.infer<typeof evalCaseSchema>;
 
 export const evalFailureSchema = z.object({

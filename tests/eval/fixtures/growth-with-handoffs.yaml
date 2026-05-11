@@ -1,0 +1,119 @@
+# Growth fund with 5 archived handoffs and 3 closed trades.
+# Used for meta_reflection surface eval cases.
+id: growth-with-handoffs
+fund_config:
+  objective: growth
+  risk_profile: aggressive
+  initial_capital: 40000
+portfolio:
+  cash: 35000
+  positions: []
+tracker:
+  progress_pct: 5
+  status: on_track
+watchlist: []
+handoffs:
+  - timestamp: "2026-04-28T13:00:00Z"
+    session_type: pre_market
+    content: |
+      ## Session Contract
+      Check NVDA position vs earnings setup.
+
+      ## What I Did
+      Reviewed NVDA — earnings 5/15. Held position; trailing stop at $850.
+      Regime score: 1.5 (Neutral-Transition boundary).
+
+      ## Open Concerns
+      - NVDA position is 12% — close to 15% cap.
+      - Pre-earnings vol elevated; implied move ±8%.
+
+  - timestamp: "2026-05-01T17:00:00Z"
+    session_type: post_market
+    content: |
+      ## Session Contract
+      Post-market review after CPI release.
+
+      ## What I Did
+      CPI at 3.2% YoY (vs 3.0% expected). Hot print. Small-caps sold off 2.1%.
+      Reduced NVDA from 12% to 8% to free risk budget for tactical trades.
+      Rationale: hot CPI tightens financial conditions; reduce large-cap tech exposure.
+
+      ## Key Numbers
+      - CPI: 3.2% vs 3.0% expected
+      - NVDA trim: 12% → 8% weight
+      - Cash freed: ~$1,600
+
+  - timestamp: "2026-05-04T17:00:00Z"
+    session_type: post_market
+    content: |
+      ## Session Contract
+      Sunday post-market planning.
+
+      ## What I Did
+      Regime score moved 1.5 → 2.1 (Transition). Applied 0.7x sizing multiplier on new entries.
+      PG entered as defensive ballast, 5% position at $143.92/share.
+
+      ## Rationale
+      Transition regime historically favors defensive allocation while momentum
+      signals are mixed. PG selected for dividend yield + low beta.
+
+  - timestamp: "2026-05-06T13:00:00Z"
+    session_type: mid_session
+    content: |
+      ## Session Contract
+      Mid-session check on PG vs MU divergence.
+
+      ## What I Did
+      PG -3.03% on day (closed at $139.56); MU +10.28% on earnings beat.
+      PG thesis (defensive in Transition) was wrong — Transition actually favors
+      cyclicals and growth names. Cut PG at -3.03% loss, redeployed half to MU.
+
+      ## Lesson Flagged
+      Regime-strategy match matters more than beta characteristics. Transition
+      regime (score 2.1) correlates with cyclical outperformance, not defensive.
+
+  - timestamp: "2026-05-08T17:00:00Z"
+    session_type: post_market
+    content: |
+      ## Session Contract
+      Weekly close review.
+
+      ## What I Did
+      MU position closed at +12.4% gain ($92.10 → $103.52). Net week: +1.8%.
+      Risk-budget rebalancing after the CPI print (freeing NVDA allocation)
+      created the runway to enter MU at a favorable price.
+
+      ## Lessons
+      - Regime-strategy match: Transition favors cyclicals.
+      - Half-sizing on MU (binary earnings risk) let upside through while bounding downside.
+      - Risk-budget rebalancing after macro surprises is preferable to thesis-driven exits.
+
+journal:
+  - symbol: PG
+    side: buy
+    timestamp: "2026-05-04T13:00:00Z"
+    closed_at: "2026-05-06T13:00:00Z"
+    price: 143.92
+    close_price: 139.56
+    pnl_pct: -3.03
+    reasoning: "Defensive ballast for Transition regime — low beta, dividend yield."
+    lessons_learned: "Defensive in Transition regime is wrong — Transition favors cyclicals over defensives."
+
+  - symbol: MU
+    side: buy
+    timestamp: "2026-05-04T13:00:00Z"
+    closed_at: "2026-05-08T17:00:00Z"
+    price: 92.10
+    close_price: 103.52
+    pnl_pct: 12.40
+    reasoning: "Cyclical exposure in Transition regime; half-sized for binary earnings risk."
+    lessons_learned: "Half-sizing on binary catalysts let upside through while bounding downside."
+
+  - symbol: NVDA
+    side: sell
+    timestamp: "2026-05-01T17:00:00Z"
+    price: 912.50
+    close_price: 935.00
+    pnl_pct: 2.47
+    reasoning: "Trim NVDA from 12% to 8% weight after CPI hot print (3.2% vs 3.0% expected) to free risk budget."
+    lessons_learned: "Risk-budget rebalancing after macro surprises is preferred to thesis-driven exits."

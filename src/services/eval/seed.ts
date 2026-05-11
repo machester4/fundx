@@ -1,5 +1,5 @@
 // src/services/eval/seed.ts
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -16,6 +16,7 @@ import {
   applyTransitionsForRun,
 } from "../watchlist.service.js";
 import { loadFundConfig } from "../fund.service.js";
+import { openJournal } from "../../journal.js";
 import type { EvalFundState, FundConfig } from "../../types.js";
 
 export interface SeedEvalFundHandle {
@@ -68,6 +69,8 @@ export async function seedEvalFund(
     await ensureFundSkillFiles(paths.claudeDir);
     await ensureFundRules(paths.claudeDir);
     await seedWatchlist(watchlistDbPath, state, fundName);
+    await seedHandoffs(paths.state.handoffsDir, state);
+    await seedJournal(fundName, state);
   } catch (err) {
     await cleanup();
     throw err;
@@ -212,6 +215,61 @@ async function seedWatchlist(dbPath: string, state: EvalFundState, fundName: str
     // production fund-scoped watchlist filter (added to buildFundContext) returns
     // the seeded entries during evaluation.
     tagWatchlistForFundDirect(db, fundName, state.watchlist.map((e) => e.ticker), now);
+  } finally {
+    db.close();
+  }
+}
+
+/** Seed archived handoff files into state/handoffs/.
+ *  Each entry's timestamp is used both in the filename and to set the
+ *  file's mtime so that listHandoffsSince (which filters by mtime) picks
+ *  them up correctly during the meta_reflection eval run. */
+async function seedHandoffs(handoffsDir: string, state: EvalFundState): Promise<void> {
+  if (!state.handoffs || state.handoffs.length === 0) return;
+  await mkdir(handoffsDir, { recursive: true });
+  for (const h of state.handoffs) {
+    const ts = new Date(h.timestamp);
+    const isoTs = ts.toISOString().replace(/:/g, "-");
+    const filename = `${isoTs}_${h.session_type}.md`;
+    const filePath = join(handoffsDir, filename);
+    await writeFile(filePath, h.content, "utf-8");
+    // Set mtime to the declared timestamp so listHandoffsSince filters correctly.
+    await utimes(filePath, ts, ts);
+  }
+}
+
+/** Seed journal rows (closed trades with lessons) into the fund's trade journal
+ *  SQLite database. Only inserts rows if state.journal is non-empty. */
+async function seedJournal(fundName: string, state: EvalFundState): Promise<void> {
+  if (!state.journal || state.journal.length === 0) return;
+  const db = openJournal(fundName);
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO trades (
+        timestamp, fund, symbol, side, quantity, price, total_value,
+        order_type, closed_at, close_price, pnl_pct, reasoning, lessons_learned
+      ) VALUES (
+        @timestamp, @fund, @symbol, @side, @quantity, @price, @total_value,
+        @order_type, @closed_at, @close_price, @pnl_pct, @reasoning, @lessons_learned
+      )
+    `);
+    for (const row of state.journal) {
+      stmt.run({
+        timestamp: row.timestamp,
+        fund: fundName,
+        symbol: row.symbol,
+        side: row.side,
+        quantity: 1,
+        price: row.price,
+        total_value: row.price,
+        order_type: "market",
+        closed_at: row.closed_at ?? null,
+        close_price: row.close_price ?? null,
+        pnl_pct: row.pnl_pct ?? null,
+        reasoning: row.reasoning,
+        lessons_learned: row.lessons_learned,
+      });
+    }
   } finally {
     db.close();
   }
