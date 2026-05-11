@@ -24,12 +24,17 @@ import {
 } from "./types.js";
 import { fundPaths } from "./paths.js";
 
-/** Write JSON atomically: write to .tmp then rename */
-export async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
+/** Write a UTF-8 text file atomically: write to .tmp then rename */
+export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   const tmp = filePath + ".tmp";
-  await writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
+  await writeFile(tmp, content, "utf-8");
   await rename(tmp, filePath);
+}
+
+/** Write JSON atomically: write to .tmp then rename */
+export async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
+  await writeFileAtomic(filePath, JSON.stringify(data, null, 2));
 }
 
 async function readJson(filePath: string): Promise<unknown> {
@@ -272,10 +277,7 @@ export async function readSessionHandoff(fundName: string): Promise<string | nul
 
 export async function writeSessionHandoff(fundName: string, content: string): Promise<void> {
   const paths = fundPaths(fundName);
-  await mkdir(dirname(paths.state.sessionHandoff), { recursive: true });
-  const tmp = paths.state.sessionHandoff + ".tmp";
-  await writeFile(tmp, content, "utf-8");
-  await rename(tmp, paths.state.sessionHandoff);
+  await writeFileAtomic(paths.state.sessionHandoff, content);
 }
 
 // ── Daily Snapshot ────────────────────────────────────────────
