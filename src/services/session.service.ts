@@ -365,47 +365,65 @@ export async function runFundSession(
 
   const verdictTracker = new VerdictTracker();
 
-  let queryActive = true;
-  let watchdogFired = false;
-  let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  /** Wrap a single runAgentQuery call with a wall-clock watchdog.
+   *  Both the initial call and the SESSION_EXPIRED retry use this helper so
+   *  neither can run forever if the SDK timeoutMs/AbortController fails. */
+  const runWithWatchdog = async (queryArgs: Parameters<typeof runAgentQuery>[0]) => {
+    let queryActive = true;
+    let watchdogFired = false;
+    let watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
-  const watchdogPromise = new Promise<never>((_, reject) => {
-    watchdogTimer = setInterval(() => {
-      const r = evaluateWatchdog({
-        now: Date.now(),
-        startedAtMs,
-        hardCeilingMs: WATCHDOG_HARD_MS,
-        queryActive,
-      });
-      if (r.shouldKill) {
-        watchdogFired = true;
-        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
-        reject(new Error(`watchdog_killed after ${Math.round(r.elapsedMs / 1000)}s`));
+    const watchdogPromise = new Promise<never>((_, reject) => {
+      watchdogTimer = setInterval(() => {
+        const r = evaluateWatchdog({
+          now: Date.now(),
+          startedAtMs,
+          hardCeilingMs: WATCHDOG_HARD_MS,
+          queryActive,
+        });
+        if (r.shouldKill) {
+          watchdogFired = true;
+          if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+          reject(new Error(`watchdog_killed after ${Math.round(r.elapsedMs / 1000)}s`));
+        }
+      }, 30_000); // check every 30s
+    });
+
+    try {
+      return await Promise.race([
+        runAgentQuery(queryArgs).finally(() => {
+          queryActive = false;
+          if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+        }),
+        watchdogPromise,
+      ]);
+    } catch (err) {
+      if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
+      if (watchdogFired) {
+        // Re-throw with a sentinel so the outer catch can build the watchdog_killed result
+        const wErr = new Error(err instanceof Error ? err.message : String(err));
+        (wErr as { isWatchdog?: boolean }).isWatchdog = true;
+        throw wErr;
       }
-    }, 30_000); // check every 30s
-  });
+      throw err;
+    }
+  };
 
   let result;
   try {
-    result = await Promise.race([
-      runAgentQuery({
-        fundName,
-        prompt,
-        model,
-        maxTurns: effectiveMaxTurns,
-        maxBudgetUsd: effectiveMaxBudgetUsd,
-        timeoutMs: timeout,
-        agents,
-        resumeSessionId: activeSession?.session_id,
-        ...buildTrackerHookOptions(verdictTracker, handoffTracker),
-      }).finally(() => {
-        queryActive = false;
-        if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
-      }),
-      watchdogPromise,
-    ]);
+    result = await runWithWatchdog({
+      fundName,
+      prompt,
+      model,
+      maxTurns: effectiveMaxTurns,
+      maxBudgetUsd: effectiveMaxBudgetUsd,
+      timeoutMs: timeout,
+      agents,
+      resumeSessionId: activeSession?.session_id,
+      ...buildTrackerHookOptions(verdictTracker, handoffTracker),
+    });
 
-    // If resumption failed (expired session), retry without resume
+    // If resumption failed (expired session), retry without resume — also watchdog-guarded
     if (
       result.status === "error" &&
       activeSession?.session_id &&
@@ -413,7 +431,7 @@ export async function runFundSession(
       SESSION_EXPIRED_PATTERN.test(result.error)
     ) {
       console.warn(`[session] Session ${activeSession.session_id} expired, starting fresh`);
-      result = await runAgentQuery({
+      result = await runWithWatchdog({
         fundName,
         prompt,
         model,
@@ -425,11 +443,10 @@ export async function runFundSession(
       });
     }
   } catch (err) {
-    if (watchdogTimer) { clearInterval(watchdogTimer); watchdogTimer = null; }
-    if (watchdogFired) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if ((err as { isWatchdog?: boolean }).isWatchdog) {
       await notifySession(
-        `\u274C <b>${displayName}</b> — ${sessionType} <b>WATCHDOG KILLED</b>\n<i>${escapeHtml(errMsg)}</i>`,
+        `❌ <b>${displayName}</b> — ${sessionType} <b>WATCHDOG KILLED</b>\n<i>${escapeHtml(errMsg)}</i>`,
       );
       result = {
         output: "",
@@ -445,9 +462,8 @@ export async function runFundSession(
         tokens_out: 0,
       };
     } else {
-      const errMsg = err instanceof Error ? err.message : String(err);
       await notifySession(
-        `\u274C <b>${displayName}</b> — ${sessionType} FAILED\n<i>${escapeHtml(errMsg.slice(0, 400))}</i>`,
+        `❌ <b>${displayName}</b> — ${sessionType} FAILED\n<i>${escapeHtml(errMsg.slice(0, 400))}</i>`,
       );
       throw err;
     }
@@ -477,7 +493,7 @@ export async function runFundSession(
   // Notify session completion
   const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);
   const durationStr = duration < 60 ? `${duration}s` : `${Math.floor(duration / 60)}m ${duration % 60}s`;
-  const statusEmoji = result.status === "success" ? "\u2705" : "\u274C";
+  const statusEmoji = result.status === "success" ? "✅" : "❌";
   const tokensIn = log.tokens_in ?? 0;
   const tokensOut = log.tokens_out ?? 0;
 
@@ -531,7 +547,7 @@ export async function runFundSession(
     try {
       await writeFile(DAEMON_NEEDS_RESTART, new Date().toISOString(), "utf-8");
       await notifySession(
-        `\u26A0\uFE0F <b>[Daemon]</b> Session failed for <b>${displayName}</b> — probable token expiry.\nRestarting daemon to refresh auth...`,
+        `⚠️ <b>[Daemon]</b> Session failed for <b>${displayName}</b> — probable token expiry.\nRestarting daemon to refresh auth...`,
       );
     } catch { /* best effort */ }
   }
