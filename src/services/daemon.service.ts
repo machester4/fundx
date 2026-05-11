@@ -21,6 +21,7 @@ import { checkSpecialSessions } from "./special-sessions.service.js";
 import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
 import { startNewsIpcServer, stopNewsIpcServer } from "./news-ipc.service.js";
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from "./reports.service.js";
+import { runMetaReflection } from "./meta-reflection.service.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
@@ -958,6 +959,29 @@ export async function startDaemon(): Promise<void> {
       await log(`[daily-cleanup] failed to list funds: ${err instanceof Error ? err.message : err}`);
     }
   }, { timezone: "UTC" });
+
+  // Sunday 18:00 UTC: weekly memory consolidation per active fund
+  cron.schedule(
+    "0 18 * * 0",
+    async () => {
+      try {
+        const fundNames = await listFundNames();
+        for (const fundName of fundNames) {
+          try {
+            await runMetaReflection(fundName);
+          } catch (err) {
+            console.warn(
+              "[meta-reflection] " + fundName + " failed:",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+      } catch (err) {
+        await log(`[meta-reflection] failed to list funds: ${err instanceof Error ? err.message : err}`);
+      }
+    },
+    { timezone: "UTC" },
+  );
 
   // Universe cache refresh — 04:00 UTC daily (well before pre-market sessions)
   cron.schedule("0 4 * * *", async () => {
