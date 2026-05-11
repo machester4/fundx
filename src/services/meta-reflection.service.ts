@@ -1,8 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic, writeJsonAtomic } from "../state.js";
 import { fundPaths } from "../paths.js";
-import { lastConsolidationStateSchema, type LastConsolidationState } from "../types.js";
+import {
+  lastConsolidationStateSchema,
+  type LastConsolidationState,
+  type FundConfig,
+} from "../types.js";
 import { sessionModePrefix } from "./chat.service.js";
+import { runFundSession } from "./session.service.js";
+import { loadFundConfig } from "./fund.service.js";
+import { readPortfolio } from "../state.js";
+import { openJournal } from "../journal.js";
+import { listHandoffsSince } from "./handoff-archive.service.js";
 
 /** Drop oldest entries beyond `cap`. An "entry" starts with a line matching
  *  `^## YYYY-MM-DD — `. Frontmatter and any prelude text before the first entry
@@ -144,4 +153,206 @@ export function buildMetaReflectionPrompt(
     `If no genuinely new lesson is worth recording, write nothing — quality over quantity.`,
     `</task>`,
   ].join("\n");
+}
+
+// ── Helpers used only by runMetaReflection ─────────────────────────────────
+
+/** Produce a human-readable one-liner from any objective variant. */
+function describeObjective(config: FundConfig): string {
+  const obj = config.objective;
+  switch (obj.type) {
+    case "custom":
+      return obj.description;
+    case "runway":
+      return `Runway — sustain ${obj.target_months} months at $${obj.monthly_burn}/mo`;
+    case "growth":
+      return obj.target_multiple
+        ? `Growth — ${obj.target_multiple}x capital`
+        : obj.target_amount
+          ? `Growth — reach $${obj.target_amount}`
+          : "Growth";
+    case "accumulation":
+      return `Accumulation — ${obj.target_amount} ${obj.target_asset}`;
+    case "income":
+      return `Income — $${obj.target_monthly_income}/mo`;
+  }
+}
+
+/** Read all three memory files. Returns the concatenated content and
+ *  per-file stats (entry count + last entry date). Returns "" + zero stats
+ *  for files that don't exist yet. */
+async function snapshotMemory(fundName: string): Promise<{
+  concat: string;
+  stats: MemoryStats;
+}> {
+  const paths = fundPaths(fundName);
+  const files = [
+    { name: "market-lessons.md", key: "marketLessons" as const },
+    { name: "trading-patterns.md", key: "tradingPatterns" as const },
+    { name: "fund-notes.md", key: "fundNotes" as const },
+  ];
+  let concat = "";
+  const stats: MemoryStats = {
+    marketLessons: { entries: 0, lastUpdate: "never" },
+    tradingPatterns: { entries: 0, lastUpdate: "never" },
+    fundNotes: { entries: 0, lastUpdate: "never" },
+  };
+  for (const f of files) {
+    const filePath = paths.memory + "/" + f.name;
+    try {
+      const content = await readFile(filePath, "utf-8");
+      concat += "\n--- " + f.name + " ---\n" + content;
+      const matches = [...content.matchAll(/^## (\d{4}-\d{2}-\d{2}) — /gm)];
+      stats[f.key] = {
+        entries: matches.length,
+        lastUpdate: matches.length > 0 ? matches[matches.length - 1][1] : "never",
+      };
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw err;
+    }
+  }
+  return { concat, stats };
+}
+
+/** Read journal rows touched (entry or exit) on or after cursorIso.
+ *  Returns a compact pipe-delimited string suitable for prompt injection. */
+function loadJournalSince(
+  fundName: string,
+  cursorIso: string,
+): { rows: string; count: number } {
+  const cursorDate = cursorIso.slice(0, 10);
+  const db = openJournal(fundName);
+  try {
+    const rows = db
+      .prepare(
+        "SELECT symbol, side, entry_date, exit_date, entry_price, exit_price, pnl_pct," +
+          " substr(reasoning, 1, 200) AS reasoning," +
+          " substr(lessons_learned, 1, 200) AS lessons_learned" +
+          " FROM trades" +
+          " WHERE entry_date >= ? OR exit_date >= ?" +
+          " ORDER BY COALESCE(exit_date, entry_date) ASC",
+      )
+      .all(cursorDate, cursorDate) as Array<Record<string, unknown>>;
+    const formatted = rows
+      .map(
+        (r) =>
+          `${r.symbol} | ${r.side} | entry ${r.entry_date} @ ${r.entry_price} | exit ${r.exit_date ?? "open"} @ ${r.exit_price ?? "-"} | pnl ${r.pnl_pct ?? "-"}% | thesis: ${r.reasoning ?? ""} | lessons: ${r.lessons_learned ?? ""}`,
+      )
+      .join("\n");
+    return { rows: formatted || "(no journal entries since cursor)", count: rows.length };
+  } finally {
+    db.close();
+  }
+}
+
+const MEMORY_CAPS = {
+  "market-lessons.md": 50,
+  "trading-patterns.md": 50,
+  "fund-notes.md": 30,
+} as const;
+
+const EPOCH_ISO = "1970-01-01T00:00:00.000Z";
+
+/** Orchestrate one meta-reflection cycle for a fund.
+ *  Steps:
+ *  1. Read tracker (or virtual epoch on first run).
+ *  2. List new handoffs + journal entries since cursor.
+ *  3. If both empty -> write `no_data` tracker, return.
+ *  4. Build prompt, call runFundSession with the override.
+ *  5. On success: enforce caps + advance cursor + write `success` tracker.
+ *  6. On error: write `error` tracker, do NOT advance cursor. */
+export async function runMetaReflection(fundName: string): Promise<void> {
+  const prev = await readConsolidationState(fundName);
+  const cursor = prev?.cursor_iso ?? EPOCH_ISO;
+  const nowIso = new Date().toISOString();
+
+  const handoffs = await listHandoffsSince(fundName, cursor);
+  const journal = loadJournalSince(fundName, cursor);
+
+  if (handoffs.length === 0 && journal.count === 0) {
+    await writeConsolidationState(fundName, {
+      cursor_iso: cursor,
+      last_run_iso: nowIso,
+      status: "no_data",
+      n_handoffs_processed: 0,
+      n_journal_entries: 0,
+      n_lessons_written: 0,
+      cost_usd: 0,
+    });
+    return;
+  }
+
+  const config = await loadFundConfig(fundName);
+  const portfolio = await readPortfolio(fundName).catch(() => null);
+  const portfolioSummary = portfolio
+    ? portfolio.positions.length + " positions, $" + portfolio.cash.toFixed(0) + " cash"
+    : "(portfolio not yet initialized)";
+
+  const memory = await snapshotMemory(fundName);
+
+  const handoffsConcat = await Promise.all(
+    handoffs.map(
+      async (h) => "\n--- " + h.path + " ---\n" + (await readFile(h.path, "utf-8")),
+    ),
+  ).then((arr) => arr.join("\n"));
+
+  const beforeLessonCounts = memory.stats;
+
+  try {
+    await runFundSession(fundName, "meta_reflection", {
+      focus: "Distill recent handoffs and journal entries into memory/*.md.",
+      promptBuilder: () =>
+        buildMetaReflectionPrompt({
+          fundName,
+          objective: describeObjective(config),
+          portfolioSummary,
+          memoryStats: memory.stats,
+          lastConsolidationIso: cursor,
+          handoffsConcat,
+          journalRows: journal.rows,
+          currentMemory: memory.concat,
+        }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await writeConsolidationState(fundName, {
+      cursor_iso: cursor, // do NOT advance on error
+      last_run_iso: nowIso,
+      status: "error",
+      n_handoffs_processed: 0,
+      n_journal_entries: 0,
+      n_lessons_written: 0,
+      cost_usd: 0,
+      error: message,
+    });
+    return;
+  }
+
+  const paths = fundPaths(fundName);
+  for (const [name, cap] of Object.entries(MEMORY_CAPS)) {
+    await enforceMemoryCap(paths.memory + "/" + name, cap);
+  }
+
+  const after = await snapshotMemory(fundName);
+  const lessonsWritten =
+    after.stats.marketLessons.entries -
+    beforeLessonCounts.marketLessons.entries +
+    after.stats.tradingPatterns.entries -
+    beforeLessonCounts.tradingPatterns.entries +
+    after.stats.fundNotes.entries -
+    beforeLessonCounts.fundNotes.entries;
+
+  const newCursor =
+    handoffs.length > 0 ? handoffs[handoffs.length - 1].mtime.toISOString() : cursor;
+
+  await writeConsolidationState(fundName, {
+    cursor_iso: newCursor,
+    last_run_iso: nowIso,
+    status: "success",
+    n_handoffs_processed: handoffs.length,
+    n_journal_entries: journal.count,
+    n_lessons_written: Math.max(0, lessonsWritten),
+    cost_usd: 0, // session_log.jsonl carries the authoritative cost
+  });
 }
