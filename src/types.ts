@@ -1008,3 +1008,18 @@ export const evalReportSchema = z.object({
   total_judge_cost_usd: z.number().nonnegative().optional(),
 });
 export type EvalReport = z.infer<typeof evalReportSchema>;
+
+// ── Last Consolidation State (meta_reflection tracker) ─────────
+
+export const lastConsolidationStateSchema = z.object({
+  cursor_iso: z.string().datetime(),
+  last_run_iso: z.string().datetime(),
+  status: z.enum(["success", "no_data", "skipped_daily_cap", "error"]),
+  n_handoffs_processed: z.number().int().min(0),
+  n_journal_entries: z.number().int().min(0),
+  n_lessons_written: z.number().int().min(0),
+  cost_usd: z.number().min(0),
+  error: z.string().optional(),
+});
+
+export type LastConsolidationState = z.infer<typeof lastConsolidationStateSchema>;

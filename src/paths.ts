@@ -134,6 +134,7 @@ export function fundPaths(fundName: string) {
       handoffsDir: join(root, "state", "handoffs"),
       sessionLogJsonl: join(root, "state", "session_log.jsonl"),
       dailyCapState: join(root, "state", "daily_cap_state.json"),
+      lastConsolidation: join(root, "state", "last_consolidation.json"),
     },
     analysis: join(root, "analysis"),
     scripts: join(root, "scripts"),
