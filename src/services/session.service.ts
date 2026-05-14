@@ -264,9 +264,14 @@ export function buildBudgetAlert(input: BuildBudgetAlertInput): string {
 /** Send a Telegram notification (best-effort, never throws) */
 async function notifySession(message: string): Promise<void> {
   try {
+    const { notifyGeneric } = await import("./notify.service.js");
+    notifyGeneric("session", message.replace(/<[^>]+>/g, ""));
+  } catch { /* best-effort */ }
+
+  try {
     const { sendTelegramNotification } = await import("./gateway.service.js");
     await sendTelegramNotification(message);
-  } catch { /* best effort */ }
+  } catch { /* best-effort */ }
 }
 
 /** Launch a Claude Code session for a fund */
