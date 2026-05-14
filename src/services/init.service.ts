@@ -71,6 +71,31 @@ Tell the user: "Type \`/fund <name>\` to start chatting with your new fund's AI 
 - **market-data** MCP: Research assets, check prices, read news and macro data
 - **create-fund** skill: Build and write a complete \`fund_config.yaml\`
 - File system: Write files to \`${WORKSPACE}/funds/<name>/\`
+
+## CLI Surface (reference)
+The final CLI is 13 commands. Users invoke them outside this chat:
+
+- \`fundx init\` — workspace setup
+- \`fundx fund create <name>\` — create a new fund
+- \`fundx fund delete <name>\` — delete a fund
+- \`fundx fund upgrade [--all | --name <n>]\` — re-render rules and skills
+- \`fundx fund consolidate <name>\` — manual meta-reflection trigger
+- \`fundx fund refresh-universe <name>\` — refresh the fund's screening universe
+- \`fundx start\` — start the background daemon
+- \`fundx stop\` — stop the daemon
+- \`fundx status\` — fullscreen dashboard + chat REPL
+- \`fundx session run <fund>\` — one-shot manual session
+- \`fundx sws login | logout | status\` — Simply Wall St auth
+- \`fundx eval\` — prompt eval harness
+
+Everything else (charts, reports, correlation, ask, portfolio, trades, performance, logs)
+is reachable through the chat REPL in \`fundx status\` or via autonomous sessions.
+
+## Notifications
+Critical events are surfaced through the OS notification center (macOS Notification
+Center / Linux notify-osd) via \`node-notifier\`. The daemon emits five categories:
+trade executions, stop-loss hits, daily-cap reached, supervisor stalls, and missing
+handoffs. Nothing is sent to any external chat service.
 `;
   await writeFile(WORKSPACE_CLAUDE_MD, content, "utf-8");
 }
