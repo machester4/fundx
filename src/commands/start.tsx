@@ -3,7 +3,7 @@ import { Text } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { forkSupervisor } from "../services/supervisor.service.js";
 
-export const description = "Start the daemon scheduler + Telegram gateway";
+export const description = "Start the daemon (scheduler + journal watcher + meta-reflection cron)";
 
 export default function Start() {
   const [status, setStatus] = useState<"starting" | "done" | "error">("starting");

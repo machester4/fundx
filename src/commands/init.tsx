@@ -7,7 +7,7 @@ import { WizardStep } from "../components/WizardStep.js";
 
 export const description = "Initialize FundX workspace";
 
-type Step = "check" | "timezone" | "model" | "botToken" | "chatId" | "done";
+type Step = "check" | "timezone" | "model" | "done";
 
 export default function Init() {
   const [step, setStep] = useState<Step>("check");
@@ -17,8 +17,6 @@ export default function Init() {
     brokerProvider: "paper",
     apiKey: "",
     secretKey: "",
-    botToken: "",
-    chatId: "",
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +46,7 @@ export default function Init() {
 
   if (step === "timezone") {
     return (
-      <WizardStep step={1} totalSteps={4} title="Default timezone">
+      <WizardStep step={1} totalSteps={2} title="Default timezone">
         <TextInput
           placeholder="UTC"
           onSubmit={(value) => {
@@ -62,7 +60,7 @@ export default function Init() {
 
   if (step === "model") {
     return (
-      <WizardStep step={2} totalSteps={3} title="Default Claude model">
+      <WizardStep step={2} totalSteps={2} title="Default Claude model">
         <Select
           options={[
             { label: "Sonnet (balanced)", value: "sonnet" },
@@ -70,40 +68,7 @@ export default function Init() {
             { label: "Haiku (fastest, cheapest)", value: "haiku" },
           ]}
           onChange={(value) => {
-            setData((d) => ({ ...d, defaultModel: value }));
-            setStep("botToken");
-          }}
-        />
-      </WizardStep>
-    );
-  }
-
-  if (step === "botToken") {
-    return (
-      <WizardStep step={3} totalSteps={3} title="Telegram bot token (empty to skip)">
-        <TextInput
-          placeholder="Enter bot token or press Enter to skip..."
-          onSubmit={(value) => {
-            const updated = { ...data, botToken: value };
-            setData(updated);
-            if (value) {
-              setStep("chatId");
-            } else {
-              doInit(updated, setStep, setError);
-            }
-          }}
-        />
-      </WizardStep>
-    );
-  }
-
-  if (step === "chatId") {
-    return (
-      <WizardStep step={3} totalSteps={3} title="Your Telegram chat ID">
-        <TextInput
-          placeholder="Enter chat ID..."
-          onSubmit={(value) => {
-            const updated = { ...data, chatId: value };
+            const updated = { ...data, defaultModel: value };
             setData(updated);
             doInit(updated, setStep, setError);
           }}
@@ -116,7 +81,7 @@ export default function Init() {
 }
 
 function doInit(
-  data: { timezone: string; defaultModel: string; brokerProvider: string; apiKey: string; secretKey: string; botToken: string; chatId: string },
+  data: { timezone: string; defaultModel: string; brokerProvider: string; apiKey: string; secretKey: string },
   setStep: (s: Step) => void,
   setError: (e: string | null) => void,
 ) {
@@ -128,8 +93,6 @@ function doInit(
         brokerProvider: data.brokerProvider,
         apiKey: data.apiKey || undefined,
         secretKey: data.secretKey || undefined,
-        botToken: data.botToken || undefined,
-        chatId: data.chatId || undefined,
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));

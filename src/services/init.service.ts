@@ -12,8 +12,6 @@ export interface InitWorkspaceParams {
   brokerProvider: string;
   apiKey?: string;
   secretKey?: string;
-  botToken?: string;
-  chatId?: string;
 }
 
 /** Check if workspace already exists */

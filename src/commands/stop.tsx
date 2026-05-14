@@ -3,7 +3,7 @@ import { Text } from "ink";
 import { Spinner } from "@inkjs/ui";
 import { stopSupervisor } from "../services/daemon.service.js";
 
-export const description = "Stop the daemon scheduler + Telegram gateway";
+export const description = "Stop the daemon (scheduler + journal watcher + meta-reflection cron)";
 
 export default function Stop() {
   const [status, setStatus] = useState<"stopping" | "done" | "error">("stopping");
