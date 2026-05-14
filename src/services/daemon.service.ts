@@ -410,13 +410,34 @@ export async function notifyDaemonEvent(event: string, details: string): Promise
   lastAlertByType.set(event, now);
   await log(`[ALERT] ${event}: ${details}`);
 
-  // Best-effort Telegram notification
+  try {
+    const { notifySupervisorStale, notifyDailyCap, notifyHandoffMissing, notifyGeneric } =
+      await import("./notify.service.js");
+    const lower = event.toLowerCase();
+    if (lower.includes("stale") || lower.includes("supervisor")) {
+      notifySupervisorStale(extractFund(event) ?? "daemon", new Date());
+    } else if (lower.includes("daily cap")) {
+      notifyDailyCap(extractFund(event) ?? "daemon", 0, 0);
+    } else if (lower.includes("handoff")) {
+      notifyHandoffMissing(extractFund(event) ?? "daemon", "unknown");
+    } else {
+      notifyGeneric(event, details);
+    }
+  } catch (err) {
+    await log(`[ALERT] notify.service failed: ${err}`);
+  }
+
   try {
     const { sendTelegramNotification } = await import("./gateway.service.js");
     await sendTelegramNotification(`<b>[Daemon]</b> ${event}\n${details}`);
   } catch {
     // Telegram not available — already logged
   }
+}
+
+function extractFund(event: string): string | null {
+  const m = event.match(/[:\s]([a-z0-9-]+)\b/i);
+  return m ? m[1] : null;
 }
 
 // Error tracking: consecutive failures per fund:errorType
