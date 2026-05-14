@@ -118,9 +118,9 @@ vi.mock("../src/services/handoff-tracker.js", () => ({
   })),
 }));
 
-const mockSendTelegramNotification = vi.fn(async () => undefined);
-vi.mock("../src/services/gateway.service.js", () => ({
-  sendTelegramNotification: (...args: unknown[]) => mockSendTelegramNotification(...args),
+const mockNotifyGeneric = vi.fn(() => undefined);
+vi.mock("../src/services/notify.service.js", () => ({
+  notifyGeneric: (...args: unknown[]) => mockNotifyGeneric(...args),
 }));
 
 // Mock session-history + daily-cap so we don't hit real fs in the unit tests.
@@ -334,11 +334,11 @@ describe("runFundSession", () => {
 
     await runFundSession("test-fund", "pre_market");
 
-    // The notifySession path lazily imports sendTelegramNotification.
-    // Find the call with the warning message.
-    const calls = mockSendTelegramNotification.mock.calls;
+    // The notifySession path lazily imports notifyGeneric.
+    // Find the call with the warning message (args[1] is the body).
+    const calls = mockNotifyGeneric.mock.calls;
     const warningCall = calls.find((args) =>
-      typeof args[0] === "string" && args[0].includes("did NOT write a handoff"),
+      typeof args[1] === "string" && args[1].includes("did NOT write a handoff"),
     );
     expect(warningCall).toBeDefined();
   });
@@ -347,8 +347,8 @@ describe("runFundSession", () => {
     // Default mock returns handoffWritten: true
     await runFundSession("test-fund", "pre_market");
 
-    const warningCalls = mockSendTelegramNotification.mock.calls.filter((args) =>
-      typeof args[0] === "string" && args[0].includes("did NOT write a handoff"),
+    const warningCalls = mockNotifyGeneric.mock.calls.filter((args) =>
+      typeof args[1] === "string" && args[1].includes("did NOT write a handoff"),
     );
     expect(warningCalls).toHaveLength(0);
   });

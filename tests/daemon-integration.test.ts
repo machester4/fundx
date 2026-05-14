@@ -45,12 +45,6 @@ vi.mock("../src/services/session.service.js", () => ({
   runFundSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../src/services/gateway.service.js", () => ({
-  startGateway: vi.fn().mockResolvedValue(undefined),
-  stopGateway: vi.fn().mockResolvedValue(undefined),
-  sendTelegramNotification: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("../src/services/special-sessions.service.js", () => ({
   checkSpecialSessions: vi.fn().mockReturnValue([]),
 }));
@@ -462,32 +456,6 @@ describe("daemon catch-up on startup", () => {
 describe("sendDailyDigest", () => {
   it("is exported and callable", () => {
     expect(typeof sendDailyDigest).toBe("function");
-  });
-
-  it("includes P&L when daily snapshot exists for today", async () => {
-    const { readPortfolio, readTracker, readDailySnapshot } = await import("../src/state.js");
-    const { sendTelegramNotification } = await import("../src/services/gateway.service.js");
-
-    vi.mocked(loadFundConfig).mockResolvedValueOnce(makeFundConfig({
-      notifications: { telegram: { enabled: true, daily_digest: true }, quiet_hours: { enabled: false } },
-    }) as never);
-    vi.mocked(readPortfolio).mockResolvedValueOnce({
-      last_updated: "2026-04-08",
-      cash: 9500,
-      total_value: 10500,
-      positions: [{ symbol: "URA", shares: 6, avg_cost: 48, current_price: 52, market_value: 312, unrealized_pnl: 24, unrealized_pnl_pct: 8.3, weight_pct: 3, entry_date: "2026-04-01", entry_reason: "test" }],
-    } as never);
-    vi.mocked(readTracker).mockResolvedValueOnce({
-      type: "growth", initial_capital: 10000, current_value: 10500, progress_pct: 5, status: "on_track",
-    } as never);
-    const today = new Date().toISOString().split("T")[0];
-    vi.mocked(readDailySnapshot).mockResolvedValueOnce({ date: today, total_value: 10000 } as never);
-
-    await sendDailyDigest("test-fund");
-
-    expect(sendTelegramNotification).toHaveBeenCalledWith(
-      expect.stringContaining("Daily Digest"),
-    );
   });
 });
 

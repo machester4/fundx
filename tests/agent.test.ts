@@ -151,7 +151,7 @@ describe("buildMcpServers", () => {
     expect(servers["broker-local"].env.FMP_API_KEY).toBe("fmp-test-key");
   });
 
-  it("includes telegram-notify when Telegram is fully configured", async () => {
+  it("never includes telegram-notify (MCP removed)", async () => {
     mockedGlobalConfig.mockResolvedValue(
       makeGlobalConfig({
         telegram: { bot_token: "bot123:ABC", chat_id: "999" },
@@ -168,121 +168,7 @@ describe("buildMcpServers", () => {
 
     const servers = await buildMcpServers("test-fund");
 
-    expect(Object.keys(servers)).toContain("telegram-notify");
-    expect(servers["telegram-notify"].env.TELEGRAM_BOT_TOKEN).toBe("bot123:ABC");
-    expect(servers["telegram-notify"].env.TELEGRAM_CHAT_ID).toBe("999");
-  });
-
-  it("excludes telegram-notify when fund notifications disabled", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        telegram: { bot_token: "bot123:ABC", chat_id: "999" },
-      }) as never,
-    );
-    // Fund has telegram disabled (default)
-    const servers = await buildMcpServers("test-fund");
-
     expect(Object.keys(servers)).not.toContain("telegram-notify");
-  });
-
-  it("passes all individual notification flags as env vars", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        telegram: { bot_token: "bot123:ABC", chat_id: "999" },
-      }) as never,
-    );
-    mockedFundConfig.mockResolvedValue(
-      makeFundConfig({
-        notifications: {
-          telegram: {
-            enabled: true,
-            trade_alerts: true,
-            stop_loss_alerts: true,
-            daily_digest: false,
-            weekly_digest: false,
-            milestone_alerts: true,
-            drawdown_alerts: false,
-          },
-          quiet_hours: { enabled: false, start: "23:00", end: "07:00", allow_critical: true },
-        },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-    const env = servers["telegram-notify"].env;
-
-    expect(env.NOTIFY_TRADE_ALERTS).toBe("true");
-    expect(env.NOTIFY_STOP_LOSS_ALERTS).toBe("true");
-    expect(env.NOTIFY_DAILY_DIGEST).toBe("false");
-    expect(env.NOTIFY_WEEKLY_DIGEST).toBe("false");
-    expect(env.NOTIFY_MILESTONE_ALERTS).toBe("true");
-    expect(env.NOTIFY_DRAWDOWN_ALERTS).toBe("false");
-  });
-
-  it("includes quiet hours env vars when enabled", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        telegram: { bot_token: "bot123:ABC", chat_id: "999" },
-      }) as never,
-    );
-    mockedFundConfig.mockResolvedValue(
-      makeFundConfig({
-        notifications: {
-          telegram: { enabled: true },
-          quiet_hours: { enabled: true, start: "23:00", end: "08:00", allow_critical: true },
-        },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-    const env = servers["telegram-notify"].env;
-
-    expect(env.QUIET_HOURS_START).toBe("23:00");
-    expect(env.QUIET_HOURS_END).toBe("08:00");
-    expect(env.QUIET_HOURS_ALLOW_CRITICAL).toBe("true");
-  });
-
-  it("omits quiet hours env vars when disabled", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        telegram: { bot_token: "bot123:ABC", chat_id: "999" },
-      }) as never,
-    );
-    mockedFundConfig.mockResolvedValue(
-      makeFundConfig({
-        notifications: {
-          telegram: { enabled: true },
-          quiet_hours: { enabled: false, start: "23:00", end: "08:00", allow_critical: false },
-        },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-    const env = servers["telegram-notify"].env;
-
-    expect(env.QUIET_HOURS_START).toBeUndefined();
-    expect(env.QUIET_HOURS_END).toBeUndefined();
-    expect(env.QUIET_HOURS_ALLOW_CRITICAL).toBeUndefined();
-  });
-
-  it("passes allow_critical=false when configured", async () => {
-    mockedGlobalConfig.mockResolvedValue(
-      makeGlobalConfig({
-        telegram: { bot_token: "bot123:ABC", chat_id: "999" },
-      }) as never,
-    );
-    mockedFundConfig.mockResolvedValue(
-      makeFundConfig({
-        notifications: {
-          telegram: { enabled: true },
-          quiet_hours: { enabled: true, start: "22:00", end: "08:00", allow_critical: false },
-        },
-      }) as never,
-    );
-
-    const servers = await buildMcpServers("test-fund");
-
-    expect(servers["telegram-notify"].env.QUIET_HOURS_ALLOW_CRITICAL).toBe("false");
   });
 
   it("passes FUND_DIR regardless of fund broker mode", async () => {

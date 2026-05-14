@@ -580,16 +580,6 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
       }
 
       if (notifyFunds.length > 0) {
-        const msg =
-          `<b>[NEWS]</b> ${article.source}\n` +
-          `${article.symbols.length > 0 ? article.symbols.join(", ") + " mentioned\n\n" : "\n"}` +
-          `${article.title}\n\n` +
-          `Funds: ${notifyFunds.join(", ")}`;
-        try {
-          const { sendTelegramNotification } = await import("./gateway.service.js");
-          await sendTelegramNotification(msg);
-        } catch { /* best effort */ }
-
         // Mark article as alerted in zvec (write — requires the daemon to hold the lock)
         try {
           const collection = await getCollection();

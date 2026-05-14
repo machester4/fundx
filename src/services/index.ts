@@ -3,7 +3,6 @@ export * from "./init.service.js";
 export * from "./status.service.js";
 export * from "./session.service.js";
 export * from "./daemon.service.js";
-export * from "./gateway.service.js";
 export * from "./ask.service.js";
 export * from "./chat.service.js";
 export * from "./templates.service.js";

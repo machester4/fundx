@@ -1,16 +1,14 @@
 /**
  * Integration test: self-healing primitives (Phase 5a)
  *
- * Tests three resilience primitives:
+ * Tests resilience primitives:
  *   1. MCP transport retry (5a.5): EPIPE first attempt → success on second
- *   2. Telegram backoff (5a.7): 503 503 200 → succeeds after retries
- *   3. Watchdog status enum smoke: "watchdog_killed" is a valid SessionLogV2 status
+ *   2. Watchdog status enum smoke: "watchdog_killed" is a valid SessionLogV2 status
  *
  * Isolation strategy:
  *   - SDK `query` is mocked via vi.mock hoisting; the REAL runAgentQuery logic runs
  *   - config.js / fund.service.js / paths.js are mocked to avoid touching ~/.fundx
  *   - createMarketDataMcpServer is stubbed so no market-data MCP subprocess is launched
- *   - telegramSendWithRetry uses the real withRetry + fake timers to control delays
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -195,67 +193,7 @@ describe("integration: self-healing primitives", () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  // ── 2. Telegram backoff ──────────────────────────────────────────────────
-
-  it("Telegram backoff: 503 503 200 → succeeds after retries", async () => {
-    vi.useFakeTimers();
-    try {
-      const fetchSpy = vi
-        .spyOn(global, "fetch")
-        .mockResolvedValueOnce(new Response("", { status: 503 }))
-        .mockResolvedValueOnce(new Response("", { status: 503 }))
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ ok: true }), { status: 200 }),
-        );
-
-      const { telegramSendWithRetry } = await import(
-        "../../src/services/gateway.service.js"
-      );
-
-      const p = telegramSendWithRetry(
-        "https://api.telegram.org/bot/sendMessage",
-        { chat_id: "x", text: "hi" },
-      );
-
-      // Advance fake timers so the retry delays fire
-      await vi.runAllTimersAsync();
-      await p;
-
-      expect(fetchSpy).toHaveBeenCalledTimes(3);
-      fetchSpy.mockRestore();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("Telegram backoff: non-retryable 400 → throws immediately (no retry)", async () => {
-    const fetchSpy = vi
-      .spyOn(global, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ ok: false, description: "Bad Request" }),
-          { status: 400 },
-        ),
-      );
-
-    const { telegramSendWithRetry } = await import(
-      "../../src/services/gateway.service.js"
-    );
-
-    // 400 is not in RETRYABLE_TG_STATUSES — the json() path throws "non-retryable"
-    await expect(
-      telegramSendWithRetry(
-        "https://api.telegram.org/bot/sendMessage",
-        { chat_id: "x", text: "bad" },
-      ),
-    ).rejects.toThrow("non-retryable");
-
-    // Only 1 fetch call — no retry loop entered
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    fetchSpy.mockRestore();
-  });
-
-  // ── 3. Watchdog status enum smoke ────────────────────────────────────────
+  // ── 2. Watchdog status enum smoke ────────────────────────────────────────
 
   it("watchdog_killed is in the SessionLogV2 status enum", async () => {
     const { sessionLogV2Schema } = await import("../../src/types.js");

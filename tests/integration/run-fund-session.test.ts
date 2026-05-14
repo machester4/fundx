@@ -128,9 +128,9 @@ vi.mock("../../src/agent.js", () => ({
   buildMcpServers: vi.fn(async () => ({})),
 }));
 
-// ── Stub Telegram (best-effort, dynamically imported inside session.service) ──
-vi.mock("../../src/services/gateway.service.js", () => ({
-  sendTelegramNotification: vi.fn(async () => {}),
+// ── Stub OS notifications (best-effort, dynamically imported inside session.service) ──
+vi.mock("../../src/services/notify.service.js", () => ({
+  notifyGeneric: vi.fn(() => undefined),
 }));
 
 // ── Stub universe resolution (network call) ───────────────────
