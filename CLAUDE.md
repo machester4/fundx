@@ -13,17 +13,18 @@ FundX is a **CLI-first, goal-oriented, multi-fund autonomous investment platform
 ### Core Concepts
 
 - **Fund**: An independent investment entity with its own capital, objective, risk profile, asset universe, schedule, and persistent memory. Each fund lives in `~/.fundx/funds/<name>/`.
-- **Session**: A Claude Code invocation scoped to a single fund. Sessions run on a schedule (pre-market, mid-session, post-market) or on-demand via CLI/Telegram.
-- **Daemon/Scheduler**: Background process that checks schedules and launches Claude Code sessions for each active fund.
-- **Telegram Gateway**: Always-on bot for notifications (trade alerts, digests) and bidirectional interaction (user questions wake Claude).
-- **MCP Servers**: Local paper broker (`broker-local`), market data (FMP/Yahoo Finance), screener + watchlist (`screener`), Simply Wall St (`sws`), and Telegram notifications (`telegram-notify`).
+- **Session**: A Claude Code invocation scoped to a single fund. Sessions run on a schedule (pre-market, mid-session, post-market) or on-demand via the CLI / chat REPL.
+- **Daemon/Scheduler**: Background process that checks schedules, launches Claude Code sessions for each active fund, and emits OS notifications for critical events.
+- **MCP Servers**: Local paper broker (`broker-local`), market data (FMP/Yahoo Finance), screener + watchlist (`screener`), and Simply Wall St (`sws`).
 
 ### High-Level Flow
 
 ```
-CLI (fundx) → Daemon/Scheduler → Claude Code Session → MCP Servers (broker, data, telegram)
+CLI (fundx) → Daemon/Scheduler → Claude Code Session → MCP Servers (broker, data, screener, sws)
                                        ↕
                                  Persistent State (per fund)
+                                       ↓
+                              OS Notifications (node-notifier)
 ```
 
 Each Claude Code session:
@@ -33,7 +34,7 @@ Each Claude Code session:
 4. **Validate** — Two gates: trade-evaluator (skeptical thesis review) → risk-guardian (hard constraint check).
 5. **Execute** — Trades via `broker-local` MCP server (paper trading, updates portfolio.json locally).
 6. **Reflect** — Grades decisions, evaluates Session Contract, writes full handoff to `session-handoff.md`.
-7. **Communicate** — Sends notifications via Telegram.
+7. **Communicate** — The daemon emits OS notifications for trade executions, stop-loss hits, daily-cap hits, supervisor stalls, and missing handoffs. The agent itself never calls a notify tool.
 8. **Follow-up** — Optionally self-schedules future sessions.
 
 ### Directory Structure
@@ -60,7 +61,6 @@ Each Claude Code session:
 ├── shared/
 │   ├── mcp-servers/               # Shared MCP server configs
 │   └── templates/                 # Fund templates (runway, growth, etc.)
-├── gateway/                       # Telegram bot
 └── orchestrator/                  # Daemon + session runner
 ```
 
@@ -73,7 +73,7 @@ Each Claude Code session:
 | Config       | YAML (js-yaml) + Zod validation         |
 | State DB     | SQLite (better-sqlite3)                 |
 | Daemon       | node-cron                               |
-| Telegram     | grammy (Phase 3)                        |
+| Notifications | node-notifier (OS native)              |
 | AI Engine    | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP Servers  | TypeScript (Phase 2+)                   |
 | Market Data  | FMP (primary) / Yahoo Finance (fallback) |
@@ -128,8 +128,9 @@ src/
     session-history.service.ts  # Append-only session_log.jsonl: appendSessionLogEntry + readTodaysSessionUsage + pruneSessionLogJsonl (Phase 4)
     daily-cap.service.ts        # Daily-per-fund USD cap alerts: notifyDailyCapReached + clearDailyCapAlertState (Phase 4)
     daemon.service.ts   # Daemon start/stop, cron scheduling, daily JSONL prune at 00:00 UTC (Phase 4)
-    supervisor.service.ts    # Daemon supervisor / watchdog + heartbeat watch (3 min stale → Telegram alert) (Phase 4)
-    gateway.service.ts  # Telegram gateway management
+    supervisor.service.ts    # Daemon supervisor / watchdog + heartbeat watch (3 min stale → OS notification) (Phase 4)
+    notify.service.ts        # OS desktop notifications via node-notifier (trade, stop-loss, daily-cap, supervisor, handoff)
+    trade-watcher.service.ts # Detects new trade journal entries inside session runs and triggers notify
     ask.service.ts      # Question answering + cross-fund analysis (uses unified buildFundContext)
     chat.service.ts     # Chat REPL — context building, streaming, sessionModePrefix, buildFundContext, relTime
     templates.service.ts     # Fund templates (export/import/builtin/clone)
@@ -166,20 +167,10 @@ src/
     status.tsx          # fundx status
     start.tsx           # fundx start
     stop.tsx            # fundx stop
-    ask.tsx             # fundx ask <question>
-    portfolio.tsx       # fundx portfolio <fund>
-    trades.tsx          # fundx trades <fund>
-    performance.tsx     # fundx performance <fund>
-    logs.tsx            # fundx logs
-    correlation.tsx     # fundx correlation
-    fund/               # fundx fund {create,list,info,delete,clone,upgrade}
-    session/            # fundx session {run,agents}
-    gateway/            # fundx gateway {start,test}
-    template/           # fundx template {list,export,import,builtin}
-    special/            # fundx special {list,add,remove}
-    chart/              # fundx chart {allocation,pnl,sparkline}
-    report/             # fundx report {daily,weekly,monthly,view}
-    montecarlo/         # fundx montecarlo {run}
+    eval.tsx            # fundx eval
+    fund/               # fundx fund {create,delete,upgrade,consolidate,refresh-universe}
+    session/            # fundx session {run}
+    sws/                # fundx sws {login,logout,status}
   components/           # Reusable Ink components
     StatusBadge.tsx     # Colored status indicator (active/paused/closed)
     PnlText.tsx         # Green/red P&L display with $ and %
@@ -207,7 +198,7 @@ src/
     NewsPanel.tsx       # News headlines panel
     DashboardFooter.tsx # Dashboard footer with hints
     FundsOverviewPanel.tsx # Funds overview panel
-    SystemStatusPanel.tsx  # Service status panel (daemon, telegram, market data)
+    SystemStatusPanel.tsx  # Service status panel (daemon, market data)
     MarketTickerBanner.tsx  # Full-width market ticker bar (indices, commodities, crypto)
   hooks/                # Custom React hooks
     useAsyncAction.ts   # Run async fn, track { data, isLoading, error, retry }
@@ -221,12 +212,10 @@ src/
     AppContext.tsx       # Global config, error handling
   mcp/
     broker-local.ts            # MCP server: local paper broker (FMP prices, portfolio.json state)
-    broker-local-notify.ts     # Helper: broker-local Telegram notifications
     broker-local-universe.ts   # Helper: broker-local universe-gating handlers
     market-data.ts             # MCP server: market data provider (FMP + Yahoo Finance, in-process to share zvec lock)
     screener.ts                # MCP server: screener (screen_run, screen_discover, watchlist_query/trajectory/tag)
     sws.ts                     # MCP server: Simply Wall St (sws_screener, sws_list_screeners, etc.)
-    telegram-notify.ts         # MCP server: Telegram notifications for Claude sessions
 ```
 
 **Design pattern:** Strict separation of concerns — services contain pure business logic (no UI deps), commands are thin React/Ink components that call services and render results. Pastel provides file-based routing: folder nesting = subcommands.
@@ -240,12 +229,12 @@ src/
 
 ### Configuration
 
-- Global config: `~/.fundx/config.yaml` (Telegram token, market data provider, FMP API key, default model)
+- Global config: `~/.fundx/config.yaml` (market data provider, FMP API key, default model, timezone, optional broker credentials)
 - Per-fund config: `~/.fundx/funds/<name>/fund_config.yaml` (objective, risk, universe, schedule, AI personality)
-- Budgets: per-session-type `maxTurns` / `maxUsd` cap resolved through `fund.budget` → `global.budget` → hardcoded defaults (see `resolveBudget` in `src/services/session.service.ts`). SDK hard-kills at 100% via `error_max_budget` / `error_max_turns` status; Telegram alert distinguishes budget kills from generic errors.
-- Daily-per-fund cap (Phase 4, raised in Phase 5c): `fund.budget.dailyCapUsd` → `global.budget.dailyCapUsd` → default $20/day (raised from $5 in Phase 5c — quality over cost-control stance; users can lower via fund or global config). See `resolveDailyCapUsd` in `src/services/session.service.ts`. When today's `cost_usd` sum across `state/session_log.jsonl` reaches the cap, further sessions are skipped with status `skipped_daily_cap` until 00:00 UTC. One-shot Telegram alert per fund per day. See `docs/operations.md` runbook.
+- Budgets: per-session-type `maxTurns` / `maxUsd` cap resolved through `fund.budget` → `global.budget` → hardcoded defaults (see `resolveBudget` in `src/services/session.service.ts`). SDK hard-kills at 100% via `error_max_budget` / `error_max_turns` status; an OS notification distinguishes budget kills from generic errors.
+- Daily-per-fund cap (Phase 4, raised in Phase 5c): `fund.budget.dailyCapUsd` → `global.budget.dailyCapUsd` → default $20/day (raised from $5 in Phase 5c — quality over cost-control stance; users can lower via fund or global config). See `resolveDailyCapUsd` in `src/services/session.service.ts`. When today's `cost_usd` sum across `state/session_log.jsonl` reaches the cap, further sessions are skipped with status `skipped_daily_cap` until 00:00 UTC. One-shot OS notification per fund per day. See `docs/operations.md` runbook.
 - State pre-population + verdict gate: every autonomous session receives a `<state_snapshot>` envelope (handoff + portfolio + objective + pending + top-10 trades + top-10 watchlist) in its first user message, replacing the manual orient sequence. A `PreToolUse` hook on `mcp__broker-local__place_order` denies BUY without both `trade-evaluator` PROCEED + `risk-guardian` APPROVED, and SELL without `risk-guardian` APPROVED. See `src/services/snapshot.service.ts` and `src/services/verdict-tracker.ts`.
-- Handoff archive + verification: every autonomous session archives the previous `state/session-handoff.md` to `state/handoffs/<iso-ts>_<session-type>.md` before starting (full audit trail, no rotation). An SDK `Stop` hook checks if the agent wrote a fresh handoff (mtime > session start); if not, the session log records `handoff_written: false` and a Telegram warning fires when the SDK status is `success` (the suspicious combo). See `src/services/handoff-archive.service.ts` and `src/services/handoff-tracker.ts`.
+- Handoff archive + verification: every autonomous session archives the previous `state/session-handoff.md` to `state/handoffs/<iso-ts>_<session-type>.md` before starting (full audit trail, no rotation). An SDK `Stop` hook checks if the agent wrote a fresh handoff (mtime > session start); if not, the session log records `handoff_written: false` and an OS notification warning fires when the SDK status is `success` (the suspicious combo). See `src/services/handoff-archive.service.ts` and `src/services/handoff-tracker.ts`.
 - Market data: `market_data.provider` (`fmp` or `yfinance`) + `market_data.fmp_api_key` in global config
 - Trading is always paper mode — trades execute locally against `portfolio.json`
 - The `.gitignore` already covers `.env` files — maintain this pattern
@@ -391,7 +380,7 @@ description: One-line description — Claude uses this to decide when to invoke 
 2. **Claude as artisan** — No pre-defined analysis pipeline; Claude creates scripts, research, and calculations as needed each session
 3. **Declarative funds** — A fund is fully defined by its `fund_config.yaml`; everything else is derived
 4. **State is king** — Everything persists between sessions; Claude always knows where it left off
-5. **Human in the loop, not in the way** — Autonomous operation with CLI/Telegram intervention available
+5. **Human in the loop, not in the way** — Autonomous operation with CLI / chat REPL intervention available
 6. **Paper mode** — All trading is simulated locally against `portfolio.json`; the user replicates positions manually in their real broker
 7. **Memory makes it smarter** — Trade journal + vector search enables learning from history
 8. **Open and extensible** — New MCP servers and objective types are pluggable
@@ -443,7 +432,7 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] Paper trade execution via `paper-trading.ts`, journal logging
 - [x] Stop-loss monitoring (FMP prices, local execution)
 
-### Phase 3 — Telegram — COMPLETE
+### Phase 3 — Telegram — REMOVED (2026-05-14, see specs)
 - [x] Telegram bot with grammy (`gateway.ts`)
 - [x] Quick commands: /status, /portfolio, /trades, /pause, /resume, /next
 - [x] Free question → wake Claude flow with auto-fund detection
@@ -471,6 +460,7 @@ Development follows 6 phases. When implementing, follow this order:
 - [x] Monte Carlo simulation: runway projections, probability of ruin (`montecarlo.ts`)
 - [x] Daemon integration: special session triggers + auto-report generation
 - [x] Zod schemas for all Phase 5 types (`types.ts`)
+- Note: in May 2026 the dedicated CLI commands for chart/report/correlation/montecarlo/special/template were removed; the chat REPL and autonomous sessions now invoke these capabilities via services.
 
 ### Phase 6 — Community & Polish
 - `npm install -g fundx` / `npx fundx` distribution, documentation, plugin system
@@ -554,3 +544,4 @@ the change automatically on the next run.
 - Every trade must be logged in the SQLite journal with reasoning
 - Per-fund `CLAUDE.md` files are auto-generated from `fund_config.yaml` — they are separate from this root `CLAUDE.md`
 - The `.gitignore` already covers Node.js patterns (node_modules, dist, etc.) — extend it with `*.tsbuildinfo` if not already present
+- Telegram was removed in May 2026. The user interface is the dashboard chat REPL (`fundx status`) plus OS notifications via `src/services/notify.service.ts`. See `docs/superpowers/specs/2026-05-11-simplify-notifications-and-cli-design.md`.
