@@ -13,9 +13,21 @@ export function __resetWatcherStateForTest(): void {
   inMemoryCursor.clear();
 }
 
-async function loadCursor(cursorPath: string, fund: string): Promise<number> {
+async function loadCursor(
+  cursorPath: string,
+  fund: string,
+  db: Database.Database,
+): Promise<number> {
   if (inMemoryCursor.has(fund)) return inMemoryCursor.get(fund)!;
-  if (!existsSync(cursorPath)) return 0;
+  if (!existsSync(cursorPath)) {
+    // First run for this fund: prime cursor to MAX(id) so we skip historical
+    // trades (rows that existed before the watcher was first enabled).
+    const row = db
+      .prepare("SELECT COALESCE(MAX(id), 0) AS maxId FROM trades")
+      .get() as { maxId: number };
+    await saveCursor(cursorPath, fund, row.maxId);
+    return row.maxId;
+  }
   try {
     const raw = await readFile(cursorPath, "utf8");
     const parsed = JSON.parse(raw) as CursorState;
@@ -38,9 +50,9 @@ export async function tickTradeWatcher(
   cursorPath: string,
 ): Promise<void> {
   if (!existsSync(journalPath)) return;
-  const cursor = await loadCursor(cursorPath, fund);
   const db = new Database(journalPath, { readonly: true });
   try {
+    const cursor = await loadCursor(cursorPath, fund, db);
     const rows = db
       .prepare(
         `SELECT id, fund, symbol, side, quantity, price, order_type, session_type
