@@ -1466,7 +1466,7 @@ Then write the updated array back to \`state/pending_sessions.json\`.
     fileName: "communication.md",
     content: `# Communication
 
-Why: Persisted artifacts (analysis, journal, reports, autonomous Telegram alerts)
+Why: Persisted artifacts (analysis, journal, reports) and OS notifications
 stay in English so they remain consistent and searchable across sessions. Chat
 responses mirror the user — answering in their language is the natural courtesy
 and avoids forcing translation on either side.
@@ -1475,9 +1475,7 @@ and avoids forcing translation on either side.
 - **Chat responses: match the language of the user's most recent message.**
   If they write in Spanish, reply in Spanish. If English, reply in English.
   When in doubt or on the first turn with no clear signal, default to English.
-- Telegram autonomous notifications (trade alerts, digests, milestones): English.
-  These are pushed without a user prompt to mirror, so they follow the artifact
-  default.
+- OS notifications (trades, stop-loss, supervisor alerts): emitted by the system; you do not call any notify tool.
 - analysis/*.md files: English
 - Trade journal entries (reasoning, lessons_learned): English
 - Session reports: English
@@ -1552,7 +1550,7 @@ Before ending an autonomous session, verify all of the following:
 2. **Trade integrity**: If trades were executed, verify:
    - \`portfolio.json\` reflects the trades (read it back)
    - Trade journal entry exists with thesis, stop-loss, and R-value
-   - Telegram notification was sent
+   - Handoff is fresh (the system surfaces critical events via OS notifications)
 
 3. **Analysis quality**: If analysis was written to \`analysis/\`, verify it contains
    specific numbers, dates, and sources. Flag and fix any vague language.
