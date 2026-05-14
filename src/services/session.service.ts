@@ -234,7 +234,8 @@ function renderUniverseBlock(resolution: UniverseResolution | null): string {
 </fund_universe>`;
 }
 
-/** Escape HTML entities for Telegram */
+/** Escape HTML entities (legacy: alert bodies were formatted as HTML;
+ *  OS notifications strip tags downstream, so escaping is now defensive only). */
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -248,9 +249,10 @@ export interface BuildBudgetAlertInput {
   costUsd: number;
 }
 
-/** Format a Telegram alert (HTML parse-mode) for a session that the SDK
- *  hard-killed on a budget cap. Returns the message body — caller passes
- *  it to notifySession(). Pure function, tested in tests/budget.test.ts. */
+/** Format a budget-kill alert for a session that the SDK hard-killed on a
+ *  budget cap. Returns the message body — caller passes it to notifySession()
+ *  which strips tags before handing it to the OS notification center. Pure
+ *  function, tested in tests/budget.test.ts. */
 export function buildBudgetAlert(input: BuildBudgetAlertInput): string {
   const safeName = escapeHtml(input.displayName);
   return [
@@ -517,7 +519,7 @@ export async function runFundSession(
   const tokensIn = log.tokens_in ?? 0;
   const tokensOut = log.tokens_out ?? 0;
 
-  // Truncate and escape summary for Telegram (max 800 chars, strip markdown artifacts)
+  // Truncate and escape summary for the notification body (max 800 chars, strip markdown artifacts)
   const rawSummary = result.output
     .replace(/^#+\s+/gm, "")          // strip markdown headers
     .replace(/\*\*([^*]+)\*\*/g, "$1") // strip bold markers

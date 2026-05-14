@@ -39,7 +39,7 @@ async function writeDailyCapState(fundName: string, state: DailyCapState): Promi
   await writeJsonAtomic(path, state);
 }
 
-/** Send a one-shot per-day Telegram alert when a fund reaches its daily cap.
+/** Send a one-shot per-day OS notification when a fund reaches its daily cap.
  *  If already alerted today (per fund), this is a no-op. */
 export async function notifyDailyCapReached(
   fundName: string,

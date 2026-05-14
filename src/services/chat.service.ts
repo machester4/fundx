@@ -829,7 +829,7 @@ export async function loadActiveSessionId(fundName: string | null): Promise<stri
 export type ChatMcpServers = Awaited<ReturnType<typeof buildMcpServers>>;
 
 /** Build MCP servers config for chat.
- * In workspace mode (null fundName) only market-data is included — no broker, no telegram. */
+ * In workspace mode (null fundName) only market-data is included — no broker, no fund-specific tools. */
 export async function buildChatMcpServers(
   fundName: string | null,
 ): Promise<ChatMcpServers> {

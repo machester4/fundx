@@ -524,7 +524,7 @@ export async function getNewsStats(): Promise<NewsCacheStats> {
 // Module-level cooldown map so it persists across invocations within the same daemon process
 const alertCooldowns = new Map<string, number>(); // fundName -> last alert timestamp
 
-/** Check new articles for breaking news and send Telegram alerts */
+/** Check new articles for breaking news and emit OS notifications */
 export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<void> {
   const names = await listFundNames();
   const fundTickers = new Map<string, string[]>();
