@@ -2,6 +2,7 @@ import { loadGlobalConfig } from "./config.js";
 import { readPortfolio, writePortfolio } from "./state.js";
 import { openJournal, insertTrade } from "./journal.js";
 import { executeSell } from "./paper-trading.js";
+import { notifyStopLoss } from "./services/notify.service.js";
 
 const FMP_BASE = "https://financialmodelingprep.com/api/v3";
 
@@ -105,6 +106,13 @@ export async function executeStopLosses(
         session_type: "stop_loss",
         reasoning: result.trade.reason,
       });
+
+      notifyStopLoss(
+        fundName,
+        event.symbol,
+        event.stopPrice,
+        `sold ${event.shares} @ $${event.currentPrice.toFixed(2)}`,
+      );
     }
   } finally {
     db.close();
