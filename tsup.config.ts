@@ -14,7 +14,6 @@ export default defineConfig([
     // market-data runs in-process via createSdkMcpServer; not a stdio binary.
     entry: [
       "src/mcp/broker-local.ts",
-      "src/mcp/telegram-notify.ts",
       "src/mcp/sws.ts",
       "src/mcp/screener.ts",
     ],

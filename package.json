@@ -24,8 +24,7 @@
     "fund-manager",
     "portfolio",
     "cli",
-    "alpaca",
-    "telegram"
+    "alpaca"
   ],
   "bin": {
     "fundx": "./dist/index.js"
