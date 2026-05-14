@@ -29,6 +29,11 @@ vi.mock("../src/paths.js", async () => {
 const notifyMock = vi.fn();
 vi.mock("../src/services/daemon.service.js", () => ({
   notifyDaemonEvent: (...args: unknown[]) => notifyMock(...args),
+  logDaemonEvent: vi.fn().mockReturnValue(true),
+  logDaemonLine: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../src/services/notify.service.js", () => ({
+  notifyDailyCap: vi.fn(),
 }));
 
 import { appendSessionLogEntry } from "../src/services/session-history.service.js";

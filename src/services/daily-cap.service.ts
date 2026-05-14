@@ -2,7 +2,8 @@ import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fundPaths } from "../paths.js";
 import { writeJsonAtomic } from "../state.js";
-import { notifyDaemonEvent } from "./daemon.service.js";
+import { logDaemonEvent, logDaemonLine } from "./daemon.service.js";
+import { notifyDailyCap } from "./notify.service.js";
 import type { DailyUsage } from "./session-history.service.js";
 
 interface DailyCapState {
@@ -52,7 +53,9 @@ export async function notifyDailyCapReached(
 
   const subject = `Daily cap reached — ${fundName}`;
   const body = `Fund ${fundName} reached daily cap $${capUsd} ($${usage.totalUsd.toFixed(2)} used in ${usage.sessionCount} sessions). Sessions will resume at 00:00 UTC tomorrow.`;
-  await notifyDaemonEvent(subject, body);
+  if (!logDaemonEvent(subject)) return;
+  await logDaemonLine(`[ALERT] ${subject}: ${body}`);
+  notifyDailyCap(fundName, capUsd, usage.totalUsd);
 
   await writeDailyCapState(fundName, { alerted_for_date: today });
 }

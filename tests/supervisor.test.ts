@@ -26,6 +26,8 @@ vi.mock("node:child_process", () => ({
 vi.mock("../src/services/daemon.service.js", () => ({
   isDaemonRunning: vi.fn().mockResolvedValue(false),
   notifyDaemonEvent: vi.fn().mockResolvedValue(undefined),
+  logDaemonEvent: vi.fn().mockReturnValue(true),
+  logDaemonLine: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { getBackoffDelay, shouldGiveUp } from "../src/services/supervisor.service.js";

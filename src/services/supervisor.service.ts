@@ -194,11 +194,14 @@ export async function startSupervisor(): Promise<void> {
 
     if (result.shouldAlert) {
       try {
-        const { notifyDaemonEvent } = await import("./daemon.service.js");
-        await notifyDaemonEvent(
-          "Daemon heartbeat stale",
-          `Heartbeat ${Math.round(result.ageMs / 1000)}s old. Sessions may be missed.`,
-        );
+        const { logDaemonEvent, logDaemonLine } = await import("./daemon.service.js");
+        const { notifySupervisorStale } = await import("./notify.service.js");
+        const subject = "Daemon heartbeat stale";
+        const details = `Heartbeat ${Math.round(result.ageMs / 1000)}s old. Sessions may be missed.`;
+        if (logDaemonEvent(subject)) {
+          await logDaemonLine(`[ALERT] ${subject}: ${details}`);
+          notifySupervisorStale("daemon", new Date(Date.now() - result.ageMs));
+        }
         heartbeatAlerted = true;
       } catch (err) {
         console.error("[supervisor] heartbeat notify failed:", err);

@@ -216,6 +216,10 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
 }
 
 /** Append a timestamped line to the daemon log file */
+export async function logDaemonLine(message: string): Promise<void> {
+  return log(message);
+}
+
 async function log(message: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${message}\n`;
   console.log(message);
@@ -388,36 +392,33 @@ export async function rotateLogIfNeeded(): Promise<void> {
 const lastAlertByType = new Map<string, number>();
 const ALERT_DEDUP_MS = 30 * 60 * 1000; // 30 minutes
 
-/** Send a daemon event notification (deduped, OS desktop notification) */
-export async function notifyDaemonEvent(event: string, details: string): Promise<void> {
+/** Records the event in the dedup map. Returns true if NOT deduped (caller should fire alert). */
+export function logDaemonEvent(event: string): boolean {
   const now = Date.now();
   const lastSent = lastAlertByType.get(event) ?? 0;
-  if (now - lastSent < ALERT_DEDUP_MS) return;
-
+  if (now - lastSent < ALERT_DEDUP_MS) return false;
   lastAlertByType.set(event, now);
+  return true;
+}
+
+/** Log + dedup a daemon event. Emits a generic OS notification.
+ *  Callers with structured data should invoke specific notify* functions
+ *  directly AND call logDaemonEvent() for log/dedup. */
+export async function notifyDaemonEvent(event: string, details: string): Promise<void> {
+  if (!logDaemonEvent(event)) return;
   await log(`[ALERT] ${event}: ${details}`);
 
   try {
-    const { notifySupervisorStale, notifyDailyCap, notifyHandoffMissing, notifyGeneric } =
-      await import("./notify.service.js");
-    const lower = event.toLowerCase();
-    if (lower.includes("stale") || lower.includes("supervisor")) {
-      notifySupervisorStale(extractFund(event) ?? "daemon", new Date());
-    } else if (lower.includes("daily cap")) {
-      notifyDailyCap(extractFund(event) ?? "daemon", 0, 0);
-    } else if (lower.includes("handoff")) {
-      notifyHandoffMissing(extractFund(event) ?? "daemon", "unknown");
-    } else {
-      notifyGeneric(event, details);
-    }
+    const { notifyGeneric } = await import("./notify.service.js");
+    notifyGeneric(event, details);
   } catch (err) {
     await log(`[ALERT] notify.service failed: ${err}`);
   }
 }
 
-function extractFund(event: string): string | null {
-  const m = event.match(/[:\s]([a-z0-9-]+)\b/i);
-  return m ? m[1] : null;
+/** Export for tests that need to reset dedup state */
+export function __resetAlertDedupForTest(): void {
+  lastAlertByType.clear();
 }
 
 // Error tracking: consecutive failures per fund:errorType

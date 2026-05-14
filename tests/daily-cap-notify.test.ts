@@ -26,8 +26,15 @@ vi.mock("../src/paths.js", async () => {
 });
 
 const sendMock = vi.fn();
+const logEventMock = vi.fn().mockReturnValue(true);
+const logLineMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("../src/services/daemon.service.js", () => ({
-  notifyDaemonEvent: (...args: unknown[]) => sendMock(...args),
+  notifyDaemonEvent: vi.fn().mockResolvedValue(undefined),
+  logDaemonEvent: (event: string) => logEventMock(event),
+  logDaemonLine: (msg: string) => logLineMock(msg),
+}));
+vi.mock("../src/services/notify.service.js", () => ({
+  notifyDailyCap: (...args: unknown[]) => sendMock(...args),
 }));
 
 import { notifyDailyCapReached } from "../src/services/daily-cap.service.js";
@@ -46,8 +53,10 @@ describe("notifyDailyCapReached", () => {
   it("sends an alert on first call of the day", async () => {
     await notifyDailyCapReached(FUND, 5, { totalUsd: 5.32, sessionCount: 7, entries: [] });
     expect(sendMock).toHaveBeenCalledTimes(1);
-    expect(sendMock.mock.calls[0][0]).toContain("Daily cap");
-    expect(sendMock.mock.calls[0][1]).toContain("5.32");
+    // notifyDailyCap(fundName, capUsd, spentUsd) — structured args, not stringified subject/body
+    expect(sendMock.mock.calls[0][0]).toBe(FUND);
+    expect(sendMock.mock.calls[0][1]).toBe(5);
+    expect(sendMock.mock.calls[0][2]).toBeCloseTo(5.32);
   });
 
   it("does not re-send if already alerted today", async () => {
