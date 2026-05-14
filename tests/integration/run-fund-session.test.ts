@@ -12,7 +12,7 @@
  *   - vi.mock("../../src/paths.js") redirects fundPaths() and module-level
  *     constants to the isolated tmpdir
  *   - vi.mock("../../src/agent.js") returns a deterministic fake result
- *   - Telegram, universe resolution, and state snapshot are stubbed out
+ *   - Universe resolution and state snapshot are stubbed out
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";

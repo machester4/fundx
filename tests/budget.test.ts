@@ -148,7 +148,6 @@ const baseFund = (): FundConfig => ({
   schedule: { sessions: {} },
   broker: { mode: "paper" },
   notifications: {
-    telegram: { enabled: false, trade_alerts: true, stop_loss_alerts: true, daily_digest: true, weekly_digest: true, milestone_alerts: true, drawdown_alerts: true },
     quiet_hours: { enabled: true, start: "23:00", end: "07:00", allow_critical: true },
   },
   claude: { model: "sonnet", personality: "", decision_framework: "" },
@@ -158,7 +157,6 @@ const baseGlobal = (): GlobalConfig => ({
   default_model: "sonnet",
   timezone: "UTC",
   broker: {},
-  telegram: { enabled: false },
   market_data: { provider: "fmp" },
 });
 

@@ -52,7 +52,6 @@ vi.mock("../src/config.js", () => ({
   loadGlobalConfig: vi.fn().mockResolvedValue({
     default_model: "sonnet",
     broker: { mode: "paper" },
-    telegram: { enabled: false },
   }),
 }));
 

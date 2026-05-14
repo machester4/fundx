@@ -43,7 +43,6 @@ describe("integration: daemon real subprocess + accelerated cron tick", () => {
         default_model: "sonnet",
         daemon: { tick_interval_ms: 1000 },
         market_data: { provider: "yfinance" },
-        // No telegram config → gateway.startGateway() returns null (safe)
       }),
       "utf-8",
     );

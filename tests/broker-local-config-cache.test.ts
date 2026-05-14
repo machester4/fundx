@@ -16,7 +16,6 @@ const fullConfig = {
   schedule: { timezone: "UTC", trading_days: ["MON","TUE","WED","THU","FRI"], sessions: {}, special_sessions: [] },
   broker: { mode: "paper" },
   claude: { personality: "", decision_framework: "" },
-  telegram: {},
 };
 
 beforeEach(() => {

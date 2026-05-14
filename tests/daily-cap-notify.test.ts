@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 describe("notifyDailyCapReached", () => {
-  it("sends a Telegram alert on first call of the day", async () => {
+  it("sends an alert on first call of the day", async () => {
     await notifyDailyCapReached(FUND, 5, { totalUsd: 5.32, sessionCount: 7, entries: [] });
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][0]).toContain("Daily cap");

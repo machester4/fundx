@@ -76,7 +76,6 @@ const makeFundConfig = (sessionOverrides: Record<string, unknown> = {}) => ({
   broker: { mode: "paper" },
   claude: { model: "sonnet", personality: "Conservative." },
   notifications: {
-    telegram: { enabled: false },
     quiet_hours: { enabled: false, start: "22:00", end: "07:00" },
   },
 });
