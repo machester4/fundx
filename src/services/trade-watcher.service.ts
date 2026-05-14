@@ -43,7 +43,7 @@ export async function tickTradeWatcher(
   try {
     const rows = db
       .prepare(
-        `SELECT id, fund, symbol, side, quantity, price, order_type
+        `SELECT id, fund, symbol, side, quantity, price, order_type, session_type
          FROM trades WHERE id > ? ORDER BY id ASC`,
       )
       .all(cursor) as Array<{
@@ -54,13 +54,15 @@ export async function tickTradeWatcher(
         quantity: number;
         price: number;
         order_type: string;
+        session_type: string | null;
       }>;
 
     let maxId = cursor;
     for (const r of rows) {
-      const isStop =
+      const isStopOrder =
         r.order_type === "stop" || r.order_type === "stop_limit" || r.order_type === "trailing_stop";
-      if (!isStop) {
+      const isStopLossFill = r.session_type === "stop_loss";
+      if (!isStopOrder && !isStopLossFill) {
         notifyTrade(fund, r.side, r.symbol, r.quantity, r.price);
       }
       maxId = Math.max(maxId, r.id);

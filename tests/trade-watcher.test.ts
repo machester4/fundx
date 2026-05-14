@@ -34,7 +34,8 @@ describe("trade-watcher", () => {
         side TEXT,
         quantity REAL,
         price REAL,
-        order_type TEXT
+        order_type TEXT,
+        session_type TEXT
       );
     `);
     __resetWatcherStateForTest();
@@ -74,6 +75,16 @@ describe("trade-watcher", () => {
       `INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, order_type)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run("2026-05-11T10:00:00Z", "alpha", "AAPL", "sell", 10, 175.0, "stop");
+
+    await tickTradeWatcher("alpha", journalPath, cursorPath);
+    expect(notifyTrade).not.toHaveBeenCalled();
+  });
+
+  it("skips trades with session_type=stop_loss even if order_type=market", async () => {
+    db.prepare(
+      `INSERT INTO trades (timestamp, fund, symbol, side, quantity, price, order_type, session_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("2026-05-11T10:00:00Z", "alpha", "AAPL", "sell", 10, 175.0, "market", "stop_loss");
 
     await tickTradeWatcher("alpha", journalPath, cursorPath);
     expect(notifyTrade).not.toHaveBeenCalled();
