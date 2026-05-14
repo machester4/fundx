@@ -1,0 +1,251 @@
+<h2>Color Scheme: Chat TUI Refresh</h2>
+<p class="subtitle">Three different approaches to make the chat feel more alive. Click the one that resonates.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Accent Colors — Subtle Vibrancy</h3>
+      <p>Keep the dark background but add colored accents to headers, borders, key data points. Professional but alive.</p>
+      <div style="display:flex;margin-top:12px;border:1px solid #444;border-radius:8px;overflow:hidden;height:420px;font-family:monospace;font-size:11px;">
+        <!-- Chat -->
+        <div style="flex:7;display:flex;flex-direction:column;background:#0a0a14;">
+          <div style="flex:1;padding:12px;">
+            <div style="color:#888;margin-bottom:2px;font-size:9px;">YOU</div>
+            <div style="color:#e2e8f0;margin-bottom:12px;padding:6px 10px;background:#1a1a2e;border-left:2px solid #60a5fa;border-radius:0 6px 6px 0;">Como abrio el mercado?</div>
+
+            <div style="color:#888;margin-bottom:2px;font-size:9px;">CLAUDE</div>
+            <div style="color:#cbd5e1;margin-bottom:8px;padding:6px 10px;background:#111827;border-left:2px solid #a78bfa;border-radius:0 6px 6px 0;">
+              ¡Buen día! Aquí el resumen:<br><br>
+              <span style="color:#60a5fa;font-weight:bold;">Portfolio — 10:13 AM ET</span><br>
+              <table style="color:#94a3b8;font-size:10px;margin:4px 0;">
+                <tr><td style="padding:1px 6px;">URA (6)</td><td>$51.29</td><td style="color:#4ade80;">+6.97%</td></tr>
+                <tr><td style="padding:1px 6px;">ITA (1)</td><td>$232.54</td><td style="color:#4ade80;">+4.14%</td></tr>
+              </table>
+              <br>
+              <span style="color:#fbbf24;font-weight:bold;">⚡ FOMC Minutes — 2:00 PM ET</span><br>
+              SPY $674.84 (<span style="color:#4ade80;">+2.37%</span>) — por encima del MA200
+            </div>
+            <div style="color:#475569;font-size:9px;">tokens: 1,124 in / 3,520 out · Read(9), Bash(3) · 30.3s</div>
+          </div>
+          <div style="border-top:1px solid #1e293b;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#60a5fa;">❯</span>
+            <span style="color:#475569;">Message... (/help)</span>
+          </div>
+          <div style="background:#0f172a;border-top:1px solid #1e293b;padding:6px 12px;display:flex;justify-content:space-between;font-size:10px;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#4ade80;">●</span>
+              <span style="color:#e2e8f0;font-weight:bold;">Growth</span>
+              <span style="color:#334155;">·</span>
+              <span style="color:#fbbf24;font-weight:bold;">[PAPER]</span>
+              <span style="color:#334155;">·</span>
+              <span style="color:#64748b;">sonnet</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#e2e8f0;font-weight:bold;">$10,024</span>
+              <span style="color:#4ade80;">+$24 (+0.2%)</span>
+            </div>
+          </div>
+        </div>
+        <!-- Sidebar -->
+        <div style="flex:3;background:#0f0f1e;border-left:1px solid #1e293b;display:flex;flex-direction:column;font-size:10px;">
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a2e;">
+            <div style="color:#60a5fa;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ HANDOFF ─────────────────┐</div>
+            <div style="color:#94a3b8;line-height:1.5;margin-top:4px;">
+              2026-04-08 Chat (Interactive)<br>
+              Orient complete. Portfolio: $9,483 cash<br>
+              <span style="color:#fbbf24;">▲ FOMC Minutes 2PM ET</span><br>
+              ▸ Check FOMC outcome
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a2e;">
+            <div style="color:#a78bfa;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ PORTFOLIO ─── $10,024 ───┐</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>URA 6×$51.29</span><span style="color:#4ade80;">▲ +5.6%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>ITA 1×$232.17</span><span style="color:#4ade80;">▲ +3.3%</span></div>
+              <div style="display:flex;justify-content:space-between;padding-top:3px;border-top:1px solid #1a1a2e;"><span>Cash $9,483</span><span>95%</span></div>
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a2e;">
+            <div style="color:#fb923c;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ SESSIONS ────────────────┐</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <span style="color:#4ade80;">✓</span> 9:00 AM — pre market<br>
+              <span style="color:#4ade80;">✓</span> 1:00 PM — mid session
+            </div>
+          </div>
+          <div style="padding:8px 10px;">
+            <div style="color:#22d3ee;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ MARKET ──────────────────┐</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>SPY $676.01</span><span style="color:#4ade80;">▲ +2.5%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>VIX 21.04</span><span style="color:#f87171;">▼ -18.4%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>URA $51.40</span><span style="color:#4ade80;">▲ +7.2%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Bold Borders — Terminal Hacker Aesthetic</h3>
+      <p>Prominent borders, bright text on dark. Panel headers pop with color. Chat messages use colored prefixes instead of backgrounds.</p>
+      <div style="display:flex;margin-top:12px;border:1px solid #444;border-radius:8px;overflow:hidden;height:420px;font-family:monospace;font-size:11px;">
+        <!-- Chat -->
+        <div style="flex:7;display:flex;flex-direction:column;background:#000;">
+          <div style="flex:1;padding:12px;">
+            <div style="margin-bottom:10px;"><span style="color:#22d3ee;font-weight:bold;">you › </span><span style="color:#f8fafc;">Como abrio el mercado?</span></div>
+
+            <div style="margin-bottom:8px;">
+              <span style="color:#a78bfa;font-weight:bold;">claude › </span><span style="color:#e2e8f0;">¡Buen día! Aquí el resumen:</span><br><br>
+              <span style="color:#e2e8f0;">
+                <span style="color:#60a5fa;font-weight:bold;">═══ Portfolio — 10:13 AM ET ═══</span><br>
+                <table style="color:#cbd5e1;font-size:10px;margin:4px 0;">
+                  <tr><td style="padding:1px 6px;color:#64748b;">URA (6)</td><td>$51.29</td><td style="color:#4ade80;font-weight:bold;">▲ +6.97%</td><td style="color:#4ade80;">+$15.78</td></tr>
+                  <tr><td style="padding:1px 6px;color:#64748b;">ITA (1)</td><td>$232.54</td><td style="color:#4ade80;font-weight:bold;">▲ +4.14%</td><td style="color:#4ade80;">+$7.79</td></tr>
+                </table>
+                <br>
+                <span style="color:#fbbf24;font-weight:bold;">⚡ FOMC Minutes — 2:00 PM ET</span><br>
+                SPY $674.84 (<span style="color:#4ade80;">+2.37%</span>) — por encima del MA200
+              </span>
+            </div>
+            <div style="color:#334155;font-size:9px;">tokens: 1,124 in / 3,520 out │ Read(9), Bash(3) │ 30.3s</div>
+          </div>
+          <div style="border-top:1px solid #22d3ee;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#22d3ee;font-weight:bold;">❯</span>
+            <span style="color:#475569;">Message... (/help)</span>
+          </div>
+          <div style="background:#0a0a0a;border-top:1px solid #333;padding:6px 12px;display:flex;justify-content:space-between;font-size:10px;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#4ade80;">●</span>
+              <span style="color:#f8fafc;font-weight:bold;">Growth</span>
+              <span style="color:#fbbf24;font-weight:bold;">[PAPER]</span>
+              <span style="color:#64748b;">sonnet</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#f8fafc;font-weight:bold;">$10,024</span>
+              <span style="color:#4ade80;">+$24 (+0.2%)</span>
+            </div>
+          </div>
+        </div>
+        <!-- Sidebar -->
+        <div style="flex:3;background:#0a0a0a;border-left:1px solid #22d3ee;display:flex;flex-direction:column;font-size:10px;">
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a1a;">
+            <div style="color:#60a5fa;font-weight:bold;font-size:9px;">╔═ HANDOFF ══════════════════╗</div>
+            <div style="color:#94a3b8;line-height:1.5;margin-top:4px;">
+              2026-04-08 Chat (Interactive)<br>
+              Orient complete. $9,483 cash<br>
+              <span style="color:#fbbf24;font-weight:bold;">▲ FOMC Minutes 2PM ET</span><br>
+              ▸ Check FOMC outcome
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a1a;">
+            <div style="color:#a78bfa;font-weight:bold;font-size:9px;">╔═ PORTFOLIO ═══ $10,024 ════╗</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>URA 6×$51.29</span><span style="color:#4ade80;font-weight:bold;">▲ +5.6%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>ITA 1×$232.17</span><span style="color:#4ade80;font-weight:bold;">▲ +3.3%</span></div>
+              <div style="display:flex;justify-content:space-between;padding-top:3px;border-top:1px solid #1a1a1a;"><span>Cash $9,483</span><span>95%</span></div>
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1a1a1a;">
+            <div style="color:#fb923c;font-weight:bold;font-size:9px;">╔═ SESSIONS ═════════════════╗</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <span style="color:#4ade80;">✓</span> 9:00 AM — pre market<br>
+              <span style="color:#4ade80;">✓</span> 1:00 PM — mid session
+            </div>
+          </div>
+          <div style="padding:8px 10px;">
+            <div style="color:#22d3ee;font-weight:bold;font-size:9px;">╔═ MARKET ═══════════════════╗</div>
+            <div style="color:#94a3b8;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>SPY $676.01</span><span style="color:#4ade80;font-weight:bold;">▲ +2.5%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>VIX 21.04</span><span style="color:#f87171;font-weight:bold;">▼ -18.4%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>URA $51.40</span><span style="color:#4ade80;font-weight:bold;">▲ +7.2%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Warm Gradient — Financial Terminal</h3>
+      <p>Warm amber/gold accents on dark navy. Inspired by Bloomberg terminal aesthetics. Panel headers use gold, data uses warm whites.</p>
+      <div style="display:flex;margin-top:12px;border:1px solid #444;border-radius:8px;overflow:hidden;height:420px;font-family:monospace;font-size:11px;">
+        <!-- Chat -->
+        <div style="flex:7;display:flex;flex-direction:column;background:#0c1220;">
+          <div style="flex:1;padding:12px;">
+            <div style="margin-bottom:10px;padding:6px 10px;border-left:2px solid #d97706;"><span style="color:#fcd34d;font-size:9px;display:block;margin-bottom:2px;">YOU</span><span style="color:#fef3c7;">Como abrio el mercado?</span></div>
+
+            <div style="margin-bottom:8px;padding:6px 10px;border-left:2px solid #6366f1;">
+              <span style="color:#a5b4fc;font-size:9px;display:block;margin-bottom:2px;">CLAUDE</span>
+              <span style="color:#e2e8f0;">¡Buen día! Aquí el resumen:</span><br><br>
+              <span style="color:#fbbf24;font-weight:bold;">Portfolio — 10:13 AM ET</span><br>
+              <table style="color:#cbd5e1;font-size:10px;margin:4px 0;">
+                <tr><td style="padding:1px 6px;color:#78716c;">URA (6)</td><td>$51.29</td><td style="color:#4ade80;">+6.97%</td></tr>
+                <tr><td style="padding:1px 6px;color:#78716c;">ITA (1)</td><td>$232.54</td><td style="color:#4ade80;">+4.14%</td></tr>
+              </table>
+              <br>
+              <span style="color:#f59e0b;font-weight:bold;">⚡ FOMC Minutes — 2:00 PM ET</span><br>
+              <span style="color:#cbd5e1;">SPY $674.84 (<span style="color:#4ade80;">+2.37%</span>) — por encima del MA200</span>
+            </div>
+            <div style="color:#44403c;font-size:9px;">tokens: 1,124 in / 3,520 out · 30.3s</div>
+          </div>
+          <div style="border-top:1px solid #292524;padding:8px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="color:#f59e0b;">❯</span>
+            <span style="color:#57534e;">Message... (/help)</span>
+          </div>
+          <div style="background:#0a0f1a;border-top:1px solid #292524;padding:6px 12px;display:flex;justify-content:space-between;font-size:10px;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#4ade80;">●</span>
+              <span style="color:#fef3c7;font-weight:bold;">Growth</span>
+              <span style="color:#f59e0b;font-weight:bold;">[PAPER]</span>
+              <span style="color:#78716c;">sonnet</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span style="color:#fef3c7;font-weight:bold;">$10,024</span>
+              <span style="color:#4ade80;">+$24 (+0.2%)</span>
+            </div>
+          </div>
+        </div>
+        <!-- Sidebar -->
+        <div style="flex:3;background:#0a0f1a;border-left:1px solid #d97706;display:flex;flex-direction:column;font-size:10px;">
+          <div style="padding:8px 10px;border-bottom:1px solid #1c1917;">
+            <div style="color:#fbbf24;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ HANDOFF ─────────────────┐</div>
+            <div style="color:#a8a29e;line-height:1.5;margin-top:4px;">
+              2026-04-08 Chat (Interactive)<br>
+              Orient complete. $9,483 cash<br>
+              <span style="color:#fbbf24;">▲ FOMC Minutes 2PM ET</span><br>
+              ▸ Check FOMC outcome
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1c1917;">
+            <div style="color:#fbbf24;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ PORTFOLIO ─── $10,024 ───┐</div>
+            <div style="color:#a8a29e;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>URA 6×$51.29</span><span style="color:#4ade80;">▲ +5.6%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>ITA 1×$232.17</span><span style="color:#4ade80;">▲ +3.3%</span></div>
+              <div style="display:flex;justify-content:space-between;padding-top:3px;border-top:1px solid #1c1917;"><span>Cash $9,483</span><span>95%</span></div>
+            </div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid #1c1917;">
+            <div style="color:#fbbf24;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ SESSIONS ────────────────┐</div>
+            <div style="color:#a8a29e;line-height:1.6;margin-top:4px;">
+              <span style="color:#4ade80;">✓</span> 9:00 AM — pre market<br>
+              <span style="color:#4ade80;">✓</span> 1:00 PM — mid session
+            </div>
+          </div>
+          <div style="padding:8px 10px;">
+            <div style="color:#fbbf24;font-weight:bold;font-size:9px;letter-spacing:0.5px;">┌ MARKET ──────────────────┐</div>
+            <div style="color:#a8a29e;line-height:1.6;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;"><span>SPY $676.01</span><span style="color:#4ade80;">▲ +2.5%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>VIX 21.04</span><span style="color:#f87171;">▼ -18.4%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>URA $51.40</span><span style="color:#4ade80;">▲ +7.2%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

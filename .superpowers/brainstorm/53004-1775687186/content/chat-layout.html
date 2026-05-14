@@ -1,0 +1,107 @@
+<h2>Chat Layout: Multi-Panel Design</h2>
+<p class="subtitle">How should the chat screen be organized to show handoff + context alongside messages?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Left Sidebar + Chat</h3>
+      <p>Sidebar fijo a la izquierda (~30% ancho) con handoff, portfolio, y estado. Chat ocupa el resto.</p>
+      <div style="display:flex;gap:8px;margin-top:12px;height:180px;border:1px solid #444;border-radius:8px;overflow:hidden;">
+        <div style="width:30%;background:#1a1a2e;padding:12px;border-right:1px solid #333;font-size:11px;overflow:hidden;">
+          <div style="color:#888;font-weight:bold;margin-bottom:8px;">HANDOFF</div>
+          <div style="color:#666;font-size:10px;line-height:1.4;">
+            Session Contract...<br>
+            Portfolio: $10,024<br>
+            URA +6.97%<br>
+            ITA +4.14%<br>
+            <br>
+            <span style="color:#888;font-weight:bold;">CONCERNS</span><br>
+            FOMC Minutes 2PM<br>
+            SPY near 200d MA
+          </div>
+        </div>
+        <div style="flex:1;padding:12px;display:flex;flex-direction:column;justify-content:space-between;">
+          <div style="font-size:11px;">
+            <div style="color:#888;margin-bottom:4px;">You: Como abrio el mercado?</div>
+            <div style="color:#aaa;margin-bottom:4px;">Claude: El mercado abrió fuerte...</div>
+            <div style="color:#888;margin-bottom:4px;">You: agendaste la revision?</div>
+            <div style="color:#aaa;">Claude: Sesión agendada para 2:15 PM</div>
+          </div>
+          <div style="border-top:1px solid #333;padding-top:8px;color:#555;font-size:11px;">
+            ❯ Message... (/help)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Top Panel + Chat</h3>
+      <p>Panel compacto arriba (~6 líneas) con handoff resumido + posiciones. Chat abajo con todo el ancho.</p>
+      <div style="display:flex;flex-direction:column;gap:0;margin-top:12px;height:180px;border:1px solid #444;border-radius:8px;overflow:hidden;">
+        <div style="background:#1a1a2e;padding:8px 12px;border-bottom:1px solid #333;font-size:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="color:#888;font-weight:bold;">LAST HANDOFF</span>
+            <span style="color:#666;">2026-04-08 pre-market</span>
+          </div>
+          <div style="color:#666;line-height:1.4;">
+            Portfolio: $10,024 | Cash 94.6% | URA +6.97% ITA +4.14%<br>
+            Next: FOMC Minutes 2PM ET | Regime: Risk-Off (2.8) | Intent: Wait for FOMC
+          </div>
+        </div>
+        <div style="flex:1;padding:12px;display:flex;flex-direction:column;justify-content:space-between;">
+          <div style="font-size:11px;">
+            <div style="color:#888;margin-bottom:4px;">You: Como abrio el mercado?</div>
+            <div style="color:#aaa;margin-bottom:4px;">Claude: El mercado abrió fuerte. SPY $674.84 (+2.37%)...</div>
+            <div style="color:#888;margin-bottom:4px;">You: agendaste la revision?</div>
+            <div style="color:#aaa;">Claude: Sesión agendada para 2:15 PM</div>
+          </div>
+          <div style="border-top:1px solid #333;padding-top:8px;color:#555;font-size:11px;">
+            ❯ Message... (/help)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Right Sidebar + Chat</h3>
+      <p>Chat a la izquierda (~70%), sidebar derecha con handoff, portfolio, pending sessions. Foco en el chat, contexto accesible.</p>
+      <div style="display:flex;gap:8px;margin-top:12px;height:180px;border:1px solid #444;border-radius:8px;overflow:hidden;">
+        <div style="flex:1;padding:12px;display:flex;flex-direction:column;justify-content:space-between;">
+          <div style="font-size:11px;">
+            <div style="color:#888;margin-bottom:4px;">You: Como abrio el mercado?</div>
+            <div style="color:#aaa;margin-bottom:4px;">Claude: El mercado abrió fuerte. SPY $674.84 (+2.37%), ganancias pre-market se mantuvieron...</div>
+            <div style="color:#888;margin-bottom:4px;">You: agendaste la revision?</div>
+            <div style="color:#aaa;">Claude: Sesión agendada para 2:15 PM</div>
+          </div>
+          <div style="border-top:1px solid #333;padding-top:8px;color:#555;font-size:11px;">
+            ❯ Message... (/help)
+          </div>
+        </div>
+        <div style="width:30%;background:#1a1a2e;padding:12px;border-left:1px solid #333;font-size:11px;overflow:hidden;">
+          <div style="color:#888;font-weight:bold;margin-bottom:6px;">HANDOFF</div>
+          <div style="color:#666;font-size:10px;line-height:1.4;">
+            Portfolio: $10,024<br>
+            Cash: $9,483 (94.6%)<br>
+            URA 6×$51.29 +6.97%<br>
+            ITA 1×$232.54 +4.14%
+          </div>
+          <div style="color:#888;font-weight:bold;margin-top:8px;margin-bottom:4px;">PENDING</div>
+          <div style="color:#666;font-size:10px;line-height:1.4;">
+            2:15 PM — FOMC review<br>
+          </div>
+          <div style="color:#888;font-weight:bold;margin-top:8px;margin-bottom:4px;">EVENTS</div>
+          <div style="color:#e8a838;font-size:10px;">
+            FOMC Minutes 2PM ET
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
