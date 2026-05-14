@@ -168,16 +168,6 @@ export interface DashboardData {
   nextCron: NextCronInfo | null;
 }
 
-/** Check if Telegram is configured */
-async function checkTelegramStatus(): Promise<boolean> {
-  try {
-    const config = await loadGlobalConfig();
-    return !!(config.telegram.enabled && config.telegram.bot_token && config.telegram.chat_id);
-  } catch {
-    return false;
-  }
-}
-
 /** Check if the active market data provider is reachable */
 async function checkMarketDataStatus(): Promise<{ ok: boolean; provider: "fmp" | "yfinance" | "none" }> {
   const provider = await getMarketDataProvider();
@@ -261,12 +251,11 @@ async function getNextCron(): Promise<NextCronInfo | null> {
 
 /** Get service statuses for the dashboard */
 export async function getServiceStatuses(): Promise<ServiceStatus> {
-  const [daemon, telegram, marketStatus] = await Promise.all([
+  const [daemon, marketStatus] = await Promise.all([
     getDaemonStatus().then((d) => d.running),
-    checkTelegramStatus(),
     checkMarketDataStatus(),
   ]);
-  return { daemon, telegram, marketData: marketStatus.ok, marketDataProvider: marketStatus.provider };
+  return { daemon, marketData: marketStatus.ok, marketDataProvider: marketStatus.provider };
 }
 
 /** Aggregate all dashboard data in a single call */

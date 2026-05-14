@@ -129,11 +129,6 @@ async function seedFundConfig(path: string, fundName: string, state: EvalFundSta
       model: "claude-sonnet-4-6",
       personality: "concise senior PM",
     },
-    notifications: {
-      telegram: {
-        enabled: false,
-      },
-    },
   };
   await writeFile(path, yaml.dump(doc), "utf8");
 }

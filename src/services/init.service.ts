@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WORKSPACE, FUNDS_DIR, SHARED_DIR, WORKSPACE_CLAUDE_MD, WORKSPACE_CLAUDE_DIR, WORKSPACE_RULES_DIR } from "../paths.js";
 import { saveGlobalConfig } from "../config.js";
 import { ensureWorkspaceSkillFiles } from "../skills.js";
-import type { GlobalConfig } from "../types.js";
+import { globalConfigSchema, type GlobalConfig } from "../types.js";
 
 export interface InitWorkspaceParams {
   timezone: string;
@@ -28,7 +28,7 @@ export function getWorkspacePath(): string {
 
 /** Initialize the FundX workspace */
 export async function initWorkspace(params: InitWorkspaceParams): Promise<void> {
-  const config: GlobalConfig = {
+  const config: GlobalConfig = globalConfigSchema.parse({
     default_model: params.defaultModel,
     timezone: params.timezone,
     broker: {
@@ -37,15 +37,10 @@ export async function initWorkspace(params: InitWorkspaceParams): Promise<void> 
       secret_key: params.secretKey,
       mode: "paper",
     },
-    telegram: {
-      bot_token: params.botToken || undefined,
-      chat_id: params.chatId,
-      enabled: !!params.botToken,
-    },
     market_data: {
       provider: "fmp",
     },
-  };
+  });
 
   await mkdir(WORKSPACE, { recursive: true });
   await mkdir(FUNDS_DIR, { recursive: true });

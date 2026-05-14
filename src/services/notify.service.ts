@@ -32,11 +32,9 @@ async function shouldSuppress(priority: NotifyPriority): Promise<boolean> {
     return inQuietHours(testOverride.now, testOverride.start, testOverride.end);
   }
   try {
-    const cfg = (await loadGlobalConfig()) as unknown as {
-      notifications?: { quiet_hours?: { enabled?: boolean; start?: string; end?: string } };
-    };
+    const cfg = await loadGlobalConfig();
     const qh = cfg.notifications?.quiet_hours;
-    if (!qh || !qh.enabled || !qh.start || !qh.end) return false;
+    if (!qh || !qh.enabled) return false;
     return inQuietHours(nowHHMM(), qh.start, qh.end);
   } catch {
     return false;

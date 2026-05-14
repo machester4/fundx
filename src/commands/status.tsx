@@ -19,7 +19,6 @@ interface SystemInfo {
   daemon: { running: boolean; pid?: number };
   supervisor: { running: boolean; pid?: number };
   heartbeat: { timestamp: string; fundsChecked: number; ageSeconds: number } | null;
-  telegram: boolean;
   marketData: boolean;
   marketDataProvider: string;
   newsDir: boolean;
@@ -86,7 +85,6 @@ async function getSystemInfo(): Promise<SystemInfo> {
     daemon: { running: daemonRunning, pid: daemonPid },
     supervisor: { running: supervisorRunning, pid: supervisorPid },
     heartbeat,
-    telegram: services.telegram,
     marketData: services.marketData,
     marketDataProvider: services.marketDataProvider,
     newsDir,
@@ -182,11 +180,6 @@ export default function Status() {
                 {sys.daemon.running ? `PID ${sys.daemon.pid}` : "stopped"}
                 {sys.heartbeat ? ` | heartbeat ${formatAge(sys.heartbeat.ageSeconds)} (${sys.heartbeat.fundsChecked} funds)` : ""}
               </Text>
-            </Box>
-            <Box gap={1}>
-              <Dot color={sys.telegram ? "green" : "yellow"} />
-              <Text>Telegram</Text>
-              <Text dimColor>{sys.telegram ? "connected" : "not configured"}</Text>
             </Box>
             <Box gap={1}>
               <Dot color={sys.marketData ? "green" : "yellow"} />

@@ -201,17 +201,7 @@ export const fundConfigSchema = z.object({
   }).passthrough(),
   notifications: z
     .object({
-      telegram: z
-        .object({
-          enabled: z.boolean().default(false),
-          trade_alerts: z.boolean().default(true),
-          stop_loss_alerts: z.boolean().default(true),
-          daily_digest: z.boolean().default(true),
-          weekly_digest: z.boolean().default(true),
-          milestone_alerts: z.boolean().default(true),
-          drawdown_alerts: z.boolean().default(true),
-        })
-        .default({}),
+      enabled: z.boolean().default(true),
       quiet_hours: z
         .object({
           enabled: z.boolean().default(true),
@@ -230,7 +220,7 @@ export const fundConfigSchema = z.object({
     })
     .default({}),
   budget: fundBudgetConfigSchema,
-});
+}).strip();
 
 export type FundConfig = z.infer<typeof fundConfigSchema>;
 export type Objective = z.infer<typeof objectiveSchema>;
@@ -288,11 +278,17 @@ export const globalConfigSchema = z.object({
     .object({})
     .passthrough()
     .default({}),
-  telegram: z
+  notifications: z
     .object({
-      bot_token: z.string().optional(),
-      chat_id: z.string().optional(),
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().default(true),
+      quiet_hours: z
+        .object({
+          enabled: z.boolean().default(true),
+          start: z.string().default("23:00"),
+          end: z.string().default("07:00"),
+          allow_critical: z.boolean().default(true),
+        })
+        .default({}),
     })
     .default({}),
   market_data: z
@@ -314,7 +310,7 @@ export const globalConfigSchema = z.object({
     })
     .optional(),
   budget: fundBudgetConfigSchema,
-});
+}).strip();
 
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
@@ -405,21 +401,6 @@ export const tradeRecordSchema = z.object({
 });
 
 export type TradeRecord = z.infer<typeof tradeRecordSchema>;
-
-// ── Telegram Notification Schemas ─────────────────────────────
-
-export const notificationPrioritySchema = z.enum(["low", "normal", "critical"]);
-
-export type NotificationPriority = z.infer<typeof notificationPrioritySchema>;
-
-export const telegramNotificationSchema = z.object({
-  fund: z.string().optional(),
-  message: z.string(),
-  priority: notificationPrioritySchema.default("normal"),
-  parse_mode: z.enum(["HTML", "MarkdownV2", "Markdown"]).default("HTML"),
-});
-
-export type TelegramNotification = z.infer<typeof telegramNotificationSchema>;
 
 // ── Phase 4: Trade Similarity Search Schema ─────────────────
 
@@ -556,7 +537,6 @@ export type DashboardMarketData = z.infer<typeof dashboardMarketDataSchema>;
 
 export const serviceStatusSchema = z.object({
   daemon: z.boolean().default(false),
-  telegram: z.boolean().default(false),
   marketData: z.boolean().default(false),
   marketDataProvider: z.enum(["fmp", "yfinance", "none"]).default("none"),
 });

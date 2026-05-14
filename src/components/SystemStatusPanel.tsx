@@ -45,10 +45,6 @@ export function SystemStatusPanel({ width, height, services, nextCron }: SystemS
         <ServiceDot label="Daemon" active={services.daemon} />
       </Box>
       <Box justifyContent="space-between">
-        <Text dimColor>v0.1.0</Text>
-        <ServiceDot label="Telegram" active={services.telegram} />
-      </Box>
-      <Box justifyContent="space-between">
         <Text dimColor>{cronLabel}</Text>
         <ServiceDot label={marketLabel} active={services.marketData} />
       </Box>

@@ -16,7 +16,7 @@ import {
 
 const notifySpy = notifier.notify as unknown as ReturnType<typeof vi.fn>;
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+const flush = () => new Promise<void>((r) => setTimeout(r, 20));
 
 describe("notify.service", () => {
   beforeEach(() => {

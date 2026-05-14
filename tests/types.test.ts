@@ -101,14 +101,29 @@ describe("globalConfigSchema", () => {
       broker: {
         mode: "paper",
       },
-      telegram: {
-        bot_token: "123:ABC",
-        chat_id: "456",
+      notifications: {
+        enabled: true,
+        quiet_hours: {
+          enabled: true,
+          start: "22:00",
+          end: "06:00",
+        },
       },
     });
     expect(result.default_model).toBe("opus");
     expect(result.broker.mode).toBe("paper");
-    expect(result.telegram.bot_token).toBe("123:ABC");
+    expect(result.notifications.quiet_hours.start).toBe("22:00");
+  });
+
+  it("silently drops legacy telegram and gateway keys", () => {
+    const result = globalConfigSchema.parse({
+      default_model: "opus",
+      telegram: { bot_token: "legacy", chat_id: "legacy" },
+      gateway: { enabled: true },
+    });
+    expect(result.default_model).toBe("opus");
+    expect((result as Record<string, unknown>).telegram).toBeUndefined();
+    expect((result as Record<string, unknown>).gateway).toBeUndefined();
   });
 });
 

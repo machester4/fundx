@@ -28,17 +28,19 @@ describe("loadGlobalConfig", () => {
 default_model: opus
 broker:
   mode: paper
-telegram:
-  bot_token: "123:ABC"
-  chat_id: "999"
+notifications:
   enabled: true
+  quiet_hours:
+    enabled: true
+    start: "22:00"
+    end: "06:00"
 `);
 
     const config = await loadGlobalConfig();
     expect(config.default_model).toBe("opus");
     expect(config.broker.mode).toBe("paper");
-    expect(config.telegram.bot_token).toBe("123:ABC");
-    expect(config.telegram.enabled).toBe(true);
+    expect(config.notifications.enabled).toBe(true);
+    expect(config.notifications.quiet_hours.start).toBe("22:00");
   });
 
   it("returns defaults when config file is missing", async () => {
@@ -46,7 +48,7 @@ telegram:
 
     const config = await loadGlobalConfig();
     expect(config.default_model).toBe("sonnet");
-    expect(config.telegram.enabled).toBe(false);
+    expect(config.notifications.enabled).toBe(true);
   });
 
   it("returns defaults when config is invalid YAML", async () => {
@@ -71,7 +73,7 @@ describe("saveGlobalConfig", () => {
       default_model: "opus",
       timezone: "US/Eastern",
       broker: { mode: "paper" as const },
-      telegram: { enabled: false },
+      notifications: { enabled: true },
     };
 
     await saveGlobalConfig(config as ReturnType<typeof loadGlobalConfig> extends Promise<infer T> ? T : never);
