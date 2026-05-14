@@ -10,9 +10,21 @@ interface QuietHoursOverride {
 }
 
 let testOverride: QuietHoursOverride | null = null;
+let enabledOverride: boolean | null = null;
+let allowCriticalOverride: boolean | null = null;
 
 export function __setQuietHoursForTest(override: QuietHoursOverride | null): void {
   testOverride = override;
+}
+
+/** Test hook: force notifications.enabled flag. null = use real config. */
+export function __setEnabledForTest(enabled: boolean | null): void {
+  enabledOverride = enabled;
+}
+
+/** Test hook: force quiet_hours.allow_critical flag. null = use real config. */
+export function __setAllowCriticalForTest(allowCritical: boolean | null): void {
+  allowCriticalOverride = allowCritical;
 }
 
 function nowHHMM(): string {
@@ -27,15 +39,31 @@ function inQuietHours(now: string, start: string, end: string): boolean {
 }
 
 async function shouldSuppress(priority: NotifyPriority): Promise<boolean> {
-  if (priority === "high") return false;
+  // Tests can force the enabled / allow_critical branches without spinning up
+  // a real global config. testOverride continues to drive the quiet-hours path.
+  if (enabledOverride === false) return true;
+
   if (testOverride) {
-    return inQuietHours(testOverride.now, testOverride.start, testOverride.end);
+    const isQuiet = inQuietHours(testOverride.now, testOverride.start, testOverride.end);
+    if (!isQuiet) return false;
+    // In quiet hours under test override: respect allow_critical (default true).
+    if (priority === "high" && allowCriticalOverride !== false) return false;
+    return true;
   }
+
   try {
     const cfg = await loadGlobalConfig();
-    const qh = cfg.notifications?.quiet_hours;
+    const notifications = cfg.notifications;
+    if (!notifications || notifications.enabled === false) return true;
+
+    const qh = notifications.quiet_hours;
     if (!qh || !qh.enabled) return false;
-    return inQuietHours(nowHHMM(), qh.start, qh.end);
+    const isQuiet = inQuietHours(nowHHMM(), qh.start, qh.end);
+    if (!isQuiet) return false;
+
+    // We are in quiet hours.
+    if (priority === "high" && qh.allow_critical !== false) return false;
+    return true;
   } catch {
     return false;
   }

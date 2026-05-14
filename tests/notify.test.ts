@@ -12,6 +12,8 @@ import {
   notifySupervisorStale,
   notifyHandoffMissing,
   __setQuietHoursForTest,
+  __setEnabledForTest,
+  __setAllowCriticalForTest,
 } from "../src/services/notify.service.js";
 
 const notifySpy = notifier.notify as unknown as ReturnType<typeof vi.fn>;
@@ -22,6 +24,8 @@ describe("notify.service", () => {
   beforeEach(() => {
     notifySpy.mockReset();
     __setQuietHoursForTest(null);
+    __setEnabledForTest(null);
+    __setAllowCriticalForTest(null);
   });
 
   it("notifyTrade emits an OS notification with fund/side/qty/price", async () => {
@@ -61,5 +65,29 @@ describe("notify.service", () => {
     await flush();
     expect(notifySpy).toHaveBeenCalledTimes(1);
     expect(notifySpy.mock.calls[0][0].message).toMatch(/pre_market/);
+  });
+
+  it("notifications.enabled=false suppresses everything (including high priority)", async () => {
+    __setEnabledForTest(false);
+    notifyTrade("alpha", "buy", "AAPL", 1, 100);
+    notifyStopLoss("alpha", "AAPL", 175.0, "sold");
+    await flush();
+    expect(notifySpy).not.toHaveBeenCalled();
+  });
+
+  it("allow_critical=false suppresses high-priority alerts inside quiet hours", async () => {
+    __setQuietHoursForTest({ now: "23:30", start: "22:00", end: "07:00" });
+    __setAllowCriticalForTest(false);
+    notifyStopLoss("alpha", "AAPL", 175.0, "sold 10 @ 174.50");
+    await flush();
+    expect(notifySpy).not.toHaveBeenCalled();
+  });
+
+  it("allow_critical=true (default) lets high-priority alerts through quiet hours", async () => {
+    __setQuietHoursForTest({ now: "23:30", start: "22:00", end: "07:00" });
+    __setAllowCriticalForTest(true);
+    notifyStopLoss("alpha", "AAPL", 175.0, "sold 10 @ 174.50");
+    await flush();
+    expect(notifySpy).toHaveBeenCalledTimes(1);
   });
 });
