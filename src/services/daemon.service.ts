@@ -32,6 +32,7 @@ import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
 import { getHistoricalDaily, getCompanyProfile } from "./market.service.js";
 import { resolveUniverse } from "./universe.service.js";
+import { tickTradeWatcher } from "./trade-watcher.service.js";
 
 // ── Schedule Constants ────────────────────────────────────────
 
@@ -47,6 +48,22 @@ const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
 const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 
 let isProcessing = false;
+
+let watcherInterval: NodeJS.Timeout | null = null;
+
+async function tickAllWatchers(): Promise<void> {
+  const names = await listFundNames();
+  for (const name of names) {
+    try {
+      const paths = fundPaths(name);
+      const journal = paths.state.journal;
+      const cursor = join(paths.state.dir, "last_notify_cursor.json");
+      await tickTradeWatcher(name, journal, cursor);
+    } catch (err) {
+      await log(`[trade-watcher] ${name} tick failed: ${err}`);
+    }
+  }
+}
 
 // ── Notification Helpers ─────────────────────────────────────
 
@@ -1110,11 +1127,19 @@ export async function startDaemon(): Promise<void> {
     }
   }, { timezone: "UTC" });
 
+  watcherInterval = setInterval(() => {
+    void tickAllWatchers();
+  }, 5000);
+
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
 }
 
 async function cleanup() {
+  if (watcherInterval) {
+    clearInterval(watcherInterval);
+    watcherInterval = null;
+  }
   await stopGateway();
   await stopNewsIpcServer().catch(() => {});
   await unlink(DAEMON_PID).catch(() => {});
