@@ -970,7 +970,7 @@ When the user describes an investment goal, strategy, or objective and wants to 
 
 ## When NOT to Use
 - The user is asking about an existing fund (rename, modify, query state) — use the per-fund chat instead
-- The user wants to clone a fund or apply a template — direct them to \`fundx fund clone\` or \`fundx template\` instead
+- The user wants to clone a fund or apply a template — explain you'll create a new fund and ask which existing fund or template YAML to base it on, then proceed via this skill (templates live at \`${WORKSPACE}/shared/templates/\`)
 - The user is exploring possibilities or asking comparison questions without a clear commitment to create — clarify intent first
 
 ## Technique
