@@ -93,7 +93,6 @@ export const IS_DEV = __dirname.endsWith("/src") || __dirname.endsWith("\\src");
  */
 export const MCP_SERVERS = {
   brokerLocal: join(__dirname, "mcp", IS_DEV ? "broker-local.ts" : "broker-local.js"),
-  telegramNotify: join(__dirname, "mcp", IS_DEV ? "telegram-notify.ts" : "telegram-notify.js"),
   sws: join(__dirname, "mcp", IS_DEV ? "sws.ts" : "sws.js"),
   screener: join(__dirname, "mcp", IS_DEV ? "screener.ts" : "screener.js"),
 };

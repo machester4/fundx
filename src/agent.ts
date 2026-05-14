@@ -103,33 +103,15 @@ export async function buildMcpServers(
   fundName: string,
 ): Promise<Record<string, McpServerEntry>> {
   const globalConfig = await loadGlobalConfig();
-  const fundConfig = await loadFundConfig(fundName);
   const paths = fundPaths(fundName);
 
-  // Build broker-local env — include Telegram vars when notifications are enabled
+  // Build broker-local env
   const brokerLocalEnv: Record<string, string> = {
     FUND_DIR: paths.root,
     ...(globalConfig.market_data?.fmp_api_key
       ? { FMP_API_KEY: globalConfig.market_data.fmp_api_key }
       : {}),
   };
-  if (
-    globalConfig.telegram.bot_token &&
-    globalConfig.telegram.chat_id &&
-    fundConfig.notifications.telegram.enabled
-  ) {
-    const tg = fundConfig.notifications.telegram;
-    const qh = fundConfig.notifications.quiet_hours;
-    brokerLocalEnv.TELEGRAM_BOT_TOKEN = globalConfig.telegram.bot_token;
-    brokerLocalEnv.TELEGRAM_CHAT_ID = globalConfig.telegram.chat_id;
-    brokerLocalEnv.NOTIFY_TRADE_ALERTS = String(tg.trade_alerts);
-    brokerLocalEnv.NOTIFY_STOP_LOSS_ALERTS = String(tg.stop_loss_alerts);
-    if (qh.enabled) {
-      brokerLocalEnv.QUIET_HOURS_START = qh.start;
-      brokerLocalEnv.QUIET_HOURS_END = qh.end;
-      brokerLocalEnv.QUIET_HOURS_ALLOW_CRITICAL = String(qh.allow_critical);
-    }
-  }
 
   const servers: Record<string, McpServerEntry> = {
     "broker-local": {
@@ -146,36 +128,6 @@ export async function buildMcpServers(
       env: { ...process.env } as Record<string, string>,
     },
   };
-
-  // Conditionally add telegram-notify
-  if (
-    globalConfig.telegram.bot_token &&
-    globalConfig.telegram.chat_id &&
-    fundConfig.notifications.telegram.enabled
-  ) {
-    const tg = fundConfig.notifications.telegram;
-    const qh = fundConfig.notifications.quiet_hours;
-    const telegramEnv: Record<string, string> = {
-      TELEGRAM_BOT_TOKEN: globalConfig.telegram.bot_token,
-      TELEGRAM_CHAT_ID: globalConfig.telegram.chat_id,
-      NOTIFY_TRADE_ALERTS: String(tg.trade_alerts),
-      NOTIFY_STOP_LOSS_ALERTS: String(tg.stop_loss_alerts),
-      NOTIFY_DAILY_DIGEST: String(tg.daily_digest),
-      NOTIFY_WEEKLY_DIGEST: String(tg.weekly_digest),
-      NOTIFY_MILESTONE_ALERTS: String(tg.milestone_alerts),
-      NOTIFY_DRAWDOWN_ALERTS: String(tg.drawdown_alerts),
-    };
-    if (qh.enabled) {
-      telegramEnv.QUIET_HOURS_START = qh.start;
-      telegramEnv.QUIET_HOURS_END = qh.end;
-      telegramEnv.QUIET_HOURS_ALLOW_CRITICAL = String(qh.allow_critical);
-    }
-    servers["telegram-notify"] = {
-      command: MCP_COMMAND,
-      args: [MCP_SERVERS.telegramNotify],
-      env: telegramEnv,
-    };
-  }
 
   if (globalConfig.sws?.auth_token) {
     servers["sws"] = {

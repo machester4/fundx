@@ -6,13 +6,6 @@ import { z } from "zod";
 import Database from "better-sqlite3";
 import yaml from "js-yaml";
 import { executeBuy, executeSell } from "../paper-trading.js";
-import {
-  isInQuietHoursEnv,
-  shouldSendNotification,
-  formatTradeAlert,
-  formatStopLossAlert,
-  sendTelegram,
-} from "./broker-local-notify.js";
 import { fundConfigSchema, fmpScreenerFiltersSchema } from "../types.js";
 import type { UniverseResolution, FundConfig } from "../types.js";
 import type { UpdateUniverseInput } from "./broker-local-universe.js";
@@ -325,11 +318,6 @@ server.tool(
     const price = await fetchFmpPrice(symbol.toUpperCase());
     const portfolio = await readPortfolio();
 
-    // Save position info before sell so we can compute accurate loss for stop-loss alerts
-    const preSellPosition = side === "sell"
-      ? portfolio.positions.find((p) => p.symbol === symbol.toUpperCase())
-      : undefined;
-
     const result = side === "buy"
       ? executeBuy(portfolio, symbol.toUpperCase(), qty, price, stop_loss, entry_reason)
       : executeSell(portfolio, symbol.toUpperCase(), qty, price, entry_reason);
@@ -347,60 +335,6 @@ server.tool(
       outOfUniverse,
       outOfUniverseReason,
     });
-
-    // ── Notify via Telegram (best-effort) ──────────────────────
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-    if (botToken && chatId) {
-      const fundDisplayName = FUND_DIR.split("/").pop() ?? "unknown";
-      const isStopLoss = /stop/i.test(entry_reason ?? "");
-      const notifyEnabled = isStopLoss
-        ? process.env.NOTIFY_STOP_LOSS_ALERTS === "true"
-        : process.env.NOTIFY_TRADE_ALERTS === "true";
-
-      if (notifyEnabled) {
-        const inQuiet = isInQuietHoursEnv(
-          process.env.QUIET_HOURS_START,
-          process.env.QUIET_HOURS_END,
-        );
-        const allowCrit = process.env.QUIET_HOURS_ALLOW_CRITICAL === "true";
-
-        if (shouldSendNotification(inQuiet, isStopLoss, allowCrit)) {
-          let message: string;
-          if (isStopLoss) {
-            // Use pre-sell avg_cost for accurate loss computation
-            const avgCost = preSellPosition?.avg_cost ?? price;
-            const loss = (price - avgCost) * qty;
-            const lossPct = avgCost > 0 ? ((price - avgCost) / avgCost) * 100 : 0;
-            message = formatStopLossAlert(
-              fundDisplayName,
-              symbol.toUpperCase(),
-              qty,
-              price,
-              loss,
-              lossPct,
-            );
-          } else {
-            // For regular sells, compute realized P&L
-            const sellPnl = preSellPosition ? (price - preSellPosition.avg_cost) * qty : undefined;
-            const sellPnlPct = preSellPosition && preSellPosition.avg_cost > 0
-              ? ((price - preSellPosition.avg_cost) / preSellPosition.avg_cost) * 100
-              : undefined;
-            message = formatTradeAlert(
-              fundDisplayName,
-              symbol.toUpperCase(),
-              side,
-              qty,
-              price,
-              entry_reason,
-              sellPnl,
-              sellPnlPct,
-            );
-          }
-          await sendTelegram(botToken, chatId, message);
-        }
-      }
-    }
 
     return {
       content: [{

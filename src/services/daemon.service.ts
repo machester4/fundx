@@ -16,7 +16,6 @@ import { listFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.servic
 import { runFundSession } from "./session.service.js";
 import { pruneSessionLogJsonl } from "./session-history.service.js";
 import { clearDailyCapAlertState } from "./daily-cap.service.js";
-import { startGateway, stopGateway } from "./gateway.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
 import { fetchAllFeeds, checkBreakingNews, cleanOldArticles } from "./news.service.js";
 import { startNewsIpcServer, stopNewsIpcServer } from "./news-ipc.service.js";
@@ -26,7 +25,6 @@ import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
 import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
-import { isInQuietHoursEnv } from "../mcp/broker-local-notify.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
@@ -69,11 +67,6 @@ async function tickAllWatchers(): Promise<void> {
 
 export async function sendDailyDigest(fundName: string): Promise<void> {
   const config = await loadFundConfig(fundName);
-  if (!config.notifications.telegram.enabled || !config.notifications.telegram.daily_digest) return;
-
-  const qh = config.notifications.quiet_hours;
-  if (qh.enabled && isInQuietHoursEnv(qh.start, qh.end)) return;
-
   const portfolio = await readPortfolio(fundName);
   const tracker = await readTracker(fundName).catch(() => null);
   const snapshot = await readDailySnapshot(fundName);
@@ -84,7 +77,7 @@ export async function sendDailyDigest(fundName: string): Promise<void> {
     const pnl = portfolio.total_value - snapshot.total_value;
     const pnlPct = snapshot.total_value > 0 ? (pnl / snapshot.total_value) * 100 : 0;
     const sign = pnl >= 0 ? "+" : "";
-    pnlLine = `P&amp;L: ${sign}$${pnl.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)`;
+    pnlLine = `P&L: ${sign}$${pnl.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)`;
   } else {
     pnlLine = `Value: $${portfolio.total_value.toFixed(2)}`;
   }
@@ -107,23 +100,17 @@ export async function sendDailyDigest(fundName: string): Promise<void> {
 
   const displayName = config.fund.display_name;
   const message = [
-    `📊 <b>${displayName}</b> — Daily Digest (${today})`,
     pnlLine,
     `Portfolio: $${portfolio.total_value.toFixed(2)}`,
     `Cash: ${cashPct}% | Positions: ${portfolio.positions.length}`,
   ].join("\n") + topMover + objectiveLine;
 
-  const { sendTelegramNotification } = await import("./gateway.service.js");
-  await sendTelegramNotification(message);
+  const { notifyGeneric } = await import("./notify.service.js");
+  notifyGeneric(`${displayName} — Daily Digest (${today})`, message);
 }
 
 export async function sendWeeklyDigest(fundName: string): Promise<void> {
   const config = await loadFundConfig(fundName);
-  if (!config.notifications.telegram.enabled || !config.notifications.telegram.weekly_digest) return;
-
-  const qh = config.notifications.quiet_hours;
-  if (qh.enabled && isInQuietHoursEnv(qh.start, qh.end)) return;
-
   const portfolio = await readPortfolio(fundName);
   const tracker = await readTracker(fundName).catch(() => null);
 
@@ -147,7 +134,7 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
   const weekRange = `${weekAgo.toISOString().split("T")[0]} – ${today.toISOString().split("T")[0]}`;
 
   const pnlLine = weeklyPnl !== 0
-    ? `\nRealized P&amp;L: ${weeklyPnl >= 0 ? "+" : ""}$${weeklyPnl.toFixed(2)}`
+    ? `\nRealized P&L: ${weeklyPnl >= 0 ? "+" : ""}$${weeklyPnl.toFixed(2)}`
     : "";
 
   const objectiveLine = tracker
@@ -156,14 +143,13 @@ export async function sendWeeklyDigest(fundName: string): Promise<void> {
 
   const displayName = config.fund.display_name;
   const message = [
-    `📅 <b>${displayName}</b> — Weekly Digest (${weekRange})`,
     `Portfolio: $${portfolio.total_value.toFixed(2)}`,
     `Trades: ${trades.length} (${wins} wins, ${losses} losses)`,
     `Best: $${bestPnl.toFixed(2)} | Worst: $${worstPnl.toFixed(2)}`,
   ].join("\n") + pnlLine + objectiveLine;
 
-  const { sendTelegramNotification } = await import("./gateway.service.js");
-  await sendTelegramNotification(message);
+  const { notifyGeneric } = await import("./notify.service.js");
+  notifyGeneric(`${displayName} — Weekly Digest (${weekRange})`, message);
 }
 
 const MILESTONE_THRESHOLDS = [10, 25, 50, 75, 100];
@@ -171,14 +157,12 @@ const DRAWDOWN_BUDGET_THRESHOLDS = [50, 75];
 
 export async function checkMilestonesAndDrawdown(fundName: string): Promise<void> {
   const config = await loadFundConfig(fundName);
-  if (!config.notifications.telegram.enabled) return;
-
   const portfolio = await readPortfolio(fundName);
   const tracker = await readTracker(fundName).catch(() => null);
   const milestones = await readNotifiedMilestones(fundName);
 
   const displayName = config.fund.display_name;
-  const { sendTelegramNotification } = await import("./gateway.service.js");
+  const { notifyGeneric } = await import("./notify.service.js");
 
   // Update peak value
   if (portfolio.total_value > milestones.peak_value) {
@@ -187,56 +171,42 @@ export async function checkMilestonesAndDrawdown(fundName: string): Promise<void
   }
 
   // Milestone check
-  if (tracker && config.notifications.telegram.milestone_alerts) {
-    const qh = config.notifications.quiet_hours;
-    const suppressed = qh.enabled && isInQuietHoursEnv(qh.start, qh.end);
-
-    if (!suppressed) {
-      for (const threshold of MILESTONE_THRESHOLDS) {
-        if (
-          tracker.progress_pct >= threshold &&
-          !milestones.thresholds_notified.includes(threshold)
-        ) {
-          milestones.thresholds_notified.push(threshold);
-          const gain = portfolio.total_value - tracker.initial_capital;
-          const sign = gain >= 0 ? "+" : "";
-          await sendTelegramNotification(
-            `🎯 <b>${displayName}</b> — Milestone: ${threshold}% of objective reached\n` +
-            `$${tracker.initial_capital.toLocaleString("en-US")} → $${portfolio.total_value.toLocaleString("en-US")} (${sign}$${gain.toFixed(2)})`,
-          );
-        }
+  if (tracker) {
+    for (const threshold of MILESTONE_THRESHOLDS) {
+      if (
+        tracker.progress_pct >= threshold &&
+        !milestones.thresholds_notified.includes(threshold)
+      ) {
+        milestones.thresholds_notified.push(threshold);
+        const gain = portfolio.total_value - tracker.initial_capital;
+        const sign = gain >= 0 ? "+" : "";
+        notifyGeneric(
+          `${displayName} — Milestone: ${threshold}% of objective reached`,
+          `$${tracker.initial_capital.toLocaleString("en-US")} → $${portfolio.total_value.toLocaleString("en-US")} (${sign}$${gain.toFixed(2)})`,
+        );
       }
     }
   }
 
-  // Drawdown check (CRITICAL — bypasses quiet hours with allow_critical)
-  if (config.notifications.telegram.drawdown_alerts && milestones.peak_value > 0) {
+  // Drawdown check
+  if (milestones.peak_value > 0) {
     const drawdownPct = ((milestones.peak_value - portfolio.total_value) / milestones.peak_value) * 100;
     const maxDrawdown = config.risk.max_drawdown_pct;
     const budgetUsed = maxDrawdown > 0 ? (drawdownPct / maxDrawdown) * 100 : 0;
 
-    const qh = config.notifications.quiet_hours;
-    const inQuiet = qh.enabled && isInQuietHoursEnv(qh.start, qh.end);
-    const allowCrit = qh.allow_critical;
-    const suppressed = inQuiet && !allowCrit;
-
-    if (!suppressed) {
-      for (const threshold of DRAWDOWN_BUDGET_THRESHOLDS) {
-        if (
-          budgetUsed >= threshold &&
-          !milestones.drawdown_thresholds_notified.includes(threshold)
-        ) {
-          milestones.drawdown_thresholds_notified.push(threshold);
-          const action = threshold >= 75
-            ? "No new positions, reduce-only mode"
-            : "Half sizing on new positions";
-          await sendTelegramNotification(
-            `📉 <b>${displayName}</b> — Drawdown Warning\n` +
-            `-$${(milestones.peak_value - portfolio.total_value).toFixed(2)} (-${drawdownPct.toFixed(1)}%) from peak $${milestones.peak_value.toLocaleString("en-US")}\n` +
-            `Drawdown budget: ${budgetUsed.toFixed(0)}% used (max -${maxDrawdown}%)\n` +
-            `Action: ${action}`,
-          );
-        }
+    for (const threshold of DRAWDOWN_BUDGET_THRESHOLDS) {
+      if (
+        budgetUsed >= threshold &&
+        !milestones.drawdown_thresholds_notified.includes(threshold)
+      ) {
+        milestones.drawdown_thresholds_notified.push(threshold);
+        const action = threshold >= 75
+          ? "No new positions, reduce-only mode"
+          : "Half sizing on new positions";
+        notifyGeneric(
+          `${displayName} — Drawdown Warning`,
+          `-$${(milestones.peak_value - portfolio.total_value).toFixed(2)} (-${drawdownPct.toFixed(1)}%) from peak $${milestones.peak_value.toLocaleString("en-US")}\nDrawdown budget: ${budgetUsed.toFixed(0)}% used (max -${maxDrawdown}%)\nAction: ${action}`,
+        );
       }
     }
   }
@@ -418,7 +388,7 @@ export async function rotateLogIfNeeded(): Promise<void> {
 const lastAlertByType = new Map<string, number>();
 const ALERT_DEDUP_MS = 30 * 60 * 1000; // 30 minutes
 
-/** Send a daemon event notification (deduped, best-effort Telegram) */
+/** Send a daemon event notification (deduped, OS desktop notification) */
 export async function notifyDaemonEvent(event: string, details: string): Promise<void> {
   const now = Date.now();
   const lastSent = lastAlertByType.get(event) ?? 0;
@@ -442,13 +412,6 @@ export async function notifyDaemonEvent(event: string, details: string): Promise
     }
   } catch (err) {
     await log(`[ALERT] notify.service failed: ${err}`);
-  }
-
-  try {
-    const { sendTelegramNotification } = await import("./gateway.service.js");
-    await sendTelegramNotification(`<b>[Daemon]</b> ${event}\n${details}`);
-  } catch {
-    // Telegram not available — already logged
   }
 }
 
@@ -486,18 +449,17 @@ async function checkSwsTokenExpiry(): Promise<void> {
   if (!expiresAt) return;
 
   const hoursLeft = (new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60);
-
-  if (!config.telegram.bot_token || !config.telegram.chat_id) return;
-
-  const { sendTelegramNotification } = await import("./gateway.service.js");
+  const { notifyGeneric } = await import("./notify.service.js");
 
   if (hoursLeft <= 0) {
-    await sendTelegramNotification(
-      "⚠️ <b>SWS token expired.</b> Simply Wall St data is disabled. Run <code>fundx sws login</code> to renew.",
+    notifyGeneric(
+      "SWS token expired",
+      "Simply Wall St data is disabled. Run `fundx sws login` to renew.",
     );
   } else if (hoursLeft <= 48) {
-    await sendTelegramNotification(
-      `⚠️ SWS token expires in ${Math.round(hoursLeft)} hours. Run <code>fundx sws login</code> to renew.`,
+    notifyGeneric(
+      "SWS token expiring",
+      `Token expires in ${Math.round(hoursLeft)} hours. Run \`fundx sws login\` to renew.`,
     );
   }
 }
@@ -656,10 +618,6 @@ export async function startDaemon(): Promise<void> {
   } catch (err) {
     await log(`[news-ipc] failed to start: ${err instanceof Error ? err.message : err}`);
   }
-
-  // Defensively stop gateway before starting
-  await stopGateway().catch(() => {});
-  await startGateway();
 
   await rotateLogIfNeeded();
   await checkMissedSessions();
@@ -1140,7 +1098,6 @@ async function cleanup() {
     clearInterval(watcherInterval);
     watcherInterval = null;
   }
-  await stopGateway();
   await stopNewsIpcServer().catch(() => {});
   await unlink(DAEMON_PID).catch(() => {});
   await unlink(DAEMON_HEARTBEAT).catch(() => {});
