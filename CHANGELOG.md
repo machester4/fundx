@@ -7,7 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `notify.service` — native OS notifications via `node-notifier` with five event
+  types (trade executed, stop-loss triggered, daily cap reached, supervisor
+  stale, handoff missing) and a generic emitter.
+- Global `notifications` config block: `enabled` master switch and
+  `quiet_hours` with `start` / `end` (UTC) and `allow_critical` to let
+  high-priority alerts bypass quiet hours.
+- `trade-watcher` service: polls `trade_journal.sqlite` inside session runs and
+  emits trade notifications, skipping `session_type = stop_loss` so the
+  dedicated stop-loss path owns those.
+- Stop-loss path now persists `pnl` / `pnl_pct` / `closed_at` / `close_price`
+  to the trade journal and the trade reasoning string is sign-aware
+  (`Gain:` vs `Loss:`) — trailing stops above avg_cost are no longer
+  misreported as losses.
+- `insertTrade` now binds `closed_at`, `close_price`, `pnl`, `pnl_pct`, and
+  `lessons_learned` — closing fields the schema declared but the INSERT
+  silently dropped.
+
+### Removed
+- Telegram integration in its entirety: `gateway.service`, `telegram-notify`
+  MCP server, `broker-local-notify` helper, `fundx gateway` commands, and
+  the `grammy` dependency. All notification flows now go through OS
+  notifications.
+- Read-view CLI commands (`portfolio`, `trades`, `performance`, `chart`,
+  `report`, `montecarlo`, `correlation`, `template`, `ask`, `logs`,
+  `fund list`, `fund info`, `fund pause`, `fund resume`, `fund clone`,
+  `fund show-universe`, `generator`, `config`). All capabilities continue
+  to exist as services; the chat REPL inside `fundx` now drives them.
+
 ### Changed
+- `daemon.service` no longer launches the Telegram gateway alongside the
+  cron scheduler.
+- Per-fund `notifications.telegram.*` config sub-tree removed; replaced by
+  the single global `notifications` block (per-fund overrides were never
+  user-facing useful).
+- Workspace and per-fund `CLAUDE.md` templates, fund rules, and skills
+  scrubbed of Telegram references.
+
+### Fixed
+- Notify service now respects `notifications.enabled = false` and
+  `quiet_hours.allow_critical = false` (regression introduced when the
+  notify-service stub was first added).
+- Trade-watcher cursor is primed to the latest trade ID on first run so the
+  first session after install does not re-notify historical journal rows.
+- `tests/notify.test.ts` is now deterministic regardless of the user's
+  local `~/.fundx/config.yaml` and wall-clock time — `loadGlobalConfig`
+  is mocked file-locally.
 - Cleaned up all ESLint warnings (unused imports/vars)
 - Improved package.json metadata for npm publish readiness
 - Rewrote README.md as user-facing documentation

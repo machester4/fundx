@@ -1,14 +1,14 @@
 # FundX Operations Runbook
 
 This runbook covers day-to-day operation of a FundX deployment: starting and
-stopping services, where to read logs, and how to interpret each Telegram
-alert.
+stopping services, where to read logs, and how to interpret each OS
+notification emitted by the daemon.
 
 ## Starting / stopping
 
 | Command | Effect |
 |---|---|
-| `fundx start` | Launch supervisor (forks daemon). Daemon runs cron schedules + Telegram gateway. |
+| `fundx start` | Launch supervisor (forks daemon). Daemon runs cron schedules and emits OS notifications via `node-notifier`. |
 | `fundx stop` | Clean shutdown. Supervisor signals daemon (SIGTERM), waits for graceful exit. |
 | `fundx status` | Snapshot: daemon + supervisor liveness, heartbeat freshness, today's USD per fund. |
 
@@ -22,16 +22,25 @@ alert.
 | `~/.fundx/funds/<name>/analysis/` | Claude's analysis archives |
 | `~/.fundx/funds/<name>/state/handoffs/` | Archived session handoffs (Phase 3a) |
 
-## Telegram alerts — what each means + what to do
+## OS notifications — what each means + what to do
 
-| Alert | Cause | Action |
+All notifications come from `src/services/notify.service.ts` via `node-notifier`
+(native macOS / Linux / Windows notification center). Quiet hours and the
+`notifications.enabled` / `quiet_hours.allow_critical` flags in
+`~/.fundx/config.yaml` control suppression — high-priority alerts (stop-loss,
+supervisor stale) bypass quiet hours by default.
+
+| Notification | Cause | Action |
 |---|---|---|
-| Daemon crashed | Crash exit; supervisor restarting with backoff | None — wait for next alert. If 5 within 10 min → "Max restarts exceeded". |
+| Daemon crashed | Crash exit; supervisor restarting with backoff | None — wait for next notification. If 5 within 10 min → "Max restarts exceeded". |
 | Max restarts exceeded | Supervisor gave up after 5 crashes in 10 min | `fundx stop && fundx start`. Read last 100 lines of `daemon.log` to identify the crash cause. |
 | Daemon heartbeat stale | Daemon's event loop blocked > 3 min | Check `top` / `ps` for the daemon process. If stuck → restart via `fundx stop && fundx start`. |
 | Daemon heartbeat recovered | Heartbeat fresh again after stale period | None — informational. |
+| Trade executed | `trade-watcher` detected a new journal row (BUY/SELL) | None — informational. Stop-loss exits are suppressed here and handled by the dedicated stop-loss notification below. |
+| Stop-loss triggered | `stoploss` daemon sold a position at the configured stop | Inspect the trade journal row: `pnl` and `pnl_pct` are populated. If the exit was profitable (trailing stop above cost), the reasoning string labels it `Gain:`. |
 | Daily cap reached | A fund hit its daily aggregate USD cap | Sessions skip until 00:00 UTC. To override: edit `fund.budget.dailyCapUsd` in `~/.fundx/funds/<name>/fund_config.yaml`. |
 | Budget killed (per-session) | Per-session cap (Phase 1a) hit | Review the session's `summary` in `session_log.json`. Consider raising the per-session cap if it's recurring. |
+| Handoff missing | SDK reported `success` but the agent did not write a fresh handoff | Inspect the session's `analysis/` artifacts. Usually a prompt regression — re-run the case in the eval harness. |
 | Auth restart needed | OAuth token expired | Daemon will be restarted with current token from your `claude` CLI session. Usually self-heals. |
 
 ## Common operations
@@ -90,26 +99,26 @@ to reset the in-memory dedup map.
 
 ## Heartbeat smoke test (manual)
 
-Validates the supervisor → daemon heartbeat alert path end-to-end. Run after
-any daemon restart for an unrelated reason — no need to trigger one solely
-for this.
+Validates the supervisor → daemon heartbeat notification path end-to-end. Run
+after any daemon restart for an unrelated reason — no need to trigger one
+solely for this.
 
-**Prereqs:** Daemon running, Telegram gateway connected.
+**Prereqs:** Daemon running, OS notifications enabled (`notifications.enabled: true` in `~/.fundx/config.yaml`, or unset — defaults to enabled).
 
 1. `fundx stop && fundx start`
 2. Find the daemon PID: `cat ~/.fundx/daemon.pid | jq .pid`
 3. `kill -STOP <pid>` to freeze the daemon's event loop
 4. Wait 4 minutes (heartbeat goes stale at 3 min; supervisor checks every 60s)
-5. Confirm Telegram alert "Daemon heartbeat stale" arrived
+5. Confirm OS notification "Daemon heartbeat stale" arrived
 6. `kill -CONT <pid>` to resume the daemon
 7. Wait 60 seconds
-8. Confirm Telegram alert "Daemon heartbeat recovered" arrived
+8. Confirm OS notification "Daemon heartbeat recovered" arrived
 9. Verify `~/.fundx/daemon.heartbeat` mtime is fresh: `stat ~/.fundx/daemon.heartbeat`
 
-**If the alert does not arrive:**
+**If the notification does not arrive:**
 - Check supervisor logs: `tail -200 ~/.fundx/daemon.log | grep heartbeat`
-- Check Telegram chat-id is correct in `~/.fundx/config.yaml`
-- Check `notifyDaemonEvent` is not being suppressed by quiet hours
+- Check `notifications.enabled` is not `false` in `~/.fundx/config.yaml`
+- Check the time is outside `notifications.quiet_hours` (default 23:00–07:00 UTC). High-priority alerts bypass quiet hours when `allow_critical: true` (default).
 
 ## When to escalate (manual debug needed)
 

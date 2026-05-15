@@ -22,7 +22,7 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - [Architecture](#architecture)
 - [Configuration](#configuration)
 - [Per-Fund Universe](#per-fund-universe)
-- [Telegram Integration](#telegram-integration)
+- [Notifications](#notifications)
 - [Tech Stack](#tech-stack)
 - [Development](#development)
 - [Roadmap](#roadmap)
@@ -36,7 +36,8 @@ FundX lets you define investment funds with **real-life financial objectives** a
 - **Goal-oriented, not return-oriented.** You say "I have $30k, I spend $2k/month, give me 18 months of runway" — not "beat the S&P."
 - **Claude as artisan.** Each session, Claude invents analysis tools, writes scripts, searches the web, and makes decisions — not limited to pre-defined pipelines.
 - **Multi-fund architecture.** Run a conservative runway fund, an aggressive growth fund, and a BTC accumulation fund simultaneously, each with its own AI personality.
-- **Bidirectional Telegram.** Get trade alerts AND wake Claude anytime to ask questions about positions or past analyses.
+- **Native OS notifications.** Trade executions, stop-loss triggers, daily-cap hits, and supervisor stalls land in macOS Notification Center / Linux libnotify / Windows toast — with quiet hours and a `notifications.enabled` master switch.
+- **Conversational UI.** A fullscreen TUI dashboard with an integrated chat REPL handles questions, reports, charts, and ad-hoc analysis — no extra subcommands needed.
 - **Paper mode.** All trading is simulated locally — you replicate positions in your real broker manually.
 
 ## Quick Start
@@ -64,7 +65,6 @@ fundx start
 - **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
 - **pnpm** (recommended) or npm
 - **FMP API key** for market data — free tier at [financialmodelingprep.com](https://financialmodelingprep.com) (recommended, falls back to Yahoo Finance)
-- **Telegram** bot token for notifications (optional)
 
 ## Installation
 
@@ -91,6 +91,11 @@ pnpm link --global
 
 ## CLI Reference
 
+The CLI surface intentionally stays small. Most day-to-day questions —
+portfolios, trades, performance, charts, reports, correlation, Monte Carlo
+projections, ad-hoc analysis — are handled by the integrated chat REPL inside
+`fundx`. Only operational primitives have dedicated commands.
+
 ### Core Commands
 
 ```
@@ -101,58 +106,35 @@ fundx                               Fullscreen TUI dashboard with chat REPL
   --max-budget <usd>                Maximum budget in USD for the session
 fundx init                          Initialize FundX workspace (~/.fundx/)
 fundx status                        Quick status of all funds and services
-fundx start [fund|all]              Start daemon scheduler
+fundx start [fund|all]              Start daemon scheduler (cron + notifications)
 fundx stop [fund|all]               Stop daemon
-fundx logs [fund] [-f|--follow]     View logs
 ```
 
 ### Fund Management
 
 ```
-fundx fund create                   Interactive fund creation wizard
-fundx fund list                     List all funds with status
-fundx fund info <name>              Detailed fund information
-fundx fund pause <name>             Pause a fund (keeps state)
-fundx fund resume <name>            Resume a paused fund
-fundx fund delete <name>            Delete a fund (requires confirmation)
-fundx fund clone <source> <name>    Clone fund configuration
-fundx fund upgrade -n <name>        Regenerate CLAUDE.md and rewrite skills
-fundx fund upgrade --all            Upgrade all funds at once
+fundx fund create                       Interactive fund creation wizard
+fundx fund delete <name>                Delete a fund (requires confirmation)
+fundx fund upgrade -n <name>            Regenerate CLAUDE.md and rewrite skills/rules
+fundx fund upgrade --all                Upgrade all funds at once
+fundx fund consolidate <name>           Force a memory-consolidation run (backfill)
+fundx fund refresh-universe <name>      Force universe re-resolution (FMP)
+fundx fund refresh-universe --all       Refresh universe for all active funds
 ```
 
-### Analysis & Interaction
+### Sessions
 
 ```
-fundx ask <fund> "<question>"       Wake Claude to answer about a fund
-fundx ask --cross "<question>"      Cross-fund analysis
-fundx session run <fund> <type>     Trigger a session (pre_market/mid_session/post_market)
+fundx session run <fund> <type>     Manually trigger a session
+                                    (pre_market | mid_session | post_market | news_reaction | meta_reflection | ...)
 ```
 
-### Portfolio & Performance
+### Simply Wall St (optional)
 
 ```
-fundx portfolio <fund>              Current holdings and allocation
-fundx trades <fund> [--today]       Recent trades
-fundx performance <fund>            Performance metrics
-fundx chart <fund> [type]           Terminal charts (allocation, pnl, sparkline)
-fundx report <fund> [--weekly]      View/generate reports
-fundx montecarlo <fund>             Monte Carlo runway projections
-fundx correlation                   Cross-fund correlation analysis
-```
-
-### Templates
-
-```
-fundx template list                 List available fund templates
-fundx template export <fund> <file> Export fund config as template
-fundx template import <file>        Create fund from template
-```
-
-### Gateway (Telegram)
-
-```
-fundx gateway start                 Start Telegram bot standalone
-fundx gateway test                  Send test message
+fundx sws login                     Authenticate with Simply Wall St
+fundx sws logout                    Clear credentials
+fundx sws status                    Show current SWS session
 ```
 
 ### Development
@@ -173,12 +155,13 @@ construction. See [CLAUDE.md](CLAUDE.md#prompt-eval-harness) for details.
 ```mermaid
 graph TB
     subgraph UI["User Interface"]
-        CLI["fundx CLI\nInk + Pastel"]
-        TG_IN["Telegram\ngrammy"]
+        CLI["fundx CLI\nInk + Pastel · chat REPL"]
+        OSN["OS Notification Center\nmacOS · Linux · Windows"]
     end
 
     subgraph Daemon["Daemon — node-cron"]
         SCHED["Scheduler\npre_market · mid_session · post_market"]
+        NOTIFY["notify.service\nnode-notifier · quiet hours"]
     end
 
     subgraph Session["Claude Agent SDK Session"]
@@ -196,70 +179,70 @@ graph TB
         MCP2["market-data\nprices · OHLCV · quotes · sectors · news"]
         MCP3["screener\nscreen_run · watchlist_query · trajectory"]
         MCP4["sws\nSimply Wall St investing screeners"]
-        MCP5["telegram-notify\nalerts · digests · milestones"]
     end
 
     subgraph State["Persistent State  ~/.fundx/funds/name/"]
         ST1["fund_config.yaml\nCLAUDE.md"]
         ST2["portfolio.json\nobjective_tracker.json"]
         ST3["trade_journal.sqlite\nFTS5 + embeddings"]
-        ST4["analysis/  reports/  scripts/"]
+        ST4["analysis/  reports/  handoffs/  memory/"]
     end
 
     subgraph Ext["External Services"]
         EXT1["portfolio.json\nlocal paper state"]
         EXT2["FMP · Yahoo Finance\nmarket data · news"]
-        EXT3["Telegram API"]
     end
 
-    CLI -->|"run session / ask / chat"| Session
+    CLI -->|"run session / chat"| Session
     CLI -->|"start / stop"| Daemon
     Daemon -->|"scheduled trigger"| Session
-    TG_IN -->|"free question / command"| Session
+    Daemon --> NOTIFY
+    NOTIFY -->|"trade · stop-loss · cap · stale"| OSN
 
     Session <-->|"read constitution\nwrite state + reports"| State
     CLAUDE --> SubAgents
 
     Session -->|"execute trades"| MCP1
     Session -->|"fetch prices"| MCP2
-    Session -->|"send alerts"| MCP3
+    Session -->|"screen / watchlist"| MCP3
+    Session -->|"investing screeners"| MCP4
 
     MCP1 --> EXT1
     MCP2 --> EXT2
-    MCP3 --> EXT3
-    EXT3 -->|"notifications"| TG_In2["Telegram\n(user)"]
 ```
 
 Each Claude session:
-1. **Orient** — Reads `session-handoff.md` from the last session, portfolio, objective tracker, and session log. Writes a Session Contract declaring intent.
+1. **Orient** — Receives a pre-built `<state_snapshot>` envelope (handoff + portfolio + objective + pending verdicts + top trades + top watchlist) and writes a Session Contract declaring intent.
 2. **Analyze** — Classifies market regime. Invokes market-analyst and technical-analyst sub-agents via the Task tool. Writes analysis to `analysis/`.
 3. **Decide** — Applies the pre-trade checklist. Skips if conviction is below threshold.
-4. **Validate** — Two gates: trade-evaluator (skeptical thesis review) → risk-guardian (hard constraint check). Both must pass.
+4. **Validate** — Two gates: trade-evaluator (skeptical thesis review) → risk-guardian (hard constraint check). Both must pass — enforced by an SDK `PreToolUse` hook on `place_order`.
 5. **Execute** — Paper trades via `broker-local` MCP server (updates portfolio.json locally).
-6. **Reflect** — Grades decisions, evaluates Session Contract, writes full handoff to `session-handoff.md` for the next session.
-7. **Communicate** — Sends Telegram notifications for trades and insights.
+6. **Reflect** — Grades decisions, evaluates Session Contract, writes full handoff to `session-handoff.md`; the previous handoff is archived under `state/handoffs/<iso-ts>_<session-type>.md`.
+7. **Notify (daemon-driven)** — The daemon's `trade-watcher` and `stoploss` services emit OS notifications for new trades, stop-loss exits, daily-cap hits, supervisor stalls, and missing handoffs. The agent itself never calls a notify tool.
 8. **Follow-up** — Optionally self-schedules future sessions for monitoring.
 
 ### Workspace Structure
 
 ```
 ~/.fundx/
-├── config.yaml                     # Global config (market data, Telegram token)
+├── config.yaml                     # Global config (market data, notifications)
 ├── daemon.pid / daemon.log         # Daemon state
+├── daemon.heartbeat                # Supervisor heartbeat mtime
 ├── funds/
 │   └── <fund-name>/
 │       ├── CLAUDE.md               # AI constitution (auto-generated)
 │       ├── fund_config.yaml        # Fund parameters
 │       ├── state/                  # portfolio.json, objective_tracker.json,
-│       │                           # trade_journal.sqlite, session_log.json,
-│       │                           # session-handoff.md
+│       │                           # trade_journal.sqlite, session_log.jsonl,
+│       │                           # session-handoff.md, handoffs/,
+│       │                           # last_consolidation.json, daily_cap_state.json
 │       ├── analysis/               # Session analysis archive
+│       ├── memory/                 # Distilled lessons (meta_reflection)
 │       ├── scripts/                # Reusable scripts Claude created
 │       └── reports/                # daily/, weekly/, monthly/
-├── shared/
-│   ├── mcp-servers/                # MCP server configs
-│   └── templates/                  # Fund templates
-└── gateway/                        # Telegram bot state
+└── shared/
+    ├── mcp-servers/                # MCP server configs
+    └── templates/                  # Fund templates
 ```
 
 ### MCP Servers
@@ -267,8 +250,9 @@ Each Claude session:
 | Server | Purpose |
 |--------|---------|
 | `broker-local` | Paper trade execution, positions, account info (local portfolio.json) |
-| `market-data` | Price data, OHLCV bars, quotes (FMP + Yahoo Finance) |
-| `telegram-notify` | Send notifications to Telegram |
+| `market-data` | Price data, OHLCV bars, quotes (FMP + Yahoo Finance, in-process) |
+| `screener` | FMP-backed screener + persistent watchlist (`screen_run`, `watchlist_query/trajectory/tag`) |
+| `sws` | Simply Wall St investing screeners (optional, requires `fundx sws login`) |
 
 ### Market Data Providers
 
@@ -285,7 +269,7 @@ FMP is recommended because it provides actual index data and comprehensive finan
 
 ### Global Config (`~/.fundx/config.yaml`)
 
-Created by `fundx init`. Stores market data provider, Telegram token, and default settings.
+Created by `fundx init`. Stores market data provider, notification preferences, and default settings.
 
 ```yaml
 # Market data provider (optional — dashboard indices, news, market hours)
@@ -305,8 +289,9 @@ Each fund is fully defined by its config. Key sections:
 - **universe** — Allowed/forbidden asset types and tickers
 - **schedule** — Trading sessions with times and focus areas
 - **broker** — Mode (paper)
-- **notifications** — Telegram alerts, quiet hours, priority overrides
 - **claude** — Model, personality, decision framework
+
+Notification preferences (enabled flag, quiet hours, allow-critical override) live in the *global* `~/.fundx/config.yaml`, not per-fund — see the [Notifications](#notifications) section below.
 
 <details>
 <summary>Full fund_config.yaml schema</summary>
@@ -412,21 +397,6 @@ schedule:
 broker:
   mode: paper                     # Paper trading (local simulation)
 
-notifications:
-  telegram:
-    enabled: true
-    trade_alerts: true
-    stop_loss_alerts: true
-    daily_digest: true
-    weekly_digest: true
-    milestone_alerts: true
-    drawdown_alerts: true
-  quiet_hours:
-    enabled: true
-    start: "23:00"
-    end: "07:00"
-    allow_critical: true          # Stop-loss alerts bypass quiet hours
-
 claude:
   model: sonnet                   # sonnet | opus | haiku
   personality: "Cautious and data-driven. Prioritizes capital preservation over returns."
@@ -481,11 +451,14 @@ Universe resolution calls FMP and writes a 24h-TTL cache at `~/.fundx/funds/<nam
 ### Tools (CLI)
 
 ```bash
-fundx fund show-universe <name>      # inspect resolved universe
 fundx fund refresh-universe <name>   # force re-resolution
 fundx fund refresh-universe --all    # force re-resolution for all active funds
 fundx fund upgrade --name <name>     # migrate legacy universe schema + regenerate CLAUDE.md/skills
 ```
+
+To inspect the resolved universe, ask in the chat REPL (`fundx --fund <name>`):
+"what's in my universe right now?" — the agent calls the `list_universe` MCP
+tool and renders the result.
 
 ### Tools (MCP, for the AI agent)
 
@@ -497,34 +470,35 @@ fundx fund upgrade --name <name>     # migrate legacy universe schema + regenera
 
 Funds created before the universe system used `universe: { allowed, forbidden }`. Running `fundx fund upgrade --name <name>` migrates to the new schema with `.bak` backup preserved.
 
-## Telegram Integration
+## Notifications
 
-### Quick Commands (instant, no Claude needed)
+The daemon emits native OS notifications via [`node-notifier`](https://github.com/mikaelbr/node-notifier) for the events that matter operationally. The agent itself never calls a notify tool — notification responsibility lives in the daemon's `notify`, `trade-watcher`, `stoploss`, and `supervisor` services.
 
+### What gets emitted
+
+| Event | Priority | Suppression behavior |
+|---|---|---|
+| Trade executed (BUY / non-stop SELL) | normal | Suppressed during quiet hours |
+| Stop-loss triggered | high | Bypasses quiet hours (configurable) |
+| Daily cap reached (per fund) | normal | Once per fund per UTC day |
+| Supervisor heartbeat stale (>3 min) | high | Bypasses quiet hours |
+| Supervisor heartbeat recovered | normal | — |
+| Daemon crashed / max restarts exceeded | high | Bypasses quiet hours |
+| Handoff missing (SDK success but no fresh handoff) | normal | — |
+
+### Configuration (`~/.fundx/config.yaml`)
+
+```yaml
+notifications:
+  enabled: true                   # master switch (default true)
+  quiet_hours:
+    enabled: true                 # default true
+    start: "23:00"                # UTC
+    end:   "07:00"                # UTC
+    allow_critical: true          # high-priority alerts bypass quiet hours (default true)
 ```
-/status [fund]    — Fund status summary
-/portfolio fund   — Current holdings
-/trades fund      — Recent trades
-/pause fund       — Pause a fund
-/resume fund      — Resume a fund
-/next             — Next scheduled sessions
-```
 
-### Free Questions (wakes Claude)
-
-Any non-command message wakes Claude with full fund context:
-
-```
-You: "why did you sell GDXJ yesterday?"
-Bot: [Claude explains with references to its analysis archive]
-
-You: "which fund has the most risk this week?"
-Bot: [Cross-fund analysis comparing all active funds]
-```
-
-### Notifications
-
-Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and runway warnings — with quiet hours and priority overrides.
+See [`docs/operations.md`](docs/operations.md) for the operator runbook — what each notification means, the heartbeat smoke test, and how to clear the daily-cap dedup state.
 
 ## Tech Stack
 
@@ -535,7 +509,7 @@ Trade alerts, stop-loss triggers, daily/weekly digests, milestone alerts, and ru
 | Config | YAML (js-yaml) + Zod validation |
 | State DB | SQLite (better-sqlite3) |
 | Daemon | node-cron |
-| Telegram | grammy |
+| Notifications | node-notifier (native OS notification center) |
 | AI Engine | Claude Agent SDK (@anthropic-ai/claude-agent-sdk) |
 | MCP | @modelcontextprotocol/sdk |
 | Market Data | FMP (primary) / Yahoo Finance (fallback) |
@@ -562,10 +536,11 @@ pnpm typecheck            # Type check (tsc --noEmit)
 |-------|-------|--------|
 | 1 — MVP | CLI, fund CRUD, daemon, sessions | Done |
 | 2 — Trading | Local paper broker, market data (FMP) | Done |
-| 3 — Telegram | Gateway, notifications, bidirectional chat | Done |
+| 3 — Telegram | Gateway, notifications, bidirectional chat | Removed May 2026 — superseded by chat REPL + OS notifications |
 | 4 — Intelligence | Sub-agents, trade journal, embeddings | Done |
 | 5 — Advanced | Templates, Monte Carlo, reports, correlation | Done |
 | 5.5 — Quality | Per-fund universes, screener, prompt eval harness, mode-aware rules | Done |
+| 5b — Notifications | Native OS notifications via node-notifier, quiet hours, CLI simplification | Done |
 | 6 — Community | npm distribution, docs, plugin system | **In progress** |
 
 See [open issues](https://github.com/machester4/fundx/issues) for contribution opportunities.
@@ -576,7 +551,7 @@ See [open issues](https://github.com/machester4/fundx/issues) for contribution o
 2. **Claude as artisan.** No pre-defined pipeline — Claude creates scripts, research, and calculations as needed.
 3. **Declarative funds.** A fund is fully defined by `fund_config.yaml`. Everything else is derived.
 4. **State is king.** Everything persists between sessions. Claude always knows where it left off.
-5. **Human in the loop, not in the way.** Autonomous operation with CLI/Telegram intervention available.
+5. **Human in the loop, not in the way.** Autonomous operation with CLI intervention (chat REPL, manual sessions) available at any time.
 6. **Paper mode.** All trading is simulated locally — replicate positions in your real broker.
 7. **Memory makes it smarter.** Trade journal + FTS5 search enables learning from history.
 8. **Open and extensible.** New MCP servers and objective types are pluggable.
