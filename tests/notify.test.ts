@@ -4,6 +4,25 @@ vi.mock("node-notifier", () => ({
   default: { notify: vi.fn() },
 }));
 
+// Isolate notify.service from the user's local ~/.fundx/config.yaml and
+// wall-clock time. Tests that need a specific quiet-hours window or
+// disabled flag set them explicitly via __setQuietHoursForTest /
+// __setEnabledForTest; this baseline ensures the loadGlobalConfig fallback
+// branch is deterministic when no override is in effect.
+vi.mock("../src/config.js", () => ({
+  loadGlobalConfig: async () => ({
+    notifications: {
+      enabled: true,
+      quiet_hours: {
+        enabled: false,
+        start: "23:00",
+        end: "07:00",
+        allow_critical: true,
+      },
+    },
+  }),
+}));
+
 import notifier from "node-notifier";
 import {
   notifyTrade,
