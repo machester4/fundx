@@ -14,8 +14,8 @@ export interface StopLossEvent {
   stopPrice: number;
   currentPrice: number;
   avgCost: number;
-  loss: number;
-  lossPct: number;
+  pnl: number;
+  pnlPct: number;
 }
 
 async function fetchPricesFromFmp(symbols: string[]): Promise<Record<string, number>> {
@@ -55,8 +55,8 @@ export async function checkStopLosses(
     if (currentPrice === undefined) continue;
 
     if (currentPrice <= pos.stop_loss) {
-      const loss = (currentPrice - pos.avg_cost) * pos.shares;
-      const lossPct = ((currentPrice - pos.avg_cost) / pos.avg_cost) * 100;
+      const pnl = (currentPrice - pos.avg_cost) * pos.shares;
+      const pnlPct = ((currentPrice - pos.avg_cost) / pos.avg_cost) * 100;
 
       triggered.push({
         symbol: pos.symbol,
@@ -64,8 +64,8 @@ export async function checkStopLosses(
         stopPrice: pos.stop_loss,
         currentPrice,
         avgCost: pos.avg_cost,
-        loss,
-        lossPct,
+        pnl,
+        pnlPct,
       });
     }
   }
@@ -84,18 +84,23 @@ export async function executeStopLosses(
 
   try {
     for (const event of events) {
+      const pnlLabel = event.pnl >= 0 ? "Gain" : "Loss";
+      const pctSign = event.pnlPct >= 0 ? "+" : "";
+      const reason = `Stop-loss triggered at $${event.stopPrice.toFixed(2)}. Current price: $${event.currentPrice.toFixed(2)}. ${pnlLabel}: $${Math.abs(event.pnl).toFixed(2)} (${pctSign}${event.pnlPct.toFixed(1)}%)`;
+
       const result = executeSell(
         portfolio,
         event.symbol,
         event.shares,
         event.currentPrice,
-        `Stop-loss triggered at $${event.stopPrice.toFixed(2)}. Current price: $${event.currentPrice.toFixed(2)}. Loss: $${event.loss.toFixed(2)} (${event.lossPct.toFixed(1)}%)`,
+        reason,
       );
 
       portfolio = result.portfolio;
 
+      const now = new Date().toISOString();
       insertTrade(db, {
-        timestamp: new Date().toISOString(),
+        timestamp: now,
         fund: fundName,
         symbol: event.symbol,
         side: "sell",
@@ -105,6 +110,10 @@ export async function executeStopLosses(
         order_type: "market",
         session_type: "stop_loss",
         reasoning: result.trade.reason,
+        closed_at: now,
+        close_price: event.currentPrice,
+        pnl: event.pnl,
+        pnl_pct: event.pnlPct,
       });
 
       notifyStopLoss(

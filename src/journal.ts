@@ -63,10 +63,12 @@ export function insertTrade(db: Database.Database, trade: TradeRecord): number {
   const stmt = db.prepare(`
     INSERT INTO trades (
       timestamp, fund, symbol, side, quantity, price, total_value,
-      order_type, session_type, reasoning, analysis_ref, market_context
+      order_type, session_type, reasoning, analysis_ref, market_context,
+      closed_at, close_price, pnl, pnl_pct, lessons_learned
     ) VALUES (
       @timestamp, @fund, @symbol, @side, @quantity, @price, @total_value,
-      @order_type, @session_type, @reasoning, @analysis_ref, @market_context
+      @order_type, @session_type, @reasoning, @analysis_ref, @market_context,
+      @closed_at, @close_price, @pnl, @pnl_pct, @lessons_learned
     )
   `);
   const result = stmt.run({
@@ -82,6 +84,11 @@ export function insertTrade(db: Database.Database, trade: TradeRecord): number {
     reasoning: trade.reasoning ?? null,
     analysis_ref: trade.analysis_ref ?? null,
     market_context: trade.market_context ?? null,
+    closed_at: trade.closed_at ?? null,
+    close_price: trade.close_price ?? null,
+    pnl: trade.pnl ?? null,
+    pnl_pct: trade.pnl_pct ?? null,
+    lessons_learned: trade.lessons_learned ?? null,
   });
   return Number(result.lastInsertRowid);
 }
