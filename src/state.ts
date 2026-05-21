@@ -263,6 +263,18 @@ export async function writeSessionCounts(fundName: string, counts: SessionCounts
   await writeJsonAtomic(paths.state.sessionCounts, counts);
 }
 
+/** Read counts, then if the persisted date is not today reset to a fresh day
+ *  and persist the reset before returning. Callers can rely on `date === today`
+ *  on the returned object without writing it back themselves. */
+export async function readSessionCountsForToday(fundName: string): Promise<SessionCounts> {
+  const counts = await readSessionCounts(fundName);
+  const today = new Date().toISOString().split("T")[0]!;
+  if (counts.date === today) return counts;
+  const reset: SessionCounts = { date: today, agent: 0, news: 0 };
+  await writeSessionCounts(fundName, reset);
+  return reset;
+}
+
 // ── Session Handoff ────────────────────────────────────────────
 
 export async function readSessionHandoff(fundName: string): Promise<string | null> {

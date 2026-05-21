@@ -12,7 +12,7 @@ import {
   DAEMON_LOG_MAX_FILES,
   fundPaths,
 } from "../paths.js";
-import { listFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.service.js";
+import { listActiveFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.service.js";
 import { runFundSession } from "./session.service.js";
 import { pruneSessionLogJsonl } from "./session-history.service.js";
 import { clearDailyCapAlertState } from "./daily-cap.service.js";
@@ -23,8 +23,8 @@ import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from
 import { runMetaReflection } from "./meta-reflection.service.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
-import { acquireFundLock, releaseFundLock, withTimeout } from "../lock.js";
-import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCounts, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
+import { acquireFundLock, releaseFundLock, withTimeout, createSemaphore } from "../lock.js";
+import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCountsForToday, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
@@ -44,13 +44,27 @@ const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
 
 const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
 const SESSION_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const HEARTBEAT_PULSE_MS = 30 * 1000; // 30 seconds — independent of cron tick
+/** Hard cap on concurrent Claude SDK sessions launched by the daemon. Protects
+ *  against news_reaction fan-out across many funds wedging the cron tick for
+ *  minutes (which used to trigger false stale-heartbeat alerts) and reduces
+ *  spike load on the FMP / Claude APIs. Configurable per workspace via
+ *  `daemon.max_concurrent_sessions` in global config. */
+const DEFAULT_MAX_CONCURRENT_SESSIONS = 3;
 
 let isProcessing = false;
+let sessionSemaphore: <T>(fn: () => Promise<T>) => Promise<T> = createSemaphore(
+  DEFAULT_MAX_CONCURRENT_SESSIONS,
+);
+/** Snapshot of the last fund count published to the heartbeat, so the
+ *  independent pulse can keep the dashboard's "(N funds)" display stable
+ *  instead of flickering between the real number and 0 every 30s. */
+let lastFundsChecked = 0;
 
 let watcherInterval: NodeJS.Timeout | null = null;
 
 async function tickAllWatchers(): Promise<void> {
-  const names = await listFundNames();
+  const names = await listActiveFundNames();
   for (const name of names) {
     try {
       const paths = fundPaths(name);
@@ -354,8 +368,10 @@ export async function cleanStalePidFiles(): Promise<void> {
   }
 }
 
-/** Write heartbeat with timestamp and fund count */
+/** Write heartbeat with timestamp and fund count. Also caches the count so
+ *  the independent pulse can re-publish it without resetting the dashboard. */
 export async function updateHeartbeat(fundsChecked: number): Promise<void> {
+  lastFundsChecked = fundsChecked;
   const data = { timestamp: new Date().toISOString(), fundsChecked };
   await writeFile(DAEMON_HEARTBEAT, JSON.stringify(data), "utf-8").catch(() => {});
 }
@@ -482,7 +498,7 @@ function getTimezoneOffsetMs(tz: string): number {
  * Called on daemon startup to recover from downtime.
  */
 export async function checkMissedSessions(): Promise<void> {
-  const names = await listFundNames();
+  const names = await listActiveFundNames();
   const now = Date.now();
 
   for (const name of names) {
@@ -553,11 +569,13 @@ export async function checkMissedSessions(): Promise<void> {
           `Catching up — was scheduled ${Math.round((now - bestMissed.scheduledAt) / 60000)} minutes ago`,
         );
 
-        await withTimeout(
-          runFundSession(name, catchupType, {
-            focus: `[CATCH-UP] ${bestMissed.focus} — This is a retroactive session; the daemon was down when it was scheduled.`,
-          }),
-          SESSION_TIMEOUT_MS,
+        await sessionSemaphore(() =>
+          withTimeout(
+            runFundSession(name, catchupType, {
+              focus: `[CATCH-UP] ${bestMissed.focus} — This is a retroactive session; the daemon was down when it was scheduled.`,
+            }),
+            SESSION_TIMEOUT_MS,
+          ),
         );
       } catch (err) {
         await log(`Catch-up session error (${name}/${bestMissed.sessionType}): ${err}`);
@@ -572,7 +590,7 @@ export async function checkMissedSessions(): Promise<void> {
 
 /** Remove analysis files older than 30 days from all fund analysis/ directories */
 export async function cleanOldAnalysisFiles(): Promise<void> {
-  const fundNames = await listFundNames();
+  const fundNames = await listActiveFundNames();
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   for (const name of fundNames) {
     const analysisDir = fundPaths(name).analysis;
@@ -625,6 +643,23 @@ export async function startDaemon(): Promise<void> {
 
   const globalConfig = await loadGlobalConfig();
 
+  // Reinitialize the session semaphore with the configured cap. Defaults to
+  // DEFAULT_MAX_CONCURRENT_SESSIONS if unset. Tests that exercise tickFn
+  // directly without calling startDaemon keep the module-level default.
+  const maxConcurrent =
+    globalConfig.daemon?.max_concurrent_sessions ?? DEFAULT_MAX_CONCURRENT_SESSIONS;
+  sessionSemaphore = createSemaphore(maxConcurrent);
+  await log(`Session concurrency cap: ${maxConcurrent}`);
+
+  // Independent heartbeat pulse: keeps the supervisor satisfied even when a
+  // single cron tick legitimately blocks for minutes (e.g., a news-reaction
+  // batch). The pulse runs on its own setInterval so it fires regardless of
+  // `isProcessing`. If the event loop is actually wedged, this interval also
+  // stops firing and the supervisor sees stale → correct alert.
+  setInterval(() => {
+    void updateHeartbeat(lastFundsChecked);
+  }, HEARTBEAT_PULSE_MS).unref();
+
   const tickFn = async () => {
     // Backpressure: skip if previous tick is still running
     if (isProcessing) {
@@ -634,7 +669,7 @@ export async function startDaemon(): Promise<void> {
     isProcessing = true;
 
     try {
-      const names = await listFundNames();
+      const names = await listActiveFundNames();
       const now = new Date();
 
       await updateHeartbeat(names.length);
@@ -675,7 +710,9 @@ export async function startDaemon(): Promise<void> {
               }
               try {
                 await log(`Running ${sessionType} for '${name}'...`);
-                await withTimeout(runFundSession(name, sessionType), SESSION_TIMEOUT_MS);
+                await sessionSemaphore(() =>
+                  withTimeout(runFundSession(name, sessionType), SESSION_TIMEOUT_MS),
+                );
                 clearError(name, `session:${sessionType}`);
               } catch (err) {
                 trackError(name, `session:${sessionType}`, err);
@@ -697,9 +734,11 @@ export async function startDaemon(): Promise<void> {
               }
               try {
                 await log(`Running special session for '${name}': ${special.trigger}...`);
-                await withTimeout(
-                  runFundSession(name, specialType, { focus: special.focus }),
-                  SESSION_TIMEOUT_MS,
+                await sessionSemaphore(() =>
+                  withTimeout(
+                    runFundSession(name, specialType, { focus: special.focus }),
+                    SESSION_TIMEOUT_MS,
+                  ),
                 );
                 clearError(name, `special:${specialType}`);
               } catch (err) {
@@ -785,7 +824,6 @@ export async function startDaemon(): Promise<void> {
               else {
                 const nowMs = Date.now();
                 const nowIso = new Date().toISOString();
-                const today = nowIso.split("T")[0];
 
                 // Discard stale (>1h past) and too-far-future (>24h) entries
                 pending = pending.filter((s) => {
@@ -806,12 +844,7 @@ export async function startDaemon(): Promise<void> {
 
                 if (due.length > 0) {
                   const session = due[0]!;
-                  let counts = await readSessionCounts(name);
-
-                  // Reset counts if date changed
-                  if (counts.date !== today) {
-                    counts = { date: today, agent: 0, news: 0 };
-                  }
+                  const counts = await readSessionCountsForToday(name);
 
                   // Check source-specific limits
                   let withinLimits = true;
@@ -837,13 +870,15 @@ export async function startDaemon(): Promise<void> {
                       shouldRemove = true;
                       try {
                         await log(`[proactive] Running ${session.type} for '${name}' (source: ${session.source})`);
-                        await withTimeout(
-                          runFundSession(name, session.type, {
-                            focus: session.focus,
-                            maxTurns: session.max_turns,
-                            maxDurationMinutes: session.max_duration_minutes,
-                          }),
-                          (session.max_duration_minutes ?? 5) * 60 * 1000,
+                        await sessionSemaphore(() =>
+                          withTimeout(
+                            runFundSession(name, session.type, {
+                              focus: session.focus,
+                              maxTurns: session.max_turns,
+                              maxDurationMinutes: session.max_duration_minutes,
+                            }),
+                            (session.max_duration_minutes ?? 5) * 60 * 1000,
+                          ),
                         );
 
                         // Update counts
@@ -942,7 +977,7 @@ export async function startDaemon(): Promise<void> {
     }
     // Phase 4: prune session_log.jsonl (90-day retention) + clear daily cap-alert dedup state
     try {
-      const fundNames = await listFundNames();
+      const fundNames = await listActiveFundNames();
       for (const fundName of fundNames) {
         try {
           await pruneSessionLogJsonl(fundName, 90);
@@ -962,7 +997,7 @@ export async function startDaemon(): Promise<void> {
     "0 18 * * 0",
     async () => {
       try {
-        const fundNames = await listFundNames();
+        const fundNames = await listActiveFundNames();
         for (const fundName of fundNames) {
           try {
             const config = await loadFundConfig(fundName);

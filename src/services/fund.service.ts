@@ -187,6 +187,23 @@ export async function listFundNames(): Promise<string[]> {
   return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }
 
+/** Prefix reserved for ephemeral funds seeded by `fundx eval`. The daemon and
+ *  other autonomous loops must never operate on these. */
+export const EVAL_FUND_PREFIX = "fundx-eval-";
+
+export function isEvalFund(name: string): boolean {
+  return name.startsWith(EVAL_FUND_PREFIX);
+}
+
+/** Like `listFundNames` but excludes ephemeral eval funds. Use this from any
+ *  autonomous path (daemon ticks, news fan-out, cron cleanups). Plain
+ *  `listFundNames` stays available for UI/CLI surfaces that intentionally want
+ *  to expose orphans (so users can clean them up). */
+export async function listActiveFundNames(): Promise<string[]> {
+  const all = await listFundNames();
+  return all.filter((n) => !isEvalFund(n));
+}
+
 /** Return true if a fund with the given name exists on disk. */
 export function fundExists(fundName: string): boolean {
   return existsSync(fundPaths(fundName).config);

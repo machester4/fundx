@@ -25,6 +25,7 @@ import {
   writeDailySnapshot,
   readNotifiedMilestones,
   writeNotifiedMilestones,
+  readSessionCountsForToday,
 } from "../src/state.js";
 import type { Portfolio, ObjectiveTracker, SessionLog } from "../src/types.js";
 
@@ -319,5 +320,57 @@ describe("Session Handoff", () => {
       expect.stringContaining("session-handoff.md.tmp"),
       expect.stringContaining("session-handoff.md"),
     );
+  });
+});
+
+describe("readSessionCountsForToday", () => {
+  const today = new Date().toISOString().split("T")[0]!;
+
+  it("returns counts as-is and does NOT write when date is today", async () => {
+    mockedReadFile.mockResolvedValueOnce(
+      JSON.stringify({ date: today, agent: 2, news: 3, last_news_at: "x", last_agent_at: "y" }),
+    );
+
+    const result = await readSessionCountsForToday(FUND);
+
+    expect(result).toEqual({
+      date: today,
+      agent: 2,
+      news: 3,
+      last_news_at: "x",
+      last_agent_at: "y",
+    });
+    expect(mockedWriteFile).not.toHaveBeenCalled();
+  });
+
+  it("resets in-memory AND persists when date is stale", async () => {
+    mockedReadFile.mockResolvedValueOnce(
+      JSON.stringify({ date: "1999-01-01", agent: 4, news: 5, last_news_at: "old" }),
+    );
+
+    const result = await readSessionCountsForToday(FUND);
+
+    expect(result).toEqual({ date: today, agent: 0, news: 0 });
+    // Persistence: write to tmp then rename
+    expect(mockedWriteFile).toHaveBeenCalledTimes(1);
+    expect(mockedWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining("session_counts.json.tmp"),
+      expect.stringContaining(`"date": "${today}"`),
+      "utf-8",
+    );
+    expect(mockedRename).toHaveBeenCalled();
+  });
+
+  it("returns fresh today/0/0 when the file does not exist (no write needed)", async () => {
+    const err = new Error("ENOENT") as NodeJS.ErrnoException;
+    err.code = "ENOENT";
+    mockedReadFile.mockRejectedValueOnce(err);
+
+    const result = await readSessionCountsForToday(FUND);
+
+    expect(result).toEqual({ date: today, agent: 0, news: 0 });
+    // readSessionCounts already returns today's fresh counts on ENOENT,
+    // so no reset is needed and no write should happen.
+    expect(mockedWriteFile).not.toHaveBeenCalled();
   });
 });

@@ -35,11 +35,19 @@ vi.mock("node-cron", () => ({
   },
 }));
 
-vi.mock("../src/services/fund.service.js", () => ({
-  listFundNames: vi.fn().mockResolvedValue([]),
-  loadFundConfig: vi.fn(),
-  saveFundConfig: vi.fn(),
-}));
+vi.mock("../src/services/fund.service.js", () => {
+  // Both list helpers share the same mock value: tests stub real fund names
+  // (no "fundx-eval-*" sentinels), so listActiveFundNames is a pass-through.
+  const listFundNames = vi.fn().mockResolvedValue([]);
+  return {
+    listFundNames,
+    listActiveFundNames: listFundNames,
+    EVAL_FUND_PREFIX: "fundx-eval-",
+    isEvalFund: (n: string) => n.startsWith("fundx-eval-"),
+    loadFundConfig: vi.fn(),
+    saveFundConfig: vi.fn(),
+  };
+});
 
 vi.mock("../src/services/session.service.js", () => ({
   runFundSession: vi.fn().mockResolvedValue(undefined),
@@ -81,7 +89,11 @@ vi.mock("../src/state.js", () => ({
   writeSessionHistory: vi.fn().mockResolvedValue(undefined),
   readPendingSessions: vi.fn().mockResolvedValue([]),
   writePendingSessions: vi.fn().mockResolvedValue(undefined),
-  readSessionCounts: vi.fn().mockResolvedValue({ date: "2026-01-01", agent: 0, news: 0 }),
+  readSessionCountsForToday: vi.fn().mockResolvedValue({
+    date: new Date().toISOString().split("T")[0]!,
+    agent: 0,
+    news: 0,
+  }),
   writeSessionCounts: vi.fn().mockResolvedValue(undefined),
   readDailySnapshot: vi.fn().mockResolvedValue(null),
   writeDailySnapshot: vi.fn().mockResolvedValue(undefined),
@@ -104,6 +116,13 @@ vi.mock("../src/lock.js", () => ({
   acquireFundLock: vi.fn().mockResolvedValue(true),
   releaseFundLock: vi.fn().mockResolvedValue(undefined),
   withTimeout: vi.fn((promise: Promise<unknown>) => promise),
+  // Pass-through semaphore: tests don't need real bounded concurrency, they
+  // just need each session call to execute (and be inspectable by mock).
+  createSemaphore: vi.fn(
+    () =>
+      <T>(fn: () => Promise<T>): Promise<T> =>
+        fn(),
+  ),
 }));
 
 vi.mock("../src/services/news.service.js", () => ({

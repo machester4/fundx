@@ -1,10 +1,10 @@
 // src/services/eval/seed.ts
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import yaml from "js-yaml";
-import { fundPaths } from "../../paths.js";
+import { FUNDS_DIR, fundPaths } from "../../paths.js";
 import { writeJsonAtomic } from "../../state.js";
 import { generateFundClaudeMd } from "../../template.js";
 import { ensureFundSkillFiles, ensureFundRules } from "../../skills.js";
@@ -15,7 +15,7 @@ import {
   tagWatchlistForFundDirect,
   applyTransitionsForRun,
 } from "../watchlist.service.js";
-import { loadFundConfig } from "../fund.service.js";
+import { EVAL_FUND_PREFIX, loadFundConfig } from "../fund.service.js";
 import { openJournal } from "../../journal.js";
 import type { EvalFundState, FundConfig } from "../../types.js";
 
@@ -81,6 +81,55 @@ export async function seedEvalFund(
 
 export async function cleanupEvalFund(handle: SeedEvalFundHandle): Promise<void> {
   await handle.cleanup();
+}
+
+export interface SweepEvalOrphansResult {
+  /** Names of `fundx-eval-*` directories removed (sorted) */
+  removed: string[];
+  /** Names of `fundx-eval-*` directories kept because they were younger than minAgeMs */
+  kept: string[];
+}
+
+/** Remove leftover `fundx-eval-*` fund directories from a previous interrupted
+ *  eval run. The seed cleanup path runs in a `finally`, so a SIGKILL / closed
+ *  terminal / OOM leaves directories behind. The daemon then iterates them as
+ *  if they were real funds (news_reaction, universe refresh, stop-loss),
+ *  burning Claude API spend on synthetic data.
+ *
+ *  `minAgeMs` (default 30 min) protects concurrent eval runs: any dir created
+ *  more recently is treated as belonging to a sibling process and skipped. */
+export async function sweepEvalOrphans(
+  opts: { minAgeMs?: number } = {},
+): Promise<SweepEvalOrphansResult> {
+  const minAgeMs = opts.minAgeMs ?? 30 * 60 * 1000;
+  const removed: string[] = [];
+  const kept: string[] = [];
+
+  let entries;
+  try {
+    entries = await readdir(FUNDS_DIR, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { removed, kept };
+    throw err;
+  }
+
+  const now = Date.now();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (!entry.name.startsWith(EVAL_FUND_PREFIX)) continue;
+    const dirPath = join(FUNDS_DIR, entry.name);
+    const s = await stat(dirPath);
+    const ageMs = now - s.mtimeMs;
+    if (ageMs < minAgeMs) {
+      kept.push(entry.name);
+      continue;
+    }
+    await rm(dirPath, { recursive: true, force: true });
+    removed.push(entry.name);
+  }
+  removed.sort();
+  kept.sort();
+  return { removed, kept };
 }
 
 // ── private helpers ─────────────────────────────────────────────────

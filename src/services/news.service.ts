@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
-import { listFundNames, loadFundConfig } from "./fund.service.js";
+import { listActiveFundNames, loadFundConfig } from "./fund.service.js";
 import { resolveUniverse } from "./universe.service.js";
-import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCounts } from "../state.js";
+import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCountsForToday } from "../state.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed, type FundConfig } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
@@ -295,7 +295,7 @@ async function getKnownUniverseTickers(fundName: string, config: FundConfig): Pr
 
 async function gatherKnownTickers(): Promise<string[]> {
   const tickers = new Set<string>();
-  const names = await listFundNames();
+  const names = await listActiveFundNames();
   for (const name of names) {
     try {
       const config = await loadFundConfig(name);
@@ -526,7 +526,7 @@ const alertCooldowns = new Map<string, number>(); // fundName -> last alert time
 
 /** Check new articles for breaking news and emit OS notifications */
 export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<void> {
-  const names = await listFundNames();
+  const names = await listActiveFundNames();
   const fundTickers = new Map<string, string[]>();
 
   for (const name of names) {
@@ -592,17 +592,7 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
         // Enqueue news reaction session for each affected fund
         for (const fundName of notifyFunds) {
           try {
-            const counts = await readSessionCounts(fundName);
-            const today = new Date().toISOString().split("T")[0];
-
-            // Reset counts if date changed
-            if (counts.date !== today) {
-              counts.date = today;
-              counts.news = 0;
-              counts.agent = 0;
-              counts.last_news_at = undefined;
-              counts.last_agent_at = undefined;
-            }
+            const counts = await readSessionCountsForToday(fundName);
 
             // Check limits: max 5/day, max 1/hour
             if (counts.news >= 5) continue;

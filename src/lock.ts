@@ -80,3 +80,33 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
     clearTimeout(timer!);
   }
 }
+
+/** FIFO concurrency limiter. Returns a function that wraps any async task and
+ *  guarantees at most `capacity` are running at once. Used by the daemon to
+ *  cap concurrent Claude SDK sessions during news-reaction fan-outs and
+ *  same-minute scheduled triggers. */
+export function createSemaphore(capacity: number): <T>(fn: () => Promise<T>) => Promise<T> {
+  if (capacity < 1) throw new Error(`createSemaphore capacity must be ≥ 1, got ${capacity}`);
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  function next(): void {
+    if (active >= capacity) return;
+    const job = queue.shift();
+    if (!job) return;
+    active++;
+    job();
+  }
+
+  return function acquire<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      queue.push(() => {
+        fn().then(
+          (value) => { active--; resolve(value); next(); },
+          (err) => { active--; reject(err); next(); },
+        );
+      });
+      next();
+    });
+  };
+}

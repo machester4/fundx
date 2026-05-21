@@ -25,6 +25,14 @@ export interface HeartbeatEvalInput {
   daemonLaunchedAt: number;
   daemonRunning: boolean;
   previouslyAlerted: boolean;
+  /** Wall-clock time since the supervisor's previous tick fired. Used to detect
+   *  OS-level suspension (laptop sleep): if our own setInterval lagged, the
+   *  daemon's missed heartbeat is almost certainly the same cause, not a wedge.
+   *  Omit on the very first tick. */
+  wallClockDeltaMs?: number;
+  /** Nominal interval between supervisor ticks (e.g., 60_000). Required when
+   *  `wallClockDeltaMs` is provided. */
+  intervalMs?: number;
 }
 
 export interface HeartbeatEvalResult {
@@ -32,17 +40,25 @@ export interface HeartbeatEvalResult {
   shouldRecover: boolean;
   stale: boolean;
   ageMs: number;
+  /** True when the supervisor's own wall-clock drift suggests the host was
+   *  suspended (sleep, app nap). When true with a stale heartbeat, the alert
+   *  is suppressed for this tick — the daemon will catch up on its next cron
+   *  fire, and if it doesn't a subsequent tick (with normal wallClockDelta)
+   *  will raise the real alarm. */
+  suspectedSuspension: boolean;
 }
 
 /** Pure: decide whether to alert / recover based on heartbeat freshness.
  *  - If daemon not running: no alerts ever.
  *  - If heartbeat exists: stale = (now - mtime) > HEARTBEAT_STALE_MS.
  *  - If heartbeat missing: stale = (now - daemonLaunchedAt) > HEARTBEAT_STALE_MS (grace period).
- *  - shouldAlert: stale AND not previouslyAlerted.
- *  - shouldRecover: not stale AND previouslyAlerted. */
+ *  - shouldAlert: stale AND not previouslyAlerted AND NOT suspectedSuspension.
+ *  - shouldRecover: not stale AND previouslyAlerted (regardless of suspension —
+ *    a fresh heartbeat is unambiguous).
+ *  - suspectedSuspension: wallClockDeltaMs > 2 * intervalMs (when both provided). */
 export function evaluateHeartbeatStaleness(input: HeartbeatEvalInput): HeartbeatEvalResult {
   if (!input.daemonRunning) {
-    return { shouldAlert: false, shouldRecover: false, stale: false, ageMs: 0 };
+    return { shouldAlert: false, shouldRecover: false, stale: false, ageMs: 0, suspectedSuspension: false };
   }
 
   let stale = false;
@@ -56,9 +72,14 @@ export function evaluateHeartbeatStaleness(input: HeartbeatEvalInput): Heartbeat
     ageMs = sinceLaunchMs;
   }
 
-  const shouldAlert = stale && !input.previouslyAlerted;
+  const suspectedSuspension =
+    input.wallClockDeltaMs !== undefined &&
+    input.intervalMs !== undefined &&
+    input.wallClockDeltaMs > 2 * input.intervalMs;
+
+  const shouldAlert = stale && !input.previouslyAlerted && !suspectedSuspension;
   const shouldRecover = !stale && input.previouslyAlerted;
-  return { shouldAlert, shouldRecover, stale, ageMs };
+  return { shouldAlert, shouldRecover, stale, ageMs, suspectedSuspension };
 }
 
 /**
@@ -168,9 +189,18 @@ export async function startSupervisor(): Promise<void> {
 
   // Phase 4: heartbeat freshness watch — proactively alert if daemon's event loop is hung
   let heartbeatAlerted = false;
+  // Wall-clock anchor for OS-suspension detection. When the laptop sleeps,
+  // setInterval pauses; the gap between two consecutive ticks lets us
+  // distinguish "host was suspended" from "daemon is genuinely wedged".
+  let lastHeartbeatTickAt = 0;
+  const HEARTBEAT_INTERVAL_MS = 60_000;
 
   const heartbeatCheckInterval = setInterval(async () => {
     if (stopping) return;
+    const tickNow = Date.now();
+    const wallClockDeltaMs = lastHeartbeatTickAt > 0 ? tickNow - lastHeartbeatTickAt : undefined;
+    lastHeartbeatTickAt = tickNow;
+
     let mtimeMs = 0;
     let exists = false;
     if (existsSync(DAEMON_HEARTBEAT)) {
@@ -184,13 +214,28 @@ export async function startSupervisor(): Promise<void> {
     }
 
     const result = evaluateHeartbeatStaleness({
-      now: Date.now(),
+      now: tickNow,
       heartbeatMtimeMs: mtimeMs,
       heartbeatExists: exists,
       daemonLaunchedAt,
       daemonRunning: currentChild !== null,
       previouslyAlerted: heartbeatAlerted,
+      wallClockDeltaMs,
+      intervalMs: HEARTBEAT_INTERVAL_MS,
     });
+
+    if (result.stale && result.suspectedSuspension && !heartbeatAlerted) {
+      // Log silently so post-mortems can see we skipped the alert intentionally;
+      // do NOT notify the user — the daemon will catch up on its next tick.
+      try {
+        const { logDaemonLine } = await import("./daemon.service.js");
+        await logDaemonLine(
+          `[supervisor] suppressed stale alert: wallClockDelta=${Math.round(wallClockDeltaMs! / 1000)}s suggests OS suspension`,
+        );
+      } catch {
+        /* best effort */
+      }
+    }
 
     if (result.shouldAlert) {
       try {

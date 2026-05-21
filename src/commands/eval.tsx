@@ -6,6 +6,7 @@ import {
   loadEvalCases,
   filterCases,
   seedEvalFund,
+  sweepEvalOrphans,
   runEvalCase,
   renderTerminal,
   buildReport,
@@ -56,6 +57,25 @@ export default function EvalCommand({ options: opts }: Props) {
     async function main(): Promise<void> {
       try {
         setStatusLines(["Loading cases..."]);
+
+        // Sweep any orphaned fundx-eval-* dirs left over from a previously
+        // interrupted run. Dirs younger than 30 min are preserved in case a
+        // sibling eval process is still using them.
+        try {
+          const sweep = await sweepEvalOrphans();
+          if (sweep.removed.length > 0) {
+            appendStatus(
+              setStatusLines,
+              `Cleaned ${sweep.removed.length} orphan eval fund(s): ${sweep.removed.join(", ")}`,
+            );
+          }
+        } catch (err) {
+          appendStatus(
+            setStatusLines,
+            `Warning: orphan sweep failed: ${(err as Error).message}`,
+          );
+        }
+
         const casesDir = join(process.cwd(), "tests", "eval", "cases");
         const fixturesDir = join(process.cwd(), "tests", "eval", "fixtures");
         const allCases = await loadEvalCases({ casesDir, fixturesDir });

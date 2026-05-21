@@ -171,6 +171,54 @@ describe("listFundNames", () => {
     const names = await listFundNames();
     expect(names).toEqual(["my-fund"]);
   });
+
+  it("returns fundx-eval-* directories too (raw listing)", async () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockedReaddir.mockResolvedValue([
+      { name: "growth", isDirectory: () => true },
+      { name: "fundx-eval-abc123", isDirectory: () => true },
+    ]);
+
+    const names = await listFundNames();
+    expect(names).toEqual(["growth", "fundx-eval-abc123"]);
+  });
+});
+
+describe("listActiveFundNames", () => {
+  it("excludes ephemeral fundx-eval-* directories", async () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockedReaddir.mockResolvedValue([
+      { name: "growth", isDirectory: () => true },
+      { name: "fundx-eval-abc123", isDirectory: () => true },
+      { name: "runway", isDirectory: () => true },
+      { name: "fundx-eval-deadbeef", isDirectory: () => true },
+    ]);
+
+    const { listActiveFundNames } = await import("../src/services/fund.service.js");
+    const names = await listActiveFundNames();
+    expect(names).toEqual(["growth", "runway"]);
+  });
+
+  it("returns empty array when only eval funds exist", async () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockedReaddir.mockResolvedValue([
+      { name: "fundx-eval-abc", isDirectory: () => true },
+      { name: "fundx-eval-def", isDirectory: () => true },
+    ]);
+
+    const { listActiveFundNames } = await import("../src/services/fund.service.js");
+    expect(await listActiveFundNames()).toEqual([]);
+  });
+});
+
+describe("isEvalFund", () => {
+  it("recognizes the fundx-eval- prefix", async () => {
+    const { isEvalFund } = await import("../src/services/fund.service.js");
+    expect(isEvalFund("fundx-eval-abc123")).toBe(true);
+    expect(isEvalFund("fundx-eval-")).toBe(true); // prefix alone counts as the sentinel
+    expect(isEvalFund("growth")).toBe(false);
+    expect(isEvalFund("my-fundx-eval-suffix")).toBe(false); // prefix must be at start
+  });
 });
 
 describe("resolveWizardUniverseChoice", () => {

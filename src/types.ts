@@ -307,6 +307,10 @@ export const globalConfigSchema = z.object({
   daemon: z
     .object({
       tick_interval_ms: z.number().int().positive().optional(),
+      /** Hard cap on concurrent Claude SDK sessions launched by the daemon.
+       *  Default 3. Lower this on rate-limited plans; raise it (with care) on
+       *  hosts with plenty of memory and a higher Claude/FMP quota. */
+      max_concurrent_sessions: z.number().int().positive().optional(),
     })
     .optional(),
   budget: fundBudgetConfigSchema,

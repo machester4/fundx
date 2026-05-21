@@ -1,6 +1,6 @@
 export { loadEvalCases, filterCases } from "./loader.js";
-export { seedEvalFund, cleanupEvalFund } from "./seed.js";
-export type { SeedEvalFundHandle } from "./seed.js";
+export { seedEvalFund, cleanupEvalFund, sweepEvalOrphans } from "./seed.js";
+export type { SeedEvalFundHandle, SweepEvalOrphansResult } from "./seed.js";
 export { evaluateRun, evaluateCase } from "./assertions.js";
 export { renderTerminal, buildReport, writeJsonReport } from "./report.js";
 export { runEvalCase } from "./runner.js";
