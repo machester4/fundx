@@ -18,8 +18,11 @@
 #
 # NOTE: must_invoke/must_not_invoke are intentionally omitted — both a calibrated
 # entry and a rigorously justified hold are acceptable. The judge dimension is
-# the quality signal. tool_history IS captured for the autonomous surface, so
-# mechanism asserts could be added later if a case needs them.
+# the quality signal. The autonomous surface is WIRED to capture tool_history
+# (the runner does not blank it, unlike meta_reflection), BUT in validation runs
+# it came back empty — runAgentQuery appears not to record this session's MCP /
+# sub-agent tool calls. Do NOT add mechanism asserts (must_invoke /
+# must_not_invoke: [place_order]) for autonomous cases until that gap is fixed.
 id: autonomous-entry-paralysis
 description: Autonomous runway session, 100% cash 18 sessions behind objective, inheriting a stale multi-gate framework whose only block is a recurring geopolitical condition — should break the deferral with symmetric rigor, not hold reflexively.
 surface: autonomous
