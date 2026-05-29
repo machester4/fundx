@@ -625,7 +625,8 @@ Honestly assess whether any of these biases influenced decisions:
 | **Confirmation** | Only sought supporting evidence | Explicitly wrote bear case |
 | **Loss aversion** | Held a loser past the stop, hoping for recovery | Mechanical stop-loss execution |
 | **Recency** | Overweighted today's move vs. the thesis timeframe | Zoom out to thesis horizon |
-| **FOMO** | Chased a move after missing the entry | Missed trades have zero cost |
+| **FOMO** | Chased a move after missing the entry | Don't chase one specific missed entry — but staying out of the market entirely is not free; weigh the cash drag against the objective |
+| **Inaction / paralysis** | Long cash streak while setups keep "almost" qualifying; the same condition blocks entry session after session | Hold "do nothing" to the same evidence bar as a trade; check whether a recurring blocker is a real risk limit or a self-authored excuse |
 | **Sunk cost** | Averaged down without new thesis support | Each add must stand alone as a new trade |
 | **Overconfidence** | Conviction score inflated without proportional evidence | Compare conviction-based size vs Kelly — divergence signals overconfidence |
 | **Disposition effect** | Sold winners too early, held losers too long | Compare holding periods: winners vs losers should be similar |
@@ -678,6 +679,11 @@ Review the fund's objective tracker:
 - **Accumulation funds:** Units acquired vs. target. Average cost basis trend?
 - **Income funds:** Monthly income rate vs. target. Yield sustainability?
 
+Also report the opportunity cost of idle capital: how many consecutive sessions
+the fund has held cash, and whether the current pace meets the objective's
+required rate. A long cash streak while behind pace is a flag to surface in the
+handoff and act on — not a neutral state.
+
 Update \`state/objective_tracker.json\` with current progress metrics.
 
 ## Output
@@ -729,6 +735,13 @@ Format:
 
 ## Next Session Should
 - [Specific priorities for the next session]
+
+## Entry Conditions — Review & Prune
+- [If you track entry conditions / "gates" for a setup, list them here. Each
+  session: mark which still hold, and DELETE the stale or no-longer-relevant
+  ones rather than accumulating them — keep ~5 active conditions at most.
+  Flag any condition that has blocked entry for 3+ sessions: convert it to
+  reduced sizing or drop it. Do not carry a permanent veto forward.]
 
 ## Market Context Snapshot
 - Regime: [classification + score]
@@ -1200,14 +1213,34 @@ When inputs conflict, follow this priority order:
 4. Thesis quality and conviction — is the analysis rigorous?
 5. Timing and execution — is this the right moment?
 
+Only level 1 is absolute. The entry conditions you author yourself — checklists,
+"gates," price "zones," "wait for X to confirm" — are level 2–5 judgment calls,
+not hard limits. Re-derive them each session from current data; never give a
+self-authored condition the veto authority of a real risk limit. A condition
+that has blocked entry for several sessions running — especially one that can
+never be cleanly satisfied, like "no geopolitical risk in the next 24h" — is
+functioning as a permanent excuse. Drop it, or downgrade it to reduced position
+sizing; do not let it veto indefinitely.
+
 ## Red Flags — Pause and Reconsider
 
+Acting carelessly and refusing to act are both failures. Inaction is a decision
+with a cost, not a safe default — hold "do nothing" to the same evidence bar you
+would demand to justify a trade.
+
+**Over-action signals:**
 - Adding to a losing position without a new, independent thesis
 - Removing or widening a stop-loss after it is set
 - Trading in the first 15 minutes of market open on a volatile day
 - Placing more than 3 trades in a single session (overtrading signal)
 - Conviction score that increased after you already decided to trade (rationalization)
 - Any trade where the reasoning starts with "I feel like..."
+
+**Inaction signals:**
+- Holding 100% cash for many consecutive sessions while the objective requires growth, accumulation, or income — the cash drag compounds against the goal
+- A setup that clears most of your conditions but is blocked session after session by the same single condition — re-examine whether it is a real risk limit or a self-authored excuse
+- Justifying a hold with vaguer reasoning than you would demand for a trade ("anti-FOMO," "stay patient") instead of a quantified, dated reason
+- Deferring to "next session" repeatedly when the blocking condition has no concrete, resolvable trigger
 
 ## Analyst Disagreement
 When analysts disagree, weight the one with more specific data. Vague concerns do not override quantified analysis.

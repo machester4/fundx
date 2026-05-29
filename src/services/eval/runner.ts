@@ -45,6 +45,14 @@ export interface RunnerDeps {
     fundName: string,
     opts: { model: string },
   ) => Promise<RunChatTurnResult>;
+  /** Required when any case has surface="autonomous". Runs one autonomous
+   *  scheduled session (via runFundSession) over the seeded fund and returns
+   *  the eval-compatible result shape, including tool_history. */
+  runAutonomousEval?: (
+    fundName: string,
+    sessionType: string,
+    opts: { model: string },
+  ) => Promise<RunChatTurnResult>;
   buildFundContext: (
     fundName: string,
     opts?: { watchlistDbPath?: string },
@@ -61,6 +69,11 @@ export async function runEvalCase(caseDef: EvalCase, deps: RunnerDeps): Promise<
   if (caseDef.surface === "meta_reflection" && !deps.runMetaReflectionEval) {
     throw new Error(
       `Case "${caseDef.id}" has surface "meta_reflection" but RunnerDeps.runMetaReflectionEval was not provided`,
+    );
+  }
+  if (caseDef.surface === "autonomous" && !deps.runAutonomousEval) {
+    throw new Error(
+      `Case "${caseDef.id}" has surface "autonomous" but RunnerDeps.runAutonomousEval was not provided`,
     );
   }
   const startedAt = Date.now();
@@ -155,6 +168,16 @@ async function runOnce(
       // Override response with memory file contents for the judge rubric.
       const memoryContents = await readMemoryFilesForJudge(fundName);
       result = { ...result, response: memoryContents };
+    } else if (caseDef.surface === "autonomous") {
+      // Real autonomous scheduled session over the seeded fund. Unlike
+      // meta_reflection, this captures tool_history (must_invoke/must_not_invoke
+      // are evaluated) and uses the agent's output as the judge response.
+      result = await withTimeout(
+        deps.runAutonomousEval!(fundName, caseDef.autonomous_session_type, {
+          model: deps.model,
+        }),
+        deps.timeoutMs,
+      );
     } else {
       result = await withTimeout(
         deps.runChatTurn(fundName, undefined, caseDef.prompt!, context, {

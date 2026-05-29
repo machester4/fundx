@@ -889,6 +889,11 @@ export const evalFundStateSchema = z.object({
     screens: z.array(z.string()).default(["momentum-12-1"]),
     first_surfaced_days_ago: z.number().int().nonnegative().default(7),
   })).default([]),
+  /** Current session-handoff.md content. Seeded to state/session-handoff.md so
+   *  the autonomous state_snapshot envelope carries it into the session (and the
+   *  chat freshness line reflects it). Used by surface=autonomous to reproduce
+   *  inherited-context behavior (e.g. an accumulated entry-gate framework). */
+  handoff_current: z.string().optional(),
   /** Archived handoff files to seed into state/handoffs/ for meta_reflection evals. */
   handoffs: z.array(z.object({
     /** ISO timestamp used to derive the archive filename and mtime. */
@@ -925,6 +930,8 @@ export const judgeDimSchema = z.enum([
   "routing",
   "format",
   "restraint",
+  // autonomous decision-quality dim
+  "decision_discipline",
 ]);
 export type JudgeDim = z.infer<typeof judgeDimSchema>;
 
@@ -960,14 +967,20 @@ export const evalCaseSchema = z.object({
    *  no interactive user prompt — the session is driven by the prompt builder. */
   prompt: z.string().min(1).optional(),
   language: z.enum(["es", "en"]).default("es"),
-  surface: z.enum(["chat", "ask", "meta_reflection"]).default("chat"),
+  surface: z.enum(["chat", "ask", "meta_reflection", "autonomous"]).default("chat"),
+  /** Session type to run for surface=autonomous (must exist in the seeded
+   *  fund's schedule). Ignored for other surfaces. */
+  autonomous_session_type: z.string().default("pre_market"),
   fund_state: evalFundStateSchema,
   expect: evalAssertionsSchema,
   runs: z.number().int().min(1).max(10).default(3),
   threshold: z.number().int().min(1).default(2),
 }).refine((c) => c.threshold <= c.runs, { message: "threshold must be ≤ runs" })
   .refine(
-    (c) => c.surface === "meta_reflection" || (c.prompt !== undefined && c.prompt.length > 0),
+    (c) =>
+      c.surface === "meta_reflection" ||
+      c.surface === "autonomous" ||
+      (c.prompt !== undefined && c.prompt.length > 0),
     { message: "prompt is required for surface chat and ask" },
   );
 export type EvalCase = z.infer<typeof evalCaseSchema>;

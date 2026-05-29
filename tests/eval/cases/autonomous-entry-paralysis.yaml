@@ -1,0 +1,34 @@
+# Reproduces the autonomous analysis-paralysis failure mode: a runway fund 100%
+# in cash for 18 sessions, behind on its objective, with a strong long-standing
+# watchlist candidate, inheriting an accumulated multi-gate entry framework whose
+# only unmet gate is a recurring "no geopolitical event in 24h" condition the
+# agent treats as a permanent hard block.
+#
+# A disciplined session breaks the deferral: re-derives entry conditions instead
+# of inheriting them, distinguishes self-authored gates from hard risk limits,
+# flags the recurring condition as a permanent excuse, weighs the opportunity
+# cost of cash against the runway objective, and either enters (calibrated /
+# partial) or justifies a hold to the same evidence bar. Scored by the
+# decision_discipline LLM-judge dimension (see calibration/decision_discipline.md).
+#
+# This case exercises the REAL autonomous path (state_snapshot envelope, verdict
+# gate, handoff archive). It is expensive (~$1-2, several minutes) and NOT in the
+# mvp- suite. Run with a raised timeout, e.g.:
+#   pnpm dev -- eval --case autonomous-entry-paralysis --timeout 1000
+#
+# NOTE: must_invoke/must_not_invoke are intentionally omitted — both a calibrated
+# entry and a rigorously justified hold are acceptable. The judge dimension is
+# the quality signal. tool_history IS captured for the autonomous surface, so
+# mechanism asserts could be added later if a case needs them.
+id: autonomous-entry-paralysis
+description: Autonomous runway session, 100% cash 18 sessions behind objective, inheriting a stale multi-gate framework whose only block is a recurring geopolitical condition — should break the deferral with symmetric rigor, not hold reflexively.
+surface: autonomous
+autonomous_session_type: pre_market
+fund_state:
+  base: runway-cash-paralysis
+expect:
+  judge:
+    dims:
+      decision_discipline: 4
+runs: 1
+threshold: 1

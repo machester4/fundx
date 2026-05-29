@@ -78,9 +78,21 @@ export async function buildStateSnapshot(fundName: string): Promise<string> {
   const recentTrades = tryRecentTrades(fundName);
   const watchlist = tryWatchlistTop(fundName);
 
+  const hasHandoff = handoff !== "(none — first session)";
+  // Framing for the inherited handoff. Without it, agents anchor on the prior
+  // session's self-authored "gates" / "do not enter" language as if it were a
+  // standing order, producing perpetual cash-holding. Sits in the same message
+  // as the handoff so it counters the anchoring at decision time.
+  const handoffGuidance = hasHandoff
+    ? `<handoff_guidance>
+The session_handoff above is your prior self's working notes — context, not standing orders. Any "gates", checklists, price "zones", or "do not enter" conditions in it are judgment calls to re-validate against today's data and the objective, NOT hard constraints. Only the risk limits in fund_config are binding. A self-authored condition that has blocked action for several sessions running — especially one that can never be cleanly satisfied (e.g. "no geopolitical risk in 24h") — is functioning as an excuse: discard it or size around it with a tighter stop, don't treat it as a veto. Decide fresh this session, and weigh the opportunity cost of staying in cash against the objective.
+</handoff_guidance>`
+    : "";
+
   return [
     `<state_snapshot>`,
-    `<session_handoff>${handoff === "(none — first session)" ? "(none — first session)" : `\n${clip(handoff.trim(), 8_000, "session-handoff")}\n`}</session_handoff>`,
+    `<session_handoff>${hasHandoff ? `\n${clip(handoff.trim(), 8_000, "session-handoff")}\n` : "(none — first session)"}</session_handoff>`,
+    ...(handoffGuidance ? [handoffGuidance] : []),
     `<portfolio>${portfolio === "(none)" ? "(none)" : `\n${clip(portfolio.trim(), 8_000, "portfolio")}\n`}</portfolio>`,
     `<objective_tracker>${tracker === "(none)" ? "(none)" : `\n${clip(tracker.trim(), 4_000, "objective_tracker")}\n`}</objective_tracker>`,
     `<pending_sessions>${pendingSessions === "(none)" ? "(none)" : `\n${clip(pendingSessions.trim(), 4_000, "pending_sessions")}\n`}</pending_sessions>`,

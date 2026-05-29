@@ -249,6 +249,20 @@ export interface BuildBudgetAlertInput {
   costUsd: number;
 }
 
+/** Finalized result of an autonomous run, surfaced to the eval harness via the
+ *  `onComplete` option. Mirrors the fields the eval runner's RunChatTurnResult
+ *  needs (tool history + output for the judge + cost/turn/token accounting). */
+export interface AutonomousRunResult {
+  output: string;
+  toolHistory: Array<{ name: string; elapsed: number }>;
+  costUsd: number;
+  numTurns: number;
+  tokensIn: number;
+  tokensOut: number;
+  sessionId: string;
+  status: string;
+}
+
 /** Format a budget-kill alert for a session that the SDK hard-killed on a
  *  budget cap. Returns the message body — caller passes it to notifySession()
  *  which strips tags before handing it to the OS notification center. Pure
@@ -290,6 +304,11 @@ export async function runFundSession(
      *  30s poll applies. Tests inject small values to verify the watchdog
      *  wiring without waiting minutes. */
     _testOnly_watchdog?: { hardMs: number; pollMs?: number };
+    /** Eval-only hook. Invoked once with the finalized run result after the
+     *  session completes (not called on the daily-cap skip path or on a
+     *  non-watchdog throw). The eval harness uses this to capture tool_history
+     *  and output for the autonomous surface without changing the void return. */
+    onComplete?: (result: AutonomousRunResult) => void;
   },
 ): Promise<void> {
   const config = await loadFundConfig(fundName);
@@ -511,6 +530,17 @@ export async function runFundSession(
 
   await writeSessionLog(fundName, log);
   await appendSessionLogEntry(fundName, log);
+
+  options?.onComplete?.({
+    output: result.output,
+    toolHistory: result.toolHistory ?? [],
+    costUsd: result.cost_usd,
+    numTurns: result.num_turns,
+    tokensIn: log.tokens_in ?? 0,
+    tokensOut: log.tokens_out ?? 0,
+    sessionId: result.session_id,
+    status: result.status,
+  });
 
   // Notify session completion
   const duration = Math.round((new Date(log.ended_at!).getTime() - new Date(log.started_at).getTime()) / 1000);

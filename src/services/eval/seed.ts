@@ -69,6 +69,7 @@ export async function seedEvalFund(
     await ensureFundSkillFiles(paths.claudeDir);
     await ensureFundRules(paths.claudeDir);
     await seedWatchlist(watchlistDbPath, state, fundName);
+    await seedCurrentHandoff(paths.state.sessionHandoff, state);
     await seedHandoffs(paths.state.handoffsDir, state);
     await seedJournal(fundName, state);
   } catch (err) {
@@ -170,7 +171,28 @@ async function seedFundConfig(path: string, fundName: string, state: EvalFundSta
     universe: {
       preset: "sp500",
     },
-    schedule: {},
+    // Mirror the default fund schedule so surface=autonomous cases can run a
+    // real session type (chat/ask ignore the schedule). Kept in sync with the
+    // defaults in fund.service.ts createFund.
+    schedule: {
+      sessions: {
+        pre_market: {
+          time: "09:00",
+          enabled: true,
+          focus: "Analyze overnight developments. Plan trades.",
+        },
+        mid_session: {
+          time: "13:00",
+          enabled: true,
+          focus: "Monitor positions. React to intraday moves.",
+        },
+        post_market: {
+          time: "18:00",
+          enabled: true,
+          focus: "Review day. Update journal. Generate report.",
+        },
+      },
+    },
     broker: {
       mode: "paper",
     },
@@ -262,6 +284,15 @@ async function seedWatchlist(dbPath: string, state: EvalFundState, fundName: str
   } finally {
     db.close();
   }
+}
+
+/** Seed the current session-handoff.md. The autonomous state_snapshot envelope
+ *  reads this file, so it carries inherited context (e.g. an accumulated
+ *  entry-gate framework) into the session being evaluated. */
+async function seedCurrentHandoff(handoffPath: string, state: EvalFundState): Promise<void> {
+  if (!state.handoff_current) return;
+  await mkdir(dirname(handoffPath), { recursive: true });
+  await writeFile(handoffPath, state.handoff_current, "utf-8");
 }
 
 /** Seed archived handoff files into state/handoffs/.

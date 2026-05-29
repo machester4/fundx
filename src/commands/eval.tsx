@@ -19,6 +19,9 @@ import {
 } from "../services/chat.service.js";
 import { runAskQuery } from "../services/ask.service.js";
 import { runMetaReflection } from "../services/meta-reflection.service.js";
+import { runFundSession } from "../services/session.service.js";
+import { __setEnabledForTest as setNotifyEnabled } from "../services/notify.service.js";
+import type { AutonomousRunResult } from "../services/session.service.js";
 import type { EvalCaseResult } from "../types.js";
 
 export const description = "Run the prompt evaluation suite against the chat surface";
@@ -171,6 +174,43 @@ export default function EvalCommand({ options: opts }: Props) {
                   tokensIn: 0,
                   tokensOut: 0,
                   toolHistory: [],
+                };
+              },
+              runAutonomousEval: async (fundName, sessionType, _runOpts) => {
+                // Run the real autonomous scheduled session over the seeded fund.
+                // runFundSession returns void and writes the session log itself; we
+                // capture the finalized result via the onComplete hook. OS
+                // notifications are suppressed for the duration of the run so the
+                // ephemeral eval fund doesn't spam the desktop.
+                // Wrapper object: TS control-flow analysis doesn't track the
+                // assignment inside the onComplete callback, so a bare `let`
+                // would narrow to `null`. An object property sidesteps that.
+                const box: { result: AutonomousRunResult | null } = { result: null };
+                setNotifyEnabled(false);
+                try {
+                  await runFundSession(fundName, sessionType, {
+                    onComplete: (res) => {
+                      box.result = res;
+                    },
+                  });
+                } finally {
+                  setNotifyEnabled(null);
+                }
+                const r = box.result;
+                if (!r) {
+                  // Session skipped (daily cap) or threw before completion.
+                  throw new Error(
+                    `Autonomous session for '${fundName}' (${sessionType}) produced no result`,
+                  );
+                }
+                return {
+                  sessionId: r.sessionId,
+                  response: r.output,
+                  costUsd: r.costUsd,
+                  numTurns: r.numTurns,
+                  tokensIn: r.tokensIn,
+                  tokensOut: r.tokensOut,
+                  toolHistory: r.toolHistory,
                 };
               },
               buildFundContext: (fundName, opts) => buildFundContext(fundName, opts),

@@ -1,0 +1,79 @@
+# Runway fund stuck 100% in cash behind an accumulated multi-gate entry
+# framework. Reproduces the analysis-paralysis failure mode observed in
+# production (runway-metal "Setup G" + recurring Iran block; pm-survivor's
+# 8-item checklist that never clears). The handoff_current carries the
+# inherited gate framework into the autonomous state_snapshot envelope, so the
+# session faces the same ratcheting context that drives perpetual cash-holding.
+#
+# A disciplined session should break the deferral: re-derive the entry
+# conditions, recognize the recurring geopolitical condition as a self-authored
+# block (not a hard risk limit), weigh the opportunity cost of 18 sessions in
+# cash against the runway objective, and either enter (calibrated/partial) or
+# justify a hold to the same evidence bar. See calibration/decision_discipline.md.
+id: runway-cash-paralysis
+fund_config:
+  objective: runway
+  risk_profile: moderate
+  initial_capital: 100000
+portfolio:
+  cash: 100000
+  positions: []
+tracker:
+  progress_pct: 4
+  status: at_risk
+watchlist:
+  - ticker: UGL
+    status: candidate
+    peak_score: 0.91
+    screens: [momentum-12-1, trend-200d]
+    first_surfaced_days_ago: 34
+  - ticker: GLD
+    status: candidate
+    peak_score: 0.84
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 28
+  - ticker: GDXJ
+    status: watching
+    peak_score: 0.78
+    screens: [momentum-12-1]
+    first_surfaced_days_ago: 21
+handoff_current: |
+  # Session Handoff — Pre-Market
+
+  ## Session Contract Evaluation
+  Held cash again. Setup G remains the only active thesis. 4/5 gates pass; only
+  Gate 4 (geopolitical all-clear) blocks entry. Anti-FOMO check passed —
+  protocol held. $100,000 cash preserved (18th consecutive session in cash).
+
+  ## Portfolio State
+  - **Cash:** $100,000 (100%)
+  - **Positions:** NONE
+  - **Drawdown:** 0%
+  - **Regime:** Risk-On 1.4 (constructive for the thesis)
+
+  ## Setup G — Entry Gate Framework (inherited, refined over 18 sessions)
+
+  | Gate | Condition | Status |
+  |------|-----------|--------|
+  | 1 | UUP ≤ $27.40 (dollar weakness) | PASS — $27.31 |
+  | 2 | UGL ≥ 200d MA ($56.61) | PASS — $57.20, held 3 sessions |
+  | 3 | First positive weekly close | PASS — earned last Friday |
+  | 4 | No geopolitical event within 24h (Iran) | **VIOLATED — Iran headlines ongoing** |
+  | 5 | GLD in middle zone ($415–420) | PASS — $417.80 |
+
+  **Gate 4 is a hard block.** Do NOT enter while any Iran-related escalation
+  headline is live within a 24h window. This has been the recurring blocker.
+
+  ## Entry probability
+  - This session: 15–25% (conditional on Gate 4 clearing)
+  - Next 3 sessions: 25–35% (if Iran stabilizes)
+
+  ## Next Session Should
+  - Re-check Gate 4 status (Iran overnight headlines)
+  - Confirm UGL still above 200d MA
+  - Hold cash unless Gate 4 clears — protocol over impulse
+
+  ## Market Context Snapshot
+  - Regime: Risk-On 1.4
+  - Gold trend: constructive, UGL +2.1% on the week
+  - Key events next 48h: ongoing Iran geopolitical headlines (no dated resolution)
