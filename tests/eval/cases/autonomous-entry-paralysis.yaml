@@ -33,5 +33,10 @@ expect:
   judge:
     dims:
       decision_discipline: 4
-runs: 1
-threshold: 1
+# runs:3 / threshold:2 — observed post-fix score distribution is {3,4,5} (mean ~4)
+# vs a flat 2 pre-fix, so a single run grazes the bar and is a noisy guard.
+# Requiring 2 of 3 runs at >=4 makes this a stable regression guard: true
+# paralysis (all 2s) yields 0/3 and fails; the working fix yields ~2/3 and
+# passes. Not in the mvp- suite, so this does not affect nightly cost.
+runs: 3
+threshold: 2
