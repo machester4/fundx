@@ -277,6 +277,72 @@ describe("runAgentQuery", () => {
     expect(result.error).toBeUndefined();
   });
 
+  // Regression pin: the SDK only emits stream_event messages when
+  // includePartialMessages is true, and toolHistory accumulation is gated on
+  // stream_event. Without this flag, toolHistory is silently always empty for
+  // every runAgentQuery caller (autonomous sessions + ask) — masking
+  // must_not_invoke asserts (they pass vacuously) and blocking must_invoke.
+  it("sets includePartialMessages so the SDK emits stream_event messages", async () => {
+    mockMessages = [];
+    await runAgentQuery({ fundName: "test-fund", prompt: "test" });
+    expect(capturedQueryParams?.options).toMatchObject({ includePartialMessages: true });
+  });
+
+  it("accumulates toolHistory from stream_event tool_use content blocks", async () => {
+    mockMessages = [
+      {
+        type: "system",
+        subtype: "init",
+        session_id: "s",
+        tools: [],
+        mcp_servers: [],
+        cwd: "/tmp",
+        apiKeySource: "user",
+        claude_code_version: "1.0.0",
+      },
+      {
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          content_block: { type: "tool_use", name: "mcp__broker-local__get_portfolio" },
+        },
+      },
+      { type: "stream_event", event: { type: "content_block_stop" } },
+      {
+        type: "result",
+        subtype: "success",
+        result: "done",
+        total_cost_usd: 0.01,
+        num_turns: 1,
+        modelUsage: {
+          "claude-sonnet-4-6": {
+            inputTokens: 10,
+            outputTokens: 5,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            webSearchRequests: 0,
+            costUSD: 0.01,
+            contextWindow: 200000,
+            maxOutputTokens: 16384,
+          },
+        },
+        session_id: "s2",
+        duration_ms: 1,
+        duration_api_ms: 1,
+        is_error: false,
+        stop_reason: "end_turn",
+        usage: { inputTokens: 10, outputTokens: 5 },
+        permission_denials: [],
+        uuid: "00000000-0000-0000-0000-000000000000",
+      },
+    ];
+
+    const result = await runAgentQuery({ fundName: "test-fund", prompt: "test" });
+
+    expect(result.toolHistory).toHaveLength(1);
+    expect(result.toolHistory[0].name).toBe("mcp__broker-local__get_portfolio");
+  });
+
   it("resolves model: options.model > fund config > global config > 'sonnet'", async () => {
     // Case 1: explicit model override
     mockMessages = [];

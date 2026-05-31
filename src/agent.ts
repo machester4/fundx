@@ -226,6 +226,11 @@ export async function runAgentQuery(
             env: childEnv,
             systemPrompt: { type: "preset", preset: "claude_code" },
             settingSources: ["project"],
+            // Required for the toolHistory accumulation below: the SDK only emits
+            // stream_event messages when this is set. Without it, toolHistory is
+            // silently always empty for every runAgentQuery caller (autonomous
+            // sessions + ask). Chat sets it in its own loop (chat.service.ts).
+            includePartialMessages: true,
             mcpServers,
             permissionMode: "bypassPermissions",
             allowDangerouslySkipPermissions: true,
