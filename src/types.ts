@@ -214,7 +214,7 @@ export const fundConfigSchema = z.object({
     .default({}),
   claude: z
     .object({
-      model: z.string().default("sonnet"),
+      model: z.string().default("claude-opus-4-8"),
       personality: z.string().default(""),
       decision_framework: z.string().default(""),
     })
@@ -271,7 +271,7 @@ export type NewsArticle = z.infer<typeof newsArticleSchema>;
 // ── Global Config Schema ───────────────────────────────────────
 
 export const globalConfigSchema = z.object({
-  default_model: z.string().default("sonnet"),
+  default_model: z.string().default("claude-opus-4-8"),
   max_budget_usd: z.number().positive().optional(),
   timezone: z.string().default("UTC"),
   broker: z

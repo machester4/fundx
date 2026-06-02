@@ -343,7 +343,7 @@ describe("runAgentQuery", () => {
     expect(result.toolHistory[0].name).toBe("mcp__broker-local__get_portfolio");
   });
 
-  it("resolves model: options.model > fund config > global config > 'sonnet'", async () => {
+  it("resolves model: options.model > fund config > global config > 'claude-opus-4-8'", async () => {
     // Case 1: explicit model override
     mockMessages = [];
     await runAgentQuery({
@@ -370,12 +370,12 @@ describe("runAgentQuery", () => {
     await runAgentQuery({ fundName: "test-fund", prompt: "test" });
     expect(capturedQueryParams?.options).toMatchObject({ model: "opus" });
 
-    // Case 4: final fallback is "sonnet"
+    // Case 4: final fallback is "claude-opus-4-8"
     mockedGlobalConfig.mockResolvedValue(
       makeGlobalConfig({ default_model: undefined }) as never,
     );
     await runAgentQuery({ fundName: "test-fund", prompt: "test" });
-    expect(capturedQueryParams?.options).toMatchObject({ model: "sonnet" });
+    expect(capturedQueryParams?.options).toMatchObject({ model: "claude-opus-4-8" });
   });
 
   it("passes correct SDK options (permissionMode, systemPrompt, cwd)", async () => {

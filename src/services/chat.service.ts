@@ -316,7 +316,7 @@ export async function buildWorkspaceContext(): Promise<string> {
     `## Workspace State`,
     `Existing funds: ${allFunds.length === 0 ? "none yet" : allFunds.join(", ")}`,
     `Mode: paper trading`,
-    `Model: ${globalConfig.default_model ?? "sonnet"}`,
+    `Model: ${globalConfig.default_model ?? "claude-opus-4-8"}`,
   ].join("\n");
 }
 
@@ -795,14 +795,14 @@ export async function resolveChatModel(
 ): Promise<string> {
   const globalConfig = await loadGlobalConfig();
   if (!fundName) {
-    return modelOption ?? globalConfig.default_model ?? "sonnet";
+    return modelOption ?? globalConfig.default_model ?? "claude-opus-4-8";
   }
   const fundConfig = await loadFundConfig(fundName);
   return (
     modelOption ??
     fundConfig.claude.model ??
     globalConfig.default_model ??
-    "sonnet"
+    "claude-opus-4-8"
   );
 }
 

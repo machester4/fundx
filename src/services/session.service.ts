@@ -52,17 +52,17 @@ export function evaluateWatchdog(input: WatchdogInput): WatchdogResult {
  *  before the global FALLBACK_DEFAULT. Conservative on the high side so a
  *  default-only deployment doesn't trip caps in normal operation. */
 const DEFAULTS_BY_SESSION_TYPE: Record<string, Budget> = {
-  pre_market: { maxTurns: 40, maxUsd: 5 },
-  mid_session: { maxTurns: 25, maxUsd: 3 },
-  post_market: { maxTurns: 60, maxUsd: 7 },
+  pre_market: { maxTurns: 40, maxUsd: 30 },
+  mid_session: { maxTurns: 25, maxUsd: 18 },
+  post_market: { maxTurns: 60, maxUsd: 40 },
 };
 
 /** Used when the session_type is not present in DEFAULTS_BY_SESSION_TYPE
  *  (e.g. a custom session type). Generous middle-of-the-road. */
-const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 5 };
+const FALLBACK_DEFAULT: Budget = { maxTurns: 50, maxUsd: 22 };
 
 /** Default daily-per-fund USD cap, used when neither fund nor global config sets one. */
-const DEFAULT_DAILY_CAP_USD = 20;
+const DEFAULT_DAILY_CAP_USD = 90;
 
 /** Resolve the daily-per-fund USD cap through a 3-level cascade.
  *  Most-specific override wins:

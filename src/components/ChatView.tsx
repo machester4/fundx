@@ -83,7 +83,7 @@ export function ChatView({ fundName, width, height, onExit, onSwitchFund, option
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [turnCount, setTurnCount] = useState(0);
   const [costTracker, setCostTracker] = useState<CostTracker>({ total_cost_usd: 0, total_turns: 0, messages: 0 });
-  const [model, setModel] = useState("sonnet");
+  const [model, setModel] = useState("claude-opus-4-8");
   const [mcpServers, setMcpServers] = useState<ChatMcpServers>({});
   const streaming = useStreaming();
   // Personalized labels for chat headers — OS username + prettified model name.

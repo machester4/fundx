@@ -295,7 +295,7 @@ export async function createFund(params: CreateFundParams): Promise<FundConfig> 
       },
     },
     broker: { mode: "paper" as const },
-    claude: { model: globalConfig.default_model ?? "sonnet" },
+    claude: { model: globalConfig.default_model ?? "claude-opus-4-8" },
   });
 
   await saveFundConfig(config);

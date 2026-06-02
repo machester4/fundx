@@ -13,7 +13,7 @@ export default function Init() {
   const [step, setStep] = useState<Step>("check");
   const [data, setData] = useState({
     timezone: "UTC",
-    defaultModel: "sonnet",
+    defaultModel: "claude-opus-4-8",
     brokerProvider: "paper",
     apiKey: "",
     secretKey: "",

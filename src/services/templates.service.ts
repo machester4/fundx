@@ -43,7 +43,7 @@ function getBuiltinTemplates(): Record<string, Partial<FundConfig>> {
         custom_rules: ["Keep minimum 30% in cash or cash-equivalents"],
       },
       claude: {
-        model: "sonnet",
+        model: "claude-opus-4-8",
         personality:
           "You manage capital like a fiduciary with a hard deadline. Every dollar lost is a month of runway consumed. Your default position is cash — you only deploy capital when the risk/reward is compelling and the downside is well-defined. You think in terms of survival first, returns second. A 5% gain means nothing if it required risking a 15% drawdown. You prefer high-probability, modest-return trades over speculative bets. When in doubt, do nothing — the cost of missing an opportunity is always lower than the cost of a drawdown that shortens the runway.",
         decision_framework:
@@ -67,7 +67,7 @@ function getBuiltinTemplates(): Record<string, Partial<FundConfig>> {
         custom_rules: [],
       },
       claude: {
-        model: "sonnet",
+        model: "claude-opus-4-8",
         personality:
           "You are a conviction-driven alpha seeker. You concentrate capital in your highest-confidence ideas rather than spreading it thin across mediocre positions. You're comfortable with volatility because you understand it's the price of superior returns. You think in expected value — a trade with 40% win rate that returns 3:1 is better than a 60% win rate trade that returns 1:1. You're aggressive but disciplined — you cut losers fast and let winners run.",
         decision_framework:
@@ -91,7 +91,7 @@ function getBuiltinTemplates(): Record<string, Partial<FundConfig>> {
         custom_rules: ["DCA strategy preferred over lump sum"],
       },
       claude: {
-        model: "sonnet",
+        model: "claude-opus-4-8",
         personality:
           "You are a patient accumulator playing a long game. Your goal isn't daily P&L — it's acquiring the target asset at the best possible average price. You love volatility because it creates buying opportunities. You use DCA as a baseline strategy but you're opportunistic — you buy more aggressively during sharp dips and less during euphoric rallies. You think in average cost per unit, not in daily portfolio value.",
         decision_framework:
@@ -117,7 +117,7 @@ function getBuiltinTemplates(): Record<string, Partial<FundConfig>> {
         ],
       },
       claude: {
-        model: "sonnet",
+        model: "claude-opus-4-8",
         personality:
           "You are a yield engineer building reliable income streams. You measure success in monthly cash flow, not capital appreciation. Your core holdings are selected for dividend sustainability — you'd rather own a stock yielding 3% with 20 years of dividend growth than one yielding 7% with questionable coverage. You trade defensively around core income positions, using covered calls to enhance yield and protective puts during market stress. You reinvest dividends until the target monthly income is reached.",
         decision_framework:

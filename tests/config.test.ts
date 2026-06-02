@@ -47,7 +47,7 @@ notifications:
     mockedReadFile.mockRejectedValue(new Error("ENOENT"));
 
     const config = await loadGlobalConfig();
-    expect(config.default_model).toBe("sonnet");
+    expect(config.default_model).toBe("claude-opus-4-8");
     expect(config.notifications.enabled).toBe(true);
   });
 
@@ -55,7 +55,7 @@ notifications:
     mockedReadFile.mockResolvedValue(":::invalid yaml:::");
 
     const config = await loadGlobalConfig();
-    expect(config.default_model).toBe("sonnet");
+    expect(config.default_model).toBe("claude-opus-4-8");
   });
 
   it("applies schema defaults for missing fields", async () => {

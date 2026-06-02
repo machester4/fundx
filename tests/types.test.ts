@@ -90,7 +90,7 @@ describe("fundConfigSchema", () => {
 describe("globalConfigSchema", () => {
   it("applies sensible defaults", () => {
     const result = globalConfigSchema.parse({});
-    expect(result.default_model).toBe("sonnet");
+    expect(result.default_model).toBe("claude-opus-4-8");
     expect(result.timezone).toBe("UTC");
   });
 

@@ -35,7 +35,7 @@ export interface AgentQueryOptions {
   fundName: string;
   /** The prompt to send to Claude */
   prompt: string;
-  /** Claude model override (defaults to fund → global → "sonnet") */
+  /** Claude model override (defaults to fund → global → "claude-opus-4-8") */
   model?: string;
   /** Maximum conversation turns (default: 50) */
   maxTurns?: number;
@@ -166,7 +166,7 @@ export async function runAgentQuery(
     options.model ??
     fundConfig.claude.model ??
     globalConfig.default_model ??
-    "sonnet";
+    "claude-opus-4-8";
 
   const mcpServers = await buildMcpServers(options.fundName);
 
