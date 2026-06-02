@@ -144,3 +144,9 @@ credentials.yaml
 # Eval harness local reports (artifacts uploaded in CI)
 reports/
 !reports/*-baseline.json
+
+# Large media / model caches (purged from history 2026-06)
+*.mp4
+*.zip
+local_cache/
+._*
