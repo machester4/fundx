@@ -13,7 +13,7 @@ import {
   fundPaths,
 } from "../paths.js";
 import { listActiveFundNames, loadFundConfig, loadAllFundConfigs } from "./fund.service.js";
-import { runFundSession } from "./session.service.js";
+import { runFundSession, isQuotaBackoffActive } from "./session.service.js";
 import { pruneSessionLogJsonl } from "./session-history.service.js";
 import { clearDailyCapAlertState } from "./daily-cap.service.js";
 import { checkSpecialSessions } from "./special-sessions.service.js";
@@ -24,7 +24,8 @@ import { runMetaReflection } from "./meta-reflection.service.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout, createSemaphore } from "../lock.js";
-import { readSessionHistory, readPendingSessions, writePendingSessions, readSessionCountsForToday, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones } from "../state.js";
+import { readSessionHistory, readPendingSessions, updatePendingSessions, readSessionCountsForToday, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones, readQuotaBackoff } from "../state.js";
+import type { PendingSession } from "../types.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
 import { runScreen } from "./screening.service.js";
@@ -53,6 +54,10 @@ const HEARTBEAT_PULSE_MS = 30 * 1000; // 30 seconds — independent of cron tick
 const DEFAULT_MAX_CONCURRENT_SESSIONS = 3;
 
 let isProcessing = false;
+/** Wall-clock anchor of the previous cron tick — drives wake-gap detection. */
+let lastTickAtMs = 0;
+/** Tracks quota-backoff state transitions so expiry can trigger one recovery catch-up. */
+let quotaBackoffWasActive = false;
 let sessionSemaphore: <T>(fn: () => Promise<T>) => Promise<T> = createSemaphore(
   DEFAULT_MAX_CONCURRENT_SESSIONS,
 );
@@ -483,7 +488,20 @@ async function checkSwsTokenExpiry(): Promise<void> {
 
 // ── Missed Session Catch-up ──────────────────────────────────
 
-const CATCHUP_TOLERANCE_MS = 60 * 60 * 1000; // 60 minutes
+// Raised from 60min: with most-recent-only catch-up per fund, a longer window
+// recovers same-day sessions after multi-hour laptop sleeps at bounded cost
+// (at most one catch-up session per fund per invocation).
+const CATCHUP_TOLERANCE_MS = 6 * 60 * 60 * 1000;
+
+/** Inter-tick gap that indicates the host slept through cron minutes.
+ *  node-cron does not backfill missed minutes, so without this the scheduled
+ *  sessions inside the gap are silently lost for the day. */
+export const WAKE_GAP_THRESHOLD_MS = 5 * 60 * 1000;
+
+/** Pure: true when a previous tick anchor exists and the gap exceeds threshold. */
+export function detectWakeGap(prevTickMs: number, nowMs: number): boolean {
+  return prevTickMs > 0 && nowMs - prevTickMs > WAKE_GAP_THRESHOLD_MS;
+}
 
 /** Get the timezone offset in ms for a given IANA timezone (relative to UTC) */
 function getTimezoneOffsetMs(tz: string): number {
@@ -497,7 +515,9 @@ function getTimezoneOffsetMs(tz: string): number {
  * Check for missed sessions and run catch-up for the most recent one per fund.
  * Called on daemon startup to recover from downtime.
  */
-export async function checkMissedSessions(): Promise<void> {
+export async function checkMissedSessions(
+  toleranceMs: number = CATCHUP_TOLERANCE_MS,
+): Promise<void> {
   const names = await listActiveFundNames();
   const now = Date.now();
 
@@ -542,7 +562,7 @@ export async function checkMissedSessions(): Promise<void> {
         // Check if session was missed: scheduled time is in the past, within tolerance, and not already run
         if (
           scheduledMs < now &&
-          now - scheduledMs <= CATCHUP_TOLERANCE_MS &&
+          now - scheduledMs <= toleranceMs &&
           lastRunMs < scheduledMs
         ) {
           if (!bestMissed || scheduledMs > bestMissed.scheduledAt) {
@@ -671,8 +691,43 @@ export async function startDaemon(): Promise<void> {
     try {
       const names = await listActiveFundNames();
       const now = new Date();
+      const nowMs = now.getTime();
 
       await updateHeartbeat(names.length);
+
+      // ── Wake catch-up: node-cron silently drops ticks during OS sleep ──
+      if (detectWakeGap(lastTickAtMs, nowMs)) {
+        await log(
+          `[wake-catchup] ${Math.round((nowMs - lastTickAtMs) / 60000)}min tick gap detected — running missed-session catch-up`,
+        );
+        try {
+          await checkMissedSessions();
+        } catch (err) {
+          await log(`[wake-catchup] failed: ${err}`);
+        }
+      }
+      lastTickAtMs = nowMs;
+
+      // ── Quota backoff: don't launch sessions into a dead usage window ──
+      const quotaState = await readQuotaBackoff().catch(() => null);
+      const quotaActive = isQuotaBackoffActive(
+        quotaState ? Date.parse(quotaState.last_quota_error_at) : null,
+        nowMs,
+      );
+      if (quotaActive && !quotaBackoffWasActive) {
+        await log(
+          `[quota-backoff] active since ${quotaState!.last_quota_error_at} — pausing session launches`,
+        );
+      }
+      if (!quotaActive && quotaBackoffWasActive) {
+        await log(`[quota-backoff] window expired — running recovery catch-up`);
+        try {
+          await checkMissedSessions();
+        } catch (err) {
+          await log(`[quota-backoff] recovery catch-up failed: ${err}`);
+        }
+      }
+      quotaBackoffWasActive = quotaActive;
 
       await Promise.allSettled(
         names.map(async (name) => {
@@ -699,6 +754,7 @@ export async function startDaemon(): Promise<void> {
             for (const [sessionType, session] of Object.entries(
               config.schedule.sessions,
             )) {
+              if (quotaActive) break; // launches paused during quota backoff
               if (!session.enabled) continue;
               if (session.time !== currentTime) continue;
 
@@ -724,6 +780,7 @@ export async function startDaemon(): Promise<void> {
             // ── Special sessions (lock-gated) ──
             const specialMatches = checkSpecialSessions(config);
             for (const special of specialMatches) {
+              if (quotaActive) break; // launches paused during quota backoff
               if (special.time !== currentTime) continue;
 
               const specialType = `special_${special.trigger.replace(/\s+/g, "_").toLowerCase()}`;
@@ -819,23 +876,41 @@ export async function startDaemon(): Promise<void> {
 
             // ── Pending sessions (proactive: news reactions, agent follow-ups) ──
             try {
-              let pending = await readPendingSessions(name);
-              if (pending.length === 0) { /* skip */ }
-              else {
-                const nowMs = Date.now();
+              const pending = quotaActive ? [] : await readPendingSessions(name);
+              if (pending.length > 0) {
+                const nowMs2 = Date.now();
                 const nowIso = new Date().toISOString();
 
-                // Discard stale (>1h past) and too-far-future (>24h) entries
-                pending = pending.filter((s) => {
-                  const schedMs = new Date(s.scheduled_at).getTime();
-                  if (nowMs - schedMs > 60 * 60 * 1000) return false; // stale
-                  if (schedMs - nowMs > 24 * 60 * 60 * 1000) return false; // too far
-                  return true;
-                });
+                // Identify discards (stale >1h past / >24h future). These were
+                // silently deleted before — dropped agent follow-ups (a fund's
+                // only execution path when its schedule is empty) now log and
+                // notify so the operator can see the loss.
+                const isStale = (s: PendingSession) =>
+                  nowMs2 - new Date(s.scheduled_at).getTime() > 60 * 60 * 1000;
+                const isTooFar = (s: PendingSession) =>
+                  new Date(s.scheduled_at).getTime() - nowMs2 > 24 * 60 * 60 * 1000;
+                const discards = pending.filter((s) => isStale(s) || isTooFar(s));
+                for (const d of discards) {
+                  await log(
+                    `[proactive] discarding ${isStale(d) ? "stale" : "far-future"} pending ${d.type} for '${name}' (scheduled ${d.scheduled_at}, source ${d.source})`,
+                  );
+                  if (d.source === "agent") {
+                    await notifyDaemonEvent(
+                      `Dropped follow-up: ${name}`,
+                      `Agent-scheduled ${d.type} (${d.scheduled_at}) expired unexecuted — it will NOT auto-retry.`,
+                    );
+                  }
+                }
+                if (discards.length > 0) {
+                  const dropIds = new Set(discards.map((d) => d.id));
+                  await updatePendingSessions(name, (list) =>
+                    list.filter((s) => !dropIds.has(s.id)),
+                  );
+                }
 
-                // Find due entries
-                const due = pending
-                  .filter((s) => new Date(s.scheduled_at).getTime() <= nowMs)
+                const live = pending.filter((s) => !isStale(s) && !isTooFar(s));
+                const due = live
+                  .filter((s) => new Date(s.scheduled_at).getTime() <= nowMs2)
                   .sort((a, b) => {
                     const prio = (a.priority === "high" ? 0 : 1) - (b.priority === "high" ? 0 : 1);
                     if (prio !== 0) return prio;
@@ -851,13 +926,13 @@ export async function startDaemon(): Promise<void> {
                   if (session.source === "agent") {
                     if (counts.agent >= 5) withinLimits = false;
                     if (counts.last_agent_at) {
-                      const elapsed = nowMs - new Date(counts.last_agent_at).getTime();
+                      const elapsed = nowMs2 - new Date(counts.last_agent_at).getTime();
                       if (elapsed < 5 * 60 * 1000) withinLimits = false;
                     }
                   } else if (session.source === "news") {
                     if (counts.news >= 5) withinLimits = false;
                     if (counts.last_news_at) {
-                      const elapsed = nowMs - new Date(counts.last_news_at).getTime();
+                      const elapsed = nowMs2 - new Date(counts.last_news_at).getTime();
                       if (elapsed < 60 * 60 * 1000) withinLimits = false;
                     }
                   }
@@ -903,12 +978,13 @@ export async function startDaemon(): Promise<void> {
                   }
 
                   if (shouldRemove) {
-                    pending = pending.filter((s) => s.id !== session.id);
+                    // Re-read + remove by id — never write back the pre-session
+                    // snapshot (it erases anything enqueued during the await).
+                    await updatePendingSessions(name, (list) =>
+                      list.filter((s) => s.id !== session.id),
+                    );
                   }
                 }
-
-                // Write back cleaned pending list
-                await writePendingSessions(name, pending);
               }
             } catch (err) {
               await log(`[proactive] Error processing pending sessions for '${name}': ${err}`);

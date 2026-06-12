@@ -51,6 +51,7 @@ vi.mock("../src/services/fund.service.js", () => {
 
 vi.mock("../src/services/session.service.js", () => ({
   runFundSession: vi.fn().mockResolvedValue(undefined),
+  isQuotaBackoffActive: vi.fn(() => false),
 }));
 
 vi.mock("../src/services/special-sessions.service.js", () => ({
@@ -89,6 +90,8 @@ vi.mock("../src/state.js", () => ({
   writeSessionHistory: vi.fn().mockResolvedValue(undefined),
   readPendingSessions: vi.fn().mockResolvedValue([]),
   writePendingSessions: vi.fn().mockResolvedValue(undefined),
+  updatePendingSessions: vi.fn().mockResolvedValue([]),
+  readQuotaBackoff: vi.fn().mockResolvedValue(null),
   readSessionCountsForToday: vi.fn().mockResolvedValue({
     date: new Date().toISOString().split("T")[0]!,
     agent: 0,
@@ -431,10 +434,10 @@ describe("daemon catch-up on startup", () => {
     );
   });
 
-  it("no catch-up when outside tolerance (> 60 min)", async () => {
+  it("no catch-up when outside tolerance (> 6h)", async () => {
     vi.useFakeTimers();
-    // Monday 10:30 UTC — pre_market was at 09:00, 90 min ago (outside 60-min tolerance)
-    vi.setSystemTime(new Date("2026-02-23T10:30:00Z"));
+    // Monday 16:00 UTC — pre_market was at 09:00, 7h ago (outside the 6h tolerance)
+    vi.setSystemTime(new Date("2026-02-23T16:00:00Z"));
 
     vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
     vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
