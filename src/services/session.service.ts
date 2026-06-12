@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { loadFundConfig } from "./fund.service.js";
-import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory } from "../state.js";
+import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory, readVerdicts, writeVerdicts } from "../state.js";
 import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import { DAEMON_NEEDS_RESTART, fundPaths } from "../paths.js";
@@ -9,7 +9,7 @@ import { resolveUniverse } from "./universe.service.js";
 import { loadGlobalConfig } from "../config.js";
 import { sessionModePrefix } from "./chat.service.js";
 import { buildStateSnapshot } from "./snapshot.service.js";
-import { VerdictTracker } from "./verdict-tracker.js";
+import { VerdictTracker, filterFreshVerdicts } from "./verdict-tracker.js";
 import { archiveHandoffIfExists } from "./handoff-archive.service.js";
 import { HandoffTracker } from "./handoff-tracker.js";
 import {
@@ -402,7 +402,14 @@ export async function runFundSession(
 
   const activeSession = await readActiveSession(fundName).catch(() => null);
 
-  const verdictTracker = new VerdictTracker();
+  // Seed the pre-trade gate with verdicts persisted from recent sessions
+  // (24h TTL). Without this, executing a previously-validated trigger
+  // requires re-running both validators inside the executing session —
+  // impossible in a 10-turn news_reaction follow-up.
+  const persistedVerdicts = await readVerdicts(fundName).catch(() => []);
+  const verdictTracker = new VerdictTracker(
+    filterFreshVerdicts(persistedVerdicts, Date.now()),
+  );
 
   /** Wrap a single runAgentQuery call with a wall-clock watchdog.
    *  Both the initial call and the SESSION_EXPIRED retry use this helper so
@@ -530,6 +537,16 @@ export async function runFundSession(
 
   await writeSessionLog(fundName, log);
   await appendSessionLogEntry(fundName, log);
+
+  // Persist verdicts (seeded + observed this session) for the next session's gate.
+  try {
+    await writeVerdicts(fundName, filterFreshVerdicts(verdictTracker.verdicts, Date.now()));
+  } catch (err) {
+    console.warn(
+      `[verdict-gate] failed to persist verdicts for ${fundName}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   options?.onComplete?.({
     output: result.output,

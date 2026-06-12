@@ -29,10 +29,17 @@ vi.mock("../src/agent.js", () => ({
   SESSION_EXPIRED_PATTERN: /session.*(expired|not found|invalid)/i,
 }));
 
+const mockReadVerdicts = vi.fn(async (): Promise<unknown[]> => []);
+const mockWriteVerdicts = vi.fn(async () => undefined);
+
 vi.mock("../src/state.js", () => ({
   writeSessionLog: (...args: unknown[]) => mockWriteSessionLog(...args),
   readActiveSession: vi.fn().mockResolvedValue(null),
   writeActiveSession: vi.fn().mockResolvedValue(undefined),
+  readSessionHistory: vi.fn(async () => ({})),
+  writeSessionHistory: vi.fn(async () => undefined),
+  readVerdicts: (...args: unknown[]) => mockReadVerdicts(...args),
+  writeVerdicts: (...args: unknown[]) => mockWriteVerdicts(...args),
 }));
 
 vi.mock("../src/subagent.js", () => ({
@@ -100,10 +107,12 @@ vi.mock("../src/services/snapshot.service.js", () => ({
 }));
 
 vi.mock("../src/services/verdict-tracker.js", () => ({
-  VerdictTracker: vi.fn().mockImplementation(() => ({
+  VerdictTracker: vi.fn().mockImplementation((initial: unknown[] = []) => ({
     observe: vi.fn(),
     checkPlaceOrder: vi.fn(() => ({ decision: "approve" })),
+    verdicts: initial,
   })),
+  filterFreshVerdicts: (v: unknown[]) => v,
 }));
 
 vi.mock("../src/services/handoff-archive.service.js", () => ({
@@ -470,5 +479,28 @@ describe("runFundSession — fund_universe block", () => {
     const opts = mockRunAgentQuery.mock.calls[0][0];
     expect(opts.prompt).toContain("excluded_tickers: [TSLA]");
     expect(opts.prompt).toContain("excluded_sectors: [Energy]");
+  });
+});
+
+// ── Verdict persistence wiring ───────────────────────────────
+
+describe("runFundSession — verdict persistence", () => {
+  it("seeds the gate from persisted verdicts and persists them back after the session", async () => {
+    const prior = {
+      ticker: "GLD",
+      side: "buy",
+      source: "risk-guardian",
+      recommendation: "APPROVED",
+      approved: true,
+      observedAt: Date.now() - 60_000,
+    };
+    mockReadVerdicts.mockResolvedValueOnce([prior]);
+
+    await runFundSession("test-fund", "pre_market");
+
+    expect(mockReadVerdicts).toHaveBeenCalledWith("test-fund");
+    const { VerdictTracker } = await import("../src/services/verdict-tracker.js");
+    expect(vi.mocked(VerdictTracker)).toHaveBeenCalledWith([prior]);
+    expect(mockWriteVerdicts).toHaveBeenCalledWith("test-fund", [prior]);
   });
 });
