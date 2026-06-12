@@ -721,6 +721,19 @@ export const pendingSessionSchema = z.object({
 
 export type PendingSession = z.infer<typeof pendingSessionSchema>;
 
+// ── Verdict Persistence (pre-trade gate, 24h TTL) ─────────────
+
+export const persistedVerdictSchema = z.object({
+  ticker: z.string(),
+  side: z.enum(["buy", "sell"]),
+  source: z.enum(["trade-evaluator", "risk-guardian"]),
+  recommendation: z.enum(["PROCEED", "RECONSIDER", "REJECT", "APPROVED", "REJECTED"]),
+  approved: z.boolean(),
+  observedAt: z.number(),
+});
+
+export type PersistedVerdict = z.infer<typeof persistedVerdictSchema>;
+
 export const sessionCountsSchema = z.object({
   date: z.string(),
   agent: z.number().default(0),

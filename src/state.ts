@@ -17,6 +17,8 @@ import {
   sessionCountsSchema,
   type PendingSession,
   type SessionCounts,
+  persistedVerdictSchema,
+  type PersistedVerdict,
   dailySnapshotSchema,
   notifiedMilestonesSchema,
   type DailySnapshot,
@@ -241,6 +243,28 @@ export async function readPendingSessions(fundName: string): Promise<PendingSess
 export async function writePendingSessions(fundName: string, sessions: PendingSession[]): Promise<void> {
   const paths = fundPaths(fundName);
   await writeJsonAtomic(paths.state.pendingSessions, sessions);
+}
+
+// ── Persisted Verdicts (pre-trade gate, loaded with TTL by session runner) ──
+
+export async function readVerdicts(fundName: string): Promise<PersistedVerdict[]> {
+  const paths = fundPaths(fundName);
+  try {
+    const data = await readJson(paths.state.verdicts);
+    const arr = Array.isArray(data) ? data : [];
+    return arr
+      .map((item) => persistedVerdictSchema.safeParse(item))
+      .filter((r): r is { success: true; data: PersistedVerdict } => r.success)
+      .map((r) => r.data);
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+export async function writeVerdicts(fundName: string, verdicts: PersistedVerdict[]): Promise<void> {
+  const paths = fundPaths(fundName);
+  await writeJsonAtomic(paths.state.verdicts, verdicts);
 }
 
 // ── Session Counts ────────────────────────────────────────────
