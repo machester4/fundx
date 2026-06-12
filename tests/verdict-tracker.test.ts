@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { VerdictTracker } from "../src/services/verdict-tracker.js";
+import {
+  VerdictTracker,
+  filterFreshVerdicts,
+  VERDICT_TTL_MS,
+  type Verdict,
+} from "../src/services/verdict-tracker.js";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 // Helper: build a mock assistant message with one tool_result block.
@@ -316,5 +321,45 @@ SIDE: buy
 VERDICT: APPROVEDISH
 </risk_validation>`));
     expect(t._verdicts).toHaveLength(0);
+  });
+});
+
+describe("VerdictTracker — persistence across sessions", () => {
+  const mk = (over: Partial<Verdict>): Verdict => ({
+    ticker: "GLD",
+    side: "buy",
+    source: "risk-guardian",
+    recommendation: "APPROVED",
+    approved: true,
+    observedAt: Date.now(),
+    ...over,
+  });
+
+  it("filterFreshVerdicts drops entries older than the TTL", () => {
+    const now = 2_000_000_000_000;
+    const fresh = mk({ observedAt: now - VERDICT_TTL_MS + 60_000 });
+    const stale = mk({ observedAt: now - VERDICT_TTL_MS - 60_000 });
+    expect(filterFreshVerdicts([fresh, stale], now)).toEqual([fresh]);
+  });
+
+  it("constructor seeds prior verdicts so the gate approves without re-running validators", () => {
+    const seed = [
+      mk({ source: "trade-evaluator", recommendation: "PROCEED" }),
+      mk({ source: "risk-guardian", recommendation: "APPROVED" }),
+    ];
+    const t = new VerdictTracker(seed);
+    expect(t.checkPlaceOrder({ symbol: "GLD", side: "buy" }).decision).toBe("approve");
+  });
+
+  it("verdicts getter exposes the combined list for persistence", () => {
+    const t = new VerdictTracker([mk({})]);
+    t.observe(mockToolResult(evalApproved));
+    expect(t.verdicts).toHaveLength(2);
+  });
+
+  it("deny message mentions 24h persistence so the agent knows prior approvals count", () => {
+    const t = new VerdictTracker();
+    const out = t.checkPlaceOrder({ symbol: "AAPL", side: "buy" });
+    expect(out.reason).toContain("24h");
   });
 });

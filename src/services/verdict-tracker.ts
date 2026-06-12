@@ -26,6 +26,16 @@ export interface HookOutput {
 
 const APPROVED_VALUES = new Set(["PROCEED", "APPROVED"]);
 
+/** Verdicts persist across sessions for this long. Long enough to bridge a
+ *  post_market approval to the next pre_market execution; short enough that a
+ *  materially-moved market forces re-validation. */
+export const VERDICT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Pure: drop verdicts whose observedAt is outside the TTL window. */
+export function filterFreshVerdicts(verdicts: Verdict[], nowMs: number): Verdict[] {
+  return verdicts.filter((v) => nowMs - v.observedAt <= VERDICT_TTL_MS);
+}
+
 /** Build a PreToolUse deny that reaches BOTH the operator (systemMessage) and
  *  the agent (reason + permissionDecisionReason). Putting the actionable text
  *  only in systemMessage hid it from the model and deadlocked exit queues. */
@@ -56,6 +66,18 @@ const VERDICT_RE = /^[ \t]*VERDICT:\s*(APPROVED|REJECTED)\b/m;
 export class VerdictTracker {
   /** Public for test introspection only — do not use externally. */
   _verdicts: Verdict[] = [];
+
+  /** `initialVerdicts` seeds the gate with verdicts persisted from recent
+   *  sessions (caller applies the TTL filter), so a previously-validated
+   *  trade can execute without re-running both validators in-session. */
+  constructor(initialVerdicts: Verdict[] = []) {
+    this._verdicts = [...initialVerdicts];
+  }
+
+  /** All seeded + observed verdicts, for persistence at session end. */
+  get verdicts(): Verdict[] {
+    return [...this._verdicts];
+  }
 
   observe(message: SDKMessage): void {
     // Verdicts arrive as <trade_evaluation> / <risk_validation> XML blocks
@@ -165,7 +187,8 @@ export class VerdictTracker {
       return denyPlaceOrder(
         `place_order denied: BUY ${symbol} requires both trade-evaluator PROCEED and risk-guardian APPROVED for (${symbol}, buy). ` +
           `Found: trade-evaluator=${evalStatus}, risk-guardian=${guardStatus}. ` +
-          `Required: invoke trade-evaluator (Task tool) and risk-guardian for this trade before retrying.`,
+          `Required: invoke trade-evaluator (Task tool) and risk-guardian for this trade before retrying. ` +
+          `Verdicts persist 24h, so approvals from a recent prior session also count.`,
       );
     }
 
@@ -177,7 +200,8 @@ export class VerdictTracker {
       return denyPlaceOrder(
         `place_order denied: SELL ${symbol} requires risk-guardian APPROVED for (${symbol}, sell). ` +
           `Found: risk-guardian=${guardStatus}. ` +
-          `Required: invoke risk-guardian (Task tool) for this trade before retrying.`,
+          `Required: invoke risk-guardian (Task tool) for this trade before retrying. ` +
+          `Verdicts persist 24h, so approvals from a recent prior session also count.`,
       );
     }
 
