@@ -247,6 +247,22 @@ export async function writePendingSessions(fundName: string, sessions: PendingSe
   await writeJsonAtomic(paths.state.pendingSessions, sessions);
 }
 
+/** Read-apply-write update for the pending queue. Closes the minutes-long
+ *  read-modify-write window in the daemon tick (which awaited a session
+ *  between read and write-back, clobbering concurrent enqueues — agents lost
+ *  self-scheduled follow-ups this way) down to the microseconds inside this
+ *  function. Writers in other processes (agents editing the file directly)
+ *  can still race that tiny window — acceptable. */
+export async function updatePendingSessions(
+  fundName: string,
+  fn: (sessions: PendingSession[]) => PendingSession[],
+): Promise<PendingSession[]> {
+  const current = await readPendingSessions(fundName);
+  const next = fn(current);
+  await writePendingSessions(fundName, next);
+  return next;
+}
+
 // ── Persisted Verdicts (pre-trade gate, loaded with TTL by session runner) ──
 
 export async function readVerdicts(fundName: string): Promise<PersistedVerdict[]> {

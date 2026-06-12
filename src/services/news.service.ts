@@ -6,7 +6,7 @@ import { NEWS_DIR } from "../paths.js";
 import { loadGlobalConfig } from "../config.js";
 import { listActiveFundNames, loadFundConfig } from "./fund.service.js";
 import { resolveUniverse } from "./universe.service.js";
-import { readPortfolio, readPendingSessions, writePendingSessions, readSessionCountsForToday } from "../state.js";
+import { readPortfolio, updatePendingSessions, readSessionCountsForToday } from "../state.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed, type FundConfig } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
@@ -601,21 +601,23 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
               if (elapsed < 60 * 60 * 1000) continue;
             }
 
-            // Enqueue pending session
-            const pending = await readPendingSessions(fundName);
+            // Enqueue via functional update — a plain read+push+write here can
+            // clobber (or be clobbered by) the daemon tick's queue maintenance.
             const symbols = article.symbols.length > 0 ? article.symbols.join(", ") : "general market";
-            pending.push({
-              id: randomUUID(),
-              type: "news_reaction",
-              focus: `NEWS REACTION SESSION: ${article.source} reported "${article.title}".\nSymbols mentioned: ${symbols}.\nAnalyze the impact on your portfolio. If immediate action is needed (stop-loss adjustment, position reduction, hedge), execute it. If no action needed, document your reasoning in memory.\nThis is a short session (5 min, 10 turns) — be decisive.`,
-              scheduled_at: new Date(Date.now() + 60_000).toISOString(),
-              created_at: new Date().toISOString(),
-              source: "news",
-              max_turns: 10,
-              max_duration_minutes: 5,
-              priority: "high",
-            });
-            await writePendingSessions(fundName, pending);
+            await updatePendingSessions(fundName, (list) => [
+              ...list,
+              {
+                id: randomUUID(),
+                type: "news_reaction" as const,
+                focus: `NEWS REACTION SESSION: ${article.source} reported "${article.title}".\nSymbols mentioned: ${symbols}.\nAnalyze the impact on your portfolio. If immediate action is needed (stop-loss adjustment, position reduction, hedge), execute it. If no action needed, document your reasoning in memory.\nThis is a short session (5 min, 10 turns) — be decisive.`,
+                scheduled_at: new Date(Date.now() + 60_000).toISOString(),
+                created_at: new Date().toISOString(),
+                source: "news" as const,
+                max_turns: 10,
+                max_duration_minutes: 5,
+                priority: "high" as const,
+              },
+            ]);
           } catch { /* best effort — alert was already sent */ }
         }
       }
