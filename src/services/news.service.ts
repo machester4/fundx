@@ -7,6 +7,7 @@ import { loadGlobalConfig } from "../config.js";
 import { listActiveFundNames, loadFundConfig } from "./fund.service.js";
 import { resolveUniverse } from "./universe.service.js";
 import { readPortfolio, updatePendingSessions, readSessionCountsForToday } from "../state.js";
+import { openWatchlistDb, queryWatchlist } from "./watchlist.service.js";
 import { newsConfigSchema, type NewsArticle, type NewsFeed, type FundConfig } from "../types.js";
 
 // ── RSS Parsing ──────────────────────────────────────────────
@@ -546,15 +547,39 @@ export async function checkBreakingNews(newArticles: NewsArticle[]): Promise<voi
   const names = await listActiveFundNames();
   const fundTickers = new Map<string, string[]>();
 
-  for (const name of names) {
-    try {
-      const config = await loadFundConfig(name);
-      if (config.fund.status !== "active") continue;
-      const tickers: string[] = await getKnownUniverseTickers(name, config);
-      const portfolio = await readPortfolio(name).catch(() => null);
-      if (portfolio) portfolio.positions.forEach((p) => tickers.push(p.symbol));
-      fundTickers.set(name, [...new Set(tickers)]);
-    } catch { /* skip */ }
+  // Relevance = portfolio positions ∪ watchlist (candidate/watching), NOT the
+  // resolved universe. With every fund on the sp500 preset, universe-based
+  // relevance fanned every tagged headline out to all funds ($513 of news
+  // sessions in 18 days, 80% dismissed as noise).
+  let wdb: ReturnType<typeof openWatchlistDb> | null = null;
+  try {
+    wdb = openWatchlistDb();
+  } catch { /* watchlist unavailable — portfolio-only relevance */ }
+
+  try {
+    for (const name of names) {
+      try {
+        const config = await loadFundConfig(name);
+        if (config.fund.status !== "active") continue;
+        const tickers: string[] = [];
+        const portfolio = await readPortfolio(name).catch(() => null);
+        if (portfolio) portfolio.positions.forEach((p) => tickers.push(p.symbol));
+        if (wdb) {
+          try {
+            for (const row of queryWatchlist(wdb, {
+              fund: name,
+              status: ["candidate", "watching"],
+              limit: 50,
+            })) {
+              tickers.push(row.ticker);
+            }
+          } catch { /* portfolio-only relevance for this fund */ }
+        }
+        fundTickers.set(name, [...new Set(tickers)]);
+      } catch { /* skip */ }
+    }
+  } finally {
+    wdb?.close();
   }
 
   for (const article of newArticles) {
