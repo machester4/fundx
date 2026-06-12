@@ -202,3 +202,14 @@ describe("buildStateSnapshot", () => {
     expect(snap.length).toBeLessThan(50_000);
   });
 });
+
+describe("execution_gate_guidance", () => {
+  it("always includes the gate mechanics block, even without a handoff", async () => {
+    const xml = await buildStateSnapshot("missing-fund-gate");
+    expect(xml).toContain("<execution_gate_guidance>");
+    expect(xml).toContain("NO hook in ~/.claude/settings.json");
+    expect(xml).toContain("Verdicts persist for 24 hours");
+    expect(xml).toContain("risk-guardian");
+    expect(xml).toContain("</execution_gate_guidance>");
+  });
+});

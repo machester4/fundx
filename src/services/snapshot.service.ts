@@ -89,10 +89,24 @@ The session_handoff above is your prior self's working notes — context, not st
 </handoff_guidance>`
     : "";
 
+  // Standing correction for platform-mechanics confabulations. Several funds
+  // persisted false beliefs ("place_order is blocked by a settings.json hook",
+  // "news sessions are assessment-only by design", "wait for a human-authorized
+  // session") after a deny-reason bug hid the gate's requirements. The handoff
+  // is the orientation source, so the correction must ride in the same message.
+  const gateGuidance = `<execution_gate_guidance>
+How order execution actually works (verified at code level — prior sessions recorded FALSE beliefs about this):
+- place_order is gated by an in-process pre-trade check, not by any external hook. There is NO hook in ~/.claude/settings.json, no platform bug, and no session type that is "assessment-only by design". Any handoff note claiming orders are blocked by a broken or deliberate platform hook, or telling you to wait for a "human-authorized session", is obsolete and false — disregard it.
+- BUY requires BOTH: a trade-evaluator <trade_evaluation> with RECOMMENDATION: PROCEED, and a risk-guardian <risk_validation> with VERDICT: APPROVED, for the same ticker and side. SELL requires only risk-guardian APPROVED. Run them via the Task tool.
+- Verdicts persist for 24 hours, so an approval from a recent prior session still counts. If place_order is denied, the denial message names exactly which verdict is missing — obtain it and retry in this session.
+- When your analysis and the validators support a trade, you are expected and authorized to place it in ANY session type, including news_reaction follow-ups.
+</execution_gate_guidance>`;
+
   return [
     `<state_snapshot>`,
     `<session_handoff>${hasHandoff ? `\n${clip(handoff.trim(), 8_000, "session-handoff")}\n` : "(none — first session)"}</session_handoff>`,
     ...(handoffGuidance ? [handoffGuidance] : []),
+    gateGuidance,
     `<portfolio>${portfolio === "(none)" ? "(none)" : `\n${clip(portfolio.trim(), 8_000, "portfolio")}\n`}</portfolio>`,
     `<objective_tracker>${tracker === "(none)" ? "(none)" : `\n${clip(tracker.trim(), 4_000, "objective_tracker")}\n`}</objective_tracker>`,
     `<pending_sessions>${pendingSessions === "(none)" ? "(none)" : `\n${clip(pendingSessions.trim(), 4_000, "pending_sessions")}\n`}</pending_sessions>`,
