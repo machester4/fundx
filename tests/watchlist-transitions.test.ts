@@ -337,3 +337,37 @@ describe("tagFundCompatibilityForTickers", () => {
     expect(row.compatible).toBe(1); // advisory — XOM is in base, sector check skipped
   });
 });
+
+describe("queryWatchlist — orderBy peak_score", () => {
+  let db: Database.Database;
+  beforeEach(() => {
+    db = openWatchlistDb(":memory:");
+    // Nightly screening stamps every row with the same last_evaluated_at, so
+    // the default ordering degenerated to an alphabetical LIMIT — the actual
+    // top-scored candidates never reached the agent's snapshot.
+    const t = 1_700_000_000_000;
+    const ins = db.prepare(
+      `INSERT INTO watchlist
+         (ticker, status, first_surfaced_at, last_evaluated_at, current_screens_json, peak_score, peak_score_at, notes)
+       VALUES (?, 'watching', ?, ?, '[]', ?, ?, NULL)`,
+    );
+    ins.run("AAAA", t, t, 1.0, t);
+    ins.run("ZTOP", t, t, 9.9, t);
+    ins.run("MMID", t, t, 5.0, t);
+  });
+  afterEach(() => db.close());
+
+  it("orders by peak_score DESC when requested despite identical timestamps", () => {
+    const rows = queryWatchlist(db, {
+      status: ["candidate", "watching"],
+      orderBy: "peak_score",
+      limit: 2,
+    });
+    expect(rows.map((r) => r.ticker)).toEqual(["ZTOP", "MMID"]);
+  });
+
+  it("keeps last_evaluated_at ordering by default", () => {
+    const rows = queryWatchlist(db, { status: ["candidate", "watching"] });
+    expect(rows).toHaveLength(3);
+  });
+});

@@ -46,6 +46,7 @@ function tryWatchlistTop(fundName: string): string {
     const rows = queryWatchlist(db, {
       fund: fundName,
       status: ["candidate", "watching"],
+      orderBy: "peak_score",
       limit: TOP_WATCHLIST,
     });
     if (rows.length === 0) return "(empty)";

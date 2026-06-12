@@ -150,6 +150,10 @@ export interface WatchlistQuery {
   fund?: string;
   ticker?: string;
   limit?: number;
+  /** Default "last_evaluated_at". Use "peak_score" when a ranked top-N is
+   *  needed — nightly screening stamps every row with the same timestamp, so
+   *  the default order ties and LIMIT degenerates to alphabetical. */
+  orderBy?: "last_evaluated_at" | "peak_score";
 }
 
 export function queryWatchlist(
@@ -176,10 +180,14 @@ export function queryWatchlist(
     );
     params.fund = q.fund;
   }
+  const orderSql =
+    q.orderBy === "peak_score"
+      ? " ORDER BY COALESCE(w.peak_score, -1e9) DESC, w.last_evaluated_at DESC"
+      : " ORDER BY w.last_evaluated_at DESC";
   const sql =
     "SELECT * FROM watchlist w" +
     (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
-    " ORDER BY w.last_evaluated_at DESC" +
+    orderSql +
     (q.limit ? ` LIMIT ${Math.min(q.limit, 1000)}` : "");
   const rows = db.prepare(sql).all(params) as Array<{
     ticker: string;
