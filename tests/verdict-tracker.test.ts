@@ -240,6 +240,35 @@ VERDICT: APPROVED
   });
 });
 
+describe("VerdictTracker.checkPlaceOrder — deny reason reaches the model", () => {
+  // Regression: the actionable deny text must land in the SDK fields the model
+  // sees (reason / hookSpecificOutput.permissionDecisionReason), not only in
+  // systemMessage (which the SDK surfaces to the human, not the agent). When it
+  // lived only in systemMessage, agents could not learn how to satisfy the gate
+  // and froze exit queues for weeks, hallucinating a settings.json hook.
+  it("BUY block carries reason + permissionDecisionReason matching systemMessage", () => {
+    const t = new VerdictTracker();
+    const out = t.checkPlaceOrder({ symbol: "AAPL", side: "buy" });
+    expect(out.decision).toBe("block");
+    expect(out.reason).toContain("place_order denied");
+    expect(out.reason).toBe(out.systemMessage);
+    expect(out.hookSpecificOutput).toMatchObject({
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+    });
+    expect(out.hookSpecificOutput?.permissionDecisionReason).toBe(out.systemMessage);
+  });
+
+  it("SELL block carries reason + permissionDecisionReason matching systemMessage", () => {
+    const t = new VerdictTracker();
+    const out = t.checkPlaceOrder({ symbol: "AAPL", side: "sell" });
+    expect(out.decision).toBe("block");
+    expect(out.reason).toContain("invoke risk-guardian");
+    expect(out.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(out.hookSpecificOutput?.permissionDecisionReason).toBe(out.reason);
+  });
+});
+
 describe("VerdictTracker.checkPlaceOrder — most-recent wins", () => {
   it("subsequent verdict for same (source, ticker, side) overrides earlier", () => {
     const t = new VerdictTracker();

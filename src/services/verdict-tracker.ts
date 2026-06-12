@@ -11,10 +11,36 @@ export interface Verdict {
 
 export interface HookOutput {
   decision: "approve" | "block";
+  /** Surfaced to the human operator (SDK does NOT relay this to the agent). */
   systemMessage?: string;
+  /** Legacy model-facing denial reason — the SDK relays this back to the agent. */
+  reason?: string;
+  /** Canonical PreToolUse deny payload. `permissionDecisionReason` is the text
+   *  the agent reads to learn how to satisfy the gate. */
+  hookSpecificOutput?: {
+    hookEventName: "PreToolUse";
+    permissionDecision: "deny";
+    permissionDecisionReason: string;
+  };
 }
 
 const APPROVED_VALUES = new Set(["PROCEED", "APPROVED"]);
+
+/** Build a PreToolUse deny that reaches BOTH the operator (systemMessage) and
+ *  the agent (reason + permissionDecisionReason). Putting the actionable text
+ *  only in systemMessage hid it from the model and deadlocked exit queues. */
+function denyPlaceOrder(message: string): HookOutput {
+  return {
+    decision: "block",
+    systemMessage: message,
+    reason: message,
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: message,
+    },
+  };
+}
 
 const TRADE_EVAL_RE = /<trade_evaluation>([\s\S]*?)<\/trade_evaluation>/g;
 const RISK_VAL_RE = /<risk_validation>([\s\S]*?)<\/risk_validation>/g;
@@ -133,13 +159,11 @@ export class VerdictTracker {
       }
       const evalStatus = evaluator?.recommendation ?? "none found";
       const guardStatus = guardian?.recommendation ?? "none found";
-      return {
-        decision: "block",
-        systemMessage:
-          `place_order denied: BUY ${symbol} requires both trade-evaluator PROCEED and risk-guardian APPROVED for (${symbol}, buy). ` +
+      return denyPlaceOrder(
+        `place_order denied: BUY ${symbol} requires both trade-evaluator PROCEED and risk-guardian APPROVED for (${symbol}, buy). ` +
           `Found: trade-evaluator=${evalStatus}, risk-guardian=${guardStatus}. ` +
           `Required: invoke trade-evaluator (Task tool) and risk-guardian for this trade before retrying.`,
-      };
+      );
     }
 
     if (side === "sell") {
@@ -147,13 +171,11 @@ export class VerdictTracker {
         return { decision: "approve" };
       }
       const guardStatus = guardian?.recommendation ?? "none found";
-      return {
-        decision: "block",
-        systemMessage:
-          `place_order denied: SELL ${symbol} requires risk-guardian APPROVED for (${symbol}, sell). ` +
+      return denyPlaceOrder(
+        `place_order denied: SELL ${symbol} requires risk-guardian APPROVED for (${symbol}, sell). ` +
           `Found: risk-guardian=${guardStatus}. ` +
           `Required: invoke risk-guardian (Task tool) for this trade before retrying.`,
-      };
+      );
     }
 
     console.warn(`[verdict-tracker] unknown side '${side}' for ${symbol} — allowing place_order`);
