@@ -89,15 +89,32 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Tickers that double as common English words. Bare-word matches for these
+ *  measured 92% false-positive in the live news store (the words "a", "on",
+ *  "it", "are"… tag A/ON/IT/ARE on nearly every headline) — they only count
+ *  in explicit $TICKER or (TICKER) form. */
+export const WORD_TICKER_STOPLIST = new Set([
+  "A", "ALL", "AMP", "ARE", "BIG", "BRO", "C", "CAN", "COST", "D", "DAY", "EAT",
+  "FAST", "FIX", "FOR", "GO", "GOOD", "HAS", "HE", "IT", "KEY", "L", "LOW",
+  "MET", "NEXT", "NICE", "NOW", "O", "ON", "ONE", "OPEN", "OR", "OUT", "PLAY",
+  "REAL", "SEE", "SO", "T", "TAP", "TECH", "UP", "WELL",
+]);
+
 export function detectTickers(text: string, knownTickers: string[]): string[] {
   const found: string[] = [];
   for (const ticker of knownTickers) {
-    // Match $TICKER, (TICKER), or bare TICKER as whole word
     const escaped = escapeRegex(ticker);
-    const pattern = new RegExp(`(\\$${escaped}\\b|\\(${escaped}\\)|\\b${escaped}\\b)`, "i");
-    if (pattern.test(text)) {
+    // Explicit forms ($TICKER / (TICKER)) are unambiguous regardless of case
+    const explicit = new RegExp(`(\\$${escaped}\\b|\\(${escaped}\\))`, "i");
+    if (explicit.test(text)) {
       found.push(ticker);
+      continue;
     }
+    // Bare form: exact-uppercase only, and never for common-word tickers.
+    // Precision over recall — the screener drives discovery; tags only need
+    // to be trustworthy enough to wake funds on genuinely relevant headlines.
+    if (WORD_TICKER_STOPLIST.has(ticker)) continue;
+    if (new RegExp(`\\b${escaped}\\b`).test(text)) found.push(ticker);
   }
   return [...new Set(found)];
 }

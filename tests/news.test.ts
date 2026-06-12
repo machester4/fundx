@@ -143,6 +143,33 @@ describe("detectTickers", () => {
   it("deduplicates tickers", () => {
     expect(detectTickers("$AAPL and AAPL both mentioned", ["AAPL"])).toEqual(["AAPL"]);
   });
+
+  // Precision regression: 92% of tag instances in the live store were
+  // common-word false positives (A/ON/IT/ARE/HAS...), fanning Opus news
+  // sessions out to every fund per irrelevant headline.
+  it("ignores common words in ordinary headlines", () => {
+    expect(
+      detectTickers(
+        "South Africa Treasury Says Upgrades Show Path to Investment Grade",
+        ["ON", "IT", "ARE", "A", "T", "AAPL"],
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps explicit $TICKER and (TICKER) forms for word-tickers", () => {
+    expect(
+      detectTickers("Apple ($AAPL) and ON Semi (ON) beat estimates", ["ON", "AAPL"]),
+    ).toEqual(expect.arrayContaining(["AAPL", "ON"]));
+  });
+
+  it("matches bare non-word tickers case-sensitively only", () => {
+    expect(detectTickers("CMI surges after earnings", ["CMI"])).toEqual(["CMI"]);
+    expect(detectTickers("cmi surges after earnings", ["CMI"])).toEqual([]);
+  });
+
+  it("never bare-matches word-tickers even in ALL-CAPS headlines", () => {
+    expect(detectTickers("BREAKING: TARIFFS ON CHIPS ARE COMING", ["ON", "ARE", "T"])).toEqual([]);
+  });
 });
 
 describe("isHighImpact", () => {
