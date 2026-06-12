@@ -281,3 +281,40 @@ describe("VerdictTracker.checkPlaceOrder — most-recent wins", () => {
     expect(out.systemMessage).toContain("trade-evaluator=REJECT");
   });
 });
+
+describe("VerdictTracker — tolerant verdict parsing", () => {
+  // Regression: anchoring with \s*$ silently discarded legitimate verdicts
+  // like "APPROVED (with warnings)" (pm-survivor's June 3 GLD denial) and
+  // produced unexplained gate denials with both validators run.
+  it("accepts VERDICT: APPROVED with trailing qualifier", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(`<risk_validation>
+TICKER: GLD
+SIDE: buy
+VERDICT: APPROVED (with warnings)
+</risk_validation>`));
+    expect(t._verdicts).toHaveLength(1);
+    expect(t._verdicts[0]).toMatchObject({ ticker: "GLD", approved: true });
+  });
+
+  it("accepts RECOMMENDATION: PROCEED with trailing qualifier", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(`<trade_evaluation>
+TICKER: CMI
+SIDE: buy
+RECOMMENDATION: PROCEED — half size given FOMC week
+</trade_evaluation>`));
+    expect(t._verdicts).toHaveLength(1);
+    expect(t._verdicts[0]).toMatchObject({ ticker: "CMI", recommendation: "PROCEED", approved: true });
+  });
+
+  it("does not match APPROVED-prefixed tokens", () => {
+    const t = new VerdictTracker();
+    t.observe(mockToolResultOnUserMessage(`<risk_validation>
+TICKER: GLD
+SIDE: buy
+VERDICT: APPROVEDISH
+</risk_validation>`));
+    expect(t._verdicts).toHaveLength(0);
+  });
+});

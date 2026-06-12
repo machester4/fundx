@@ -47,8 +47,11 @@ const RISK_VAL_RE = /<risk_validation>([\s\S]*?)<\/risk_validation>/g;
 
 const TICKER_RE = /^[ \t]*TICKER:\s*([A-Z][A-Z0-9.-]*)\s*$/m;
 const SIDE_RE = /^[ \t]*SIDE:\s*(buy|sell)\s*$/m;
-const RECOMMENDATION_RE = /^[ \t]*RECOMMENDATION:\s*(PROCEED|RECONSIDER|REJECT)\s*$/m;
-const VERDICT_RE = /^[ \t]*VERDICT:\s*(APPROVED|REJECTED)\s*$/m;
+// Accept trailing qualifiers after the keyword ("APPROVED (with warnings)",
+// "PROCEED — half size"). Anchoring with \s*$ silently discarded legitimate
+// verdicts and produced unexplained denials with both validators run.
+const RECOMMENDATION_RE = /^[ \t]*RECOMMENDATION:\s*(PROCEED|RECONSIDER|REJECT)\b/m;
+const VERDICT_RE = /^[ \t]*VERDICT:\s*(APPROVED|REJECTED)\b/m;
 
 export class VerdictTracker {
   /** Public for test introspection only — do not use externally. */
