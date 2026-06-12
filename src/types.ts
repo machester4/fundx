@@ -734,6 +734,11 @@ export const persistedVerdictSchema = z.object({
 
 export type PersistedVerdict = z.infer<typeof persistedVerdictSchema>;
 
+// ── Quota Backoff (workspace-level, subscription usage exhaustion) ──
+
+export const quotaBackoffSchema = z.object({ last_quota_error_at: z.string() });
+export type QuotaBackoffState = z.infer<typeof quotaBackoffSchema>;
+
 export const sessionCountsSchema = z.object({
   date: z.string(),
   agent: z.number().default(0),

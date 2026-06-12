@@ -27,19 +27,24 @@ vi.mock("../src/agent.js", () => ({
   runAgentQuery: (...args: unknown[]) => mockRunAgentQuery(...args),
   buildMcpServers: vi.fn(async () => ({})),
   SESSION_EXPIRED_PATTERN: /session.*(expired|not found|invalid)/i,
+  QUOTA_EXHAUSTED_PATTERN: /out of (extra )?usage|usage limit/i,
 }));
 
 const mockReadVerdicts = vi.fn(async (): Promise<unknown[]> => []);
 const mockWriteVerdicts = vi.fn(async () => undefined);
+
+const mockWriteSessionHistory = vi.fn(async () => undefined);
+const mockWriteQuotaBackoff = vi.fn(async () => undefined);
 
 vi.mock("../src/state.js", () => ({
   writeSessionLog: (...args: unknown[]) => mockWriteSessionLog(...args),
   readActiveSession: vi.fn().mockResolvedValue(null),
   writeActiveSession: vi.fn().mockResolvedValue(undefined),
   readSessionHistory: vi.fn(async () => ({})),
-  writeSessionHistory: vi.fn(async () => undefined),
+  writeSessionHistory: (...args: unknown[]) => mockWriteSessionHistory(...args),
   readVerdicts: (...args: unknown[]) => mockReadVerdicts(...args),
   writeVerdicts: (...args: unknown[]) => mockWriteVerdicts(...args),
+  writeQuotaBackoff: (...args: unknown[]) => mockWriteQuotaBackoff(...args),
 }));
 
 vi.mock("../src/subagent.js", () => ({
@@ -502,5 +507,49 @@ describe("runFundSession — verdict persistence", () => {
     const { VerdictTracker } = await import("../src/services/verdict-tracker.js");
     expect(vi.mocked(VerdictTracker)).toHaveBeenCalledWith([prior]);
     expect(mockWriteVerdicts).toHaveBeenCalledWith("test-fund", [prior]);
+  });
+});
+
+// ── Quota exhaustion handling ────────────────────────────────
+
+describe("runFundSession — quota exhaustion", () => {
+  it("does not stamp session history, writes backoff marker, sends distinct alert", async () => {
+    mockRunAgentQuery.mockResolvedValue({
+      output: "You're out of extra usage · resets 6pm (America/Montevideo)",
+      cost_usd: 0,
+      duration_ms: 4000,
+      num_turns: 1,
+      usage: {},
+      session_id: "sess-err",
+      status: "error",
+      error: "process exited",
+    });
+
+    await runFundSession("test-fund", "pre_market");
+
+    expect(mockWriteSessionHistory).not.toHaveBeenCalled();
+    expect(mockWriteQuotaBackoff).toHaveBeenCalledWith({
+      last_quota_error_at: expect.any(String),
+    });
+    const alerts = mockNotifyGeneric.mock.calls.map((c) => String(c[1] ?? c[0]));
+    expect(alerts.some((a) => a.includes("usage exhausted"))).toBe(true);
+  });
+
+  it("ordinary errors still stamp history and skip the backoff marker", async () => {
+    mockRunAgentQuery.mockResolvedValue({
+      output: "Something else broke",
+      cost_usd: 0,
+      duration_ms: 4000,
+      num_turns: 2,
+      usage: {},
+      session_id: "sess-err2",
+      status: "error",
+      error: "boom",
+    });
+
+    await runFundSession("test-fund", "pre_market");
+
+    expect(mockWriteSessionHistory).toHaveBeenCalled();
+    expect(mockWriteQuotaBackoff).not.toHaveBeenCalled();
   });
 });

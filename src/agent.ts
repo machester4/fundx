@@ -16,6 +16,11 @@ import { createMarketDataMcpServer } from "./mcp/market-data.js";
 /** Matches Claude Agent SDK error messages for expired/invalid sessions (used in two places — keep in sync) */
 export const SESSION_EXPIRED_PATTERN = /session.*(expired|not found|invalid)/i;
 
+/** Claude subscription quota exhaustion ("You're out of extra usage · resets …").
+ *  The SDK returns these as non-throwing `status: "error"` results with ~1 turn
+ *  and $0 cost. Not matched: ordinary prose mentioning "usage of tools". */
+export const QUOTA_EXHAUSTED_PATTERN = /out of (extra )?usage|usage limit/i;
+
 /** Node.js error codes that indicate an MCP server subprocess crashed or lost its transport connection */
 const TRANSPORT_ERROR_CODES = new Set(["EPIPE", "ECONNREFUSED", "ECONNRESET", "ENOENT"]);
 

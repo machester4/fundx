@@ -28,6 +28,9 @@ export const DAEMON_HEARTBEAT = join(WORKSPACE, "daemon.heartbeat");
 /** Daemon restart flag — written by session runner on auth failure, read by supervisor */
 export const DAEMON_NEEDS_RESTART = join(WORKSPACE, "daemon.needs-restart");
 
+// Workspace-level quota backoff marker (subscription usage exhausted)
+export const QUOTA_BACKOFF = join(WORKSPACE, "state", "quota_backoff.json");
+
 /** Max daemon log size before rotation (5 MB) */
 export const DAEMON_LOG_MAX_SIZE = 5 * 1024 * 1024;
 

@@ -23,8 +23,10 @@ import {
   notifiedMilestonesSchema,
   type DailySnapshot,
   type NotifiedMilestones,
+  quotaBackoffSchema,
+  type QuotaBackoffState,
 } from "./types.js";
-import { fundPaths } from "./paths.js";
+import { fundPaths, QUOTA_BACKOFF } from "./paths.js";
 
 /** Write a UTF-8 text file atomically: write to .tmp then rename */
 export async function writeFileAtomic(filePath: string, content: string): Promise<void> {
@@ -265,6 +267,20 @@ export async function readVerdicts(fundName: string): Promise<PersistedVerdict[]
 export async function writeVerdicts(fundName: string, verdicts: PersistedVerdict[]): Promise<void> {
   const paths = fundPaths(fundName);
   await writeJsonAtomic(paths.state.verdicts, verdicts);
+}
+
+// ── Quota Backoff (workspace-level, subscription usage exhaustion) ──
+
+export async function readQuotaBackoff(): Promise<QuotaBackoffState | null> {
+  try {
+    return quotaBackoffSchema.parse(await readJson(QUOTA_BACKOFF));
+  } catch {
+    return null; // missing or malformed → no backoff
+  }
+}
+
+export async function writeQuotaBackoff(state: QuotaBackoffState): Promise<void> {
+  await writeJsonAtomic(QUOTA_BACKOFF, state);
 }
 
 // ── Session Counts ────────────────────────────────────────────

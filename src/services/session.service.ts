@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { loadFundConfig } from "./fund.service.js";
-import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory, readVerdicts, writeVerdicts } from "../state.js";
-import { runAgentQuery, SESSION_EXPIRED_PATTERN } from "../agent.js";
+import { writeSessionLog, readActiveSession, writeActiveSession, readSessionHistory, writeSessionHistory, readVerdicts, writeVerdicts, writeQuotaBackoff } from "../state.js";
+import { runAgentQuery, SESSION_EXPIRED_PATTERN, QUOTA_EXHAUSTED_PATTERN } from "../agent.js";
 import { buildAnalystAgents } from "../subagent.js";
 import { DAEMON_NEEDS_RESTART, fundPaths } from "../paths.js";
 import type { Budget, FundConfig, GlobalConfig, SessionLogV2, UniverseResolution } from "../types.js";
@@ -24,6 +24,14 @@ import type { HookOutput } from "./verdict-tracker.js";
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
 const WATCHDOG_HARD_MS = 20 * 60 * 1000; // 20 minutes
+
+/** How long the daemon refrains from launching sessions after a quota error. */
+export const QUOTA_BACKOFF_MS = 60 * 60 * 1000;
+
+/** Pure: whether the backoff window from the last quota error is still open. */
+export function isQuotaBackoffActive(lastErrorAtMs: number | null, nowMs: number): boolean {
+  return lastErrorAtMs !== null && nowMs - lastErrorAtMs < QUOTA_BACKOFF_MS;
+}
 
 export interface WatchdogInput {
   now: number;
@@ -596,18 +604,37 @@ export async function runFundSession(
     );
   }
 
-  // Update per-session-type history for catch-up detection
-  try {
-    const history = await readSessionHistory(fundName);
-    history[sessionType] = new Date().toISOString();
-    await writeSessionHistory(fundName, history);
-  } catch {
-    // Non-critical -- catch-up will still work from session_log.json fallback
+  const quotaKilled =
+    result.status === "error" && QUOTA_EXHAUSTED_PATTERN.test(result.output ?? "");
+
+  // Update per-session-type history for catch-up detection.
+  // Quota-killed sessions are deliberately NOT stamped: the session did not
+  // actually run, and the wake/recovery catch-up must be able to re-run it.
+  if (!quotaKilled) {
+    try {
+      const history = await readSessionHistory(fundName);
+      history[sessionType] = new Date().toISOString();
+      await writeSessionHistory(fundName, history);
+    } catch {
+      // Non-critical -- catch-up will still work from session_log.json fallback
+    }
+  }
+
+  if (quotaKilled) {
+    try {
+      await writeQuotaBackoff({ last_quota_error_at: new Date().toISOString() });
+    } catch { /* best effort */ }
+    await notifySession(
+      `⏳ <b>${displayName}</b> — ${sessionType} blocked: Claude subscription usage exhausted. ` +
+      `Daemon will pause session launches ~1h and catch up after the window resets.`,
+    );
   }
 
   // Detect probable auth failure: error status with zero tokens/turns means the SDK
   // couldn't authenticate (expired CLAUDE_CODE_OAUTH_TOKEN). Signal supervisor to restart.
+  // Quota exhaustion is excluded — restarting the daemon cannot refill the usage window.
   if (
+    !quotaKilled &&
     result.status === "error" &&
     (log.tokens_in ?? 0) === 0 &&
     (log.tokens_out ?? 0) === 0 &&
