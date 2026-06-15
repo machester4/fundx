@@ -189,6 +189,12 @@ export default function EvalCommand({ options: opts }: Props) {
                 setNotifyEnabled(false);
                 try {
                   await runFundSession(fundName, sessionType, {
+                    // Grant the autonomous eval session nearly the full per-run
+                    // wallclock. The seeded fund's 15min default cut sessions off
+                    // mid-execution (post phantom-hook fix the agent pursues the
+                    // full validate→execute path), so the judge saw no final
+                    // response. Capped just under the 30min watchdog.
+                    maxDurationMinutes: Math.min(28, Math.ceil(opts.timeout / 60)),
                     onComplete: (res) => {
                       box.result = res;
                     },

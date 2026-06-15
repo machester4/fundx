@@ -23,7 +23,11 @@ import type { HookOutput } from "./verdict-tracker.js";
 
 const DEFAULT_MAX_TURNS = 50;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
-const WATCHDOG_HARD_MS = 20 * 60 * 1000; // 20 minutes
+// Hard wall-clock ceiling, backstop for a hung SDK/MCP. Raised 20→30min once the
+// phantom-hook fix let sessions pursue the full validate→execute→reflect path
+// (trade-evaluator + risk-guardian sub-agents + place_order + handoff), which
+// legitimately exceeds 20min and was being killed mid-trade before completion.
+const WATCHDOG_HARD_MS = 30 * 60 * 1000; // 30 minutes
 
 /** How long the daemon refrains from launching sessions after a quota error. */
 export const QUOTA_BACKOFF_MS = 60 * 60 * 1000;
