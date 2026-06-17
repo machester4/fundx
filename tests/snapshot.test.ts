@@ -219,9 +219,20 @@ describe("execution_gate_guidance", () => {
   it("always includes the gate mechanics block, even without a handoff", async () => {
     const xml = await buildStateSnapshot("missing-fund-gate");
     expect(xml).toContain("<execution_gate_guidance>");
-    expect(xml).toContain("NO hook in ~/.claude/settings.json");
+    expect(xml).toContain("in-process pre-trade check");
+    expect(xml).toContain("settings.json hook");
     expect(xml).toContain("Verdicts persist for 24 hours");
     expect(xml).toContain("risk-guardian");
     expect(xml).toContain("</execution_gate_guidance>");
+  });
+
+  it("gates the obsolete-handoff-note correction behind handoff presence", async () => {
+    // No handoff → no false belief to correct, so the corrective clause is omitted;
+    // the factual mechanics stay always-on.
+    const noHandoff = await buildStateSnapshot("missing-fund-gate-2");
+    expect(noHandoff).not.toContain("human-authorized session");
+    await seed("f-gate-hf", { "session-handoff.md": "# Handoff\nHook blocks place_order." });
+    const withHandoff = await buildStateSnapshot("f-gate-hf");
+    expect(withHandoff).toContain("human-authorized session");
   });
 });

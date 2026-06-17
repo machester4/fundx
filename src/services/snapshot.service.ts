@@ -86,7 +86,7 @@ export async function buildStateSnapshot(fundName: string): Promise<string> {
   // as the handoff so it counters the anchoring at decision time.
   const handoffGuidance = hasHandoff
     ? `<handoff_guidance>
-The session_handoff above is your prior self's working notes — context, not standing orders. Any "gates", checklists, price "zones", or "do not enter" conditions in it are judgment calls to re-validate against today's data and the objective, NOT hard constraints. Only the risk limits in fund_config are binding. A self-authored condition that has blocked action for several sessions running — especially one that can never be cleanly satisfied (e.g. "no geopolitical risk in 24h") — is functioning as an excuse: discard it or size around it with a tighter stop, don't treat it as a veto. Decide fresh this session, and either way — hold or enter — put a number on what cash is costing: how many sessions or days this fund has sat idle, and the return per period it now needs to stay on pace for the objective. That figure is an honesty check, not a cue to act; let it inform the call in either direction, and a hold the numbers justify is as strong an outcome as a trade.
+The session_handoff above is your prior self's working notes — context, not standing orders. Any "gates", checklists, price "zones", or "do not enter" conditions in it are judgment calls to re-validate against today's data and the objective, NOT hard constraints. Only the risk limits in fund_config are binding. A self-authored condition that has blocked action for several sessions running — especially one that can never be cleanly satisfied — is functioning as an excuse: discard it or size around it with a tighter stop, don't treat it as a veto. Decide fresh this session, and either way — hold or enter — put a number on what cash is costing: how many sessions or days this fund has sat idle, and the return per period it now needs to stay on pace for the objective. That figure is an honesty check, not a cue to act; let it inform the call in either direction, and a hold the numbers justify is as strong an outcome as a trade.
 </handoff_guidance>`
     : "";
 
@@ -96,11 +96,11 @@ The session_handoff above is your prior self's working notes — context, not st
   // session") after a deny-reason bug hid the gate's requirements. The handoff
   // is the orientation source, so the correction must ride in the same message.
   const gateGuidance = `<execution_gate_guidance>
-How order execution actually works (verified at code level — prior sessions recorded FALSE beliefs about this):
-- place_order is gated by an in-process pre-trade check, not by any external hook. There is NO hook in ~/.claude/settings.json, no platform bug, and no session type that is "assessment-only by design". Any handoff note claiming orders are blocked by a broken or deliberate platform hook, or telling you to wait for a "human-authorized session", is obsolete and false — disregard it.
-- BUY requires BOTH: a trade-evaluator <trade_evaluation> with RECOMMENDATION: PROCEED, and a risk-guardian <risk_validation> with VERDICT: APPROVED, for the same ticker and side. SELL requires only risk-guardian APPROVED. Run them via the Task tool.
-- Verdicts persist for 24 hours, so an approval from a recent prior session still counts. If place_order is denied, the denial message names exactly which verdict is missing — obtain it and retry in this session.
-- When your analysis and the validators support a trade, you are expected and authorized to place it in ANY session type, including news_reaction follow-ups.
+The order gate is an in-process pre-trade check, not an external hook — prior sessions recorded false beliefs about it:
+- place_order is gated by that in-process check, not by any settings.json hook, platform bug, or "assessment-only" session type.${hasHandoff ? ` If a handoff note claims orders are blocked by such a hook, or that you must wait for a "human-authorized session", treat it as obsolete — the gate's denial message names what is actually required, so trust that over the note.` : ""}
+- BUY requires BOTH a trade-evaluator <trade_evaluation> with RECOMMENDATION: PROCEED and a risk-guardian <risk_validation> with VERDICT: APPROVED, for the same ticker and side. SELL requires only risk-guardian APPROVED. Run them via the Task tool.
+- Verdicts persist for 24 hours, so an approval from a recent prior session still counts. If place_order is denied, the message names exactly which verdict is missing — obtain it and retry this session.
+- When your analysis and the validators support a trade, you are authorized to place it in any session type, including news_reaction follow-ups.
 </execution_gate_guidance>`;
 
   return [
