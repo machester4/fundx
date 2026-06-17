@@ -118,6 +118,18 @@ describe("buildStateSnapshot", () => {
     expect(snap).toContain("MSFT");
   });
 
+  it("handoff_guidance asks to quantify the opportunity cost of cash at decision time", async () => {
+    // Guards the decision_discipline lever: the judge deducts when the agent
+    // names cash drag without sizing it (sessions/days idle + pace vs target).
+    // The ask must live in the decision-time handoff_guidance, not only the
+    // reflect-phase session-reflection skill.
+    await seed("f-oppcost", { "session-handoff.md": "# Handoff\n18 sessions in cash." });
+    const snap = await buildStateSnapshot("f-oppcost");
+    expect(snap).toContain("<handoff_guidance>");
+    expect(snap).toContain("put a number on what cash is costing");
+    expect(snap).toContain("not a cue to act");
+  });
+
   it("emits (none — first session) when handoff missing", async () => {
     await seed("f2", {
       "portfolio.json": '{"cash": 5000}',
