@@ -136,7 +136,7 @@ const sessionScheduleSchema = z.object({
   time: z.string(),
   enabled: z.boolean().default(true),
   focus: z.string(),
-  max_duration_minutes: z.number().positive().default(15),
+  max_duration_minutes: z.number().positive().default(60),
 });
 
 const specialSessionSchema = z.object({
@@ -144,7 +144,7 @@ const specialSessionSchema = z.object({
   time: z.string(),
   focus: z.string(),
   enabled: z.boolean().default(true),
-  max_duration_minutes: z.number().positive().default(15),
+  max_duration_minutes: z.number().positive().default(60),
 });
 
 export const scheduleSchema = z.object({
@@ -431,7 +431,7 @@ export const specialSessionTriggerSchema = z.object({
   time: z.string(),
   focus: z.string(),
   enabled: z.boolean().default(true),
-  max_duration_minutes: z.number().positive().default(15),
+  max_duration_minutes: z.number().positive().default(60),
 });
 
 export type SpecialSessionTrigger = z.infer<typeof specialSessionTriggerSchema>;
@@ -715,7 +715,7 @@ export const pendingSessionSchema = z.object({
   created_at: z.string(),
   source: z.enum(["news", "agent"]),
   max_turns: z.number().positive().max(25).default(10),
-  max_duration_minutes: z.number().positive().max(15).default(5),
+  max_duration_minutes: z.number().positive().max(60).default(5),
   priority: z.enum(["high", "normal"]).default("normal"),
 });
 

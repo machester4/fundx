@@ -15,7 +15,7 @@ describe("Phase 5 Zod Schemas", () => {
     expect(valid.trigger).toBe("FOMC meeting days");
     expect(valid.time).toBe("14:00");
     expect(valid.enabled).toBe(true); // default
-    expect(valid.max_duration_minutes).toBe(15); // default
+    expect(valid.max_duration_minutes).toBe(60); // default
   });
 
   it("should validate fund template schema", async () => {

@@ -45,13 +45,13 @@ const STOPLOSS_CHECK_INTERVAL_MINUTES = 5;
 
 const HEARTBEAT_STALE_MS = 3 * 60 * 1000; // 3 minutes
 // Last-resort wrapper around runFundSession. MUST sit ABOVE the in-session
-// ceilings (fund max_duration ~25min SDK timeout, 30min hard watchdog) so a
+// ceilings (fund max_duration ~60min SDK timeout, 70min hard watchdog) so a
 // slow-but-progressing session is killed cleanly by its own watchdog (which
 // writes status=watchdog_killed + notifies) rather than abandoned here — a
 // withTimeout abort orphans the still-running session and logs an empty
-// status=timeout ($0, 0 turns, no handoff), wasting quota. Was 20min, which
-// undercut the raised ceilings and caused intermittent empty timeouts.
-const SESSION_TIMEOUT_MS = 35 * 60 * 1000; // 35 minutes
+// status=timeout ($0, 0 turns, no handoff), wasting quota. Tracks the
+// session-budget raise to 60min (was 20min, then 35min).
+const SESSION_TIMEOUT_MS = 75 * 60 * 1000; // 75 minutes
 const HEARTBEAT_PULSE_MS = 30 * 1000; // 30 seconds — independent of cron tick
 /** Hard cap on concurrent Claude SDK sessions launched by the daemon. Protects
  *  against news_reaction fan-out across many funds wedging the cron tick for

@@ -1481,9 +1481,14 @@ Then write the updated array back to \`state/pending_sessions.json\`.
 - Minimum 5 minutes between sessions
 - Maximum 24 hours in the future
 - max_turns must not exceed 25
-- max_duration_minutes must not exceed 15
-- Keep follow-ups short and focused — one objective per session
+- max_duration_minutes must not exceed 60
+- One objective per session
 - Do NOT schedule follow-ups for routine work that the next regular session will handle
+
+## Sizing the follow-up's budget
+Match the time and turn budget to the work:
+- A quick check (a price level, an order fill, a single-number read) needs little — 5–10 minutes, 10 turns.
+- An execution follow-up — one that will re-run trade-evaluator and risk-guardian and then place an order — needs room: those validators are sub-agents that take several minutes each, and a verdict obtained more than 24h ago has expired and must be re-derived. Give it 30–45 minutes and the full 25 turns so it is not cut off mid-trade. Under-budgeting an execution follow-up is how an armed, gate-cleared trade dies unfilled.
 
 ## Good Follow-Up Reasons
 - "Check if GLD broke $420 support in the next 30 min"

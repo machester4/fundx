@@ -22,12 +22,20 @@ import type { SDKMessage, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { HookOutput } from "./verdict-tracker.js";
 
 const DEFAULT_MAX_TURNS = 50;
-const DEFAULT_SESSION_TIMEOUT_MINUTES = 15;
-// Hard wall-clock ceiling, backstop for a hung SDK/MCP. Raised 20→30min once the
-// phantom-hook fix let sessions pursue the full validate→execute→reflect path
-// (trade-evaluator + risk-guardian sub-agents + place_order + handoff), which
-// legitimately exceeds 20min and was being killed mid-trade before completion.
-const WATCHDOG_HARD_MS = 30 * 60 * 1000; // 30 minutes
+// Session time budget (SDK timeout) when a fund config doesn't set one. Generous
+// by design so the agent can run a full session — research, sub-agent
+// validation, execution, reflection — without being cut off mid-work.
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
+// Timeout-ordering invariant — each layer MUST sit above the previous:
+//   session budget (max_duration, ~60min SDK timeout)
+//     < WATCHDOG_HARD_MS (70min, here)
+//       < daemon SESSION_TIMEOUT_MS (75min, daemon.service.ts)
+// The watchdog is the backstop for when the SDK timeout/AbortController fails;
+// the daemon withTimeout is the last resort. Keeping both above the session
+// budget ensures a slow-but-progressing session ends via its own SDK timeout or
+// a clean watchdog kill (status=watchdog_killed + notify) — never an empty
+// daemon-abandon (status=timeout, $0, 0 turns, no handoff) that wastes quota.
+const WATCHDOG_HARD_MS = 70 * 60 * 1000; // 70 minutes
 
 /** How long the daemon refrains from launching sessions after a quota error. */
 export const QUOTA_BACKOFF_MS = 60 * 60 * 1000;

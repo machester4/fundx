@@ -239,7 +239,7 @@ export async function addSpecialSession(
     time,
     focus,
     enabled: true,
-    max_duration_minutes: 15,
+    max_duration_minutes: 60,
   });
 
   config.schedule.special_sessions = specialSessions;

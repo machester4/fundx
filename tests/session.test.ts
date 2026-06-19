@@ -205,7 +205,7 @@ describe("runFundSession", () => {
     expect(opts.timeoutMs).toBe(20 * 60 * 1000);
   });
 
-  it("defaults timeout to 15 minutes when max_duration_minutes not set", async () => {
+  it("defaults timeout to 60 minutes when max_duration_minutes not set", async () => {
     mockedLoadFundConfig.mockResolvedValue(
       makeFundConfig({ max_duration_minutes: undefined }) as never,
     );
@@ -213,7 +213,7 @@ describe("runFundSession", () => {
     await runFundSession("test-fund", "pre_market");
 
     const opts = mockRunAgentQuery.mock.calls[0][0];
-    expect(opts.timeoutMs).toBe(15 * 60 * 1000);
+    expect(opts.timeoutMs).toBe(60 * 60 * 1000);
   });
 
   it("uses options.focus override when provided", async () => {
