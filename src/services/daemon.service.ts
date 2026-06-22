@@ -24,7 +24,7 @@ import { runMetaReflection } from "./meta-reflection.service.js";
 import { checkStopLosses, executeStopLosses } from "../stoploss.js";
 import { loadGlobalConfig } from "../config.js";
 import { acquireFundLock, releaseFundLock, withTimeout, createSemaphore } from "../lock.js";
-import { readSessionHistory, readPendingSessions, updatePendingSessions, readSessionCountsForToday, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones, readQuotaBackoff } from "../state.js";
+import { readSessionHistory, writeSessionHistory, readPendingSessions, updatePendingSessions, readSessionCountsForToday, writeSessionCounts, readPortfolio, readTracker, readDailySnapshot, writeDailySnapshot, readNotifiedMilestones, writeNotifiedMilestones, readQuotaBackoff } from "../state.js";
 import type { PendingSession } from "../types.js";
 import { openWatchlistDb } from "./watchlist.service.js";
 import { openPriceCache } from "./price-cache.service.js";
@@ -607,6 +607,17 @@ export async function checkMissedSessions(
       } catch (err) {
         await log(`Catch-up session error (${name}/${bestMissed.sessionType}): ${err}`);
       } finally {
+        // Mark the missed slot as handled under its REAL session type.
+        // runFundSession stamps history under the "catchup_<type>" key it ran
+        // as, which never satisfies this function's missed-session check (which
+        // reads the base type) — so without this the same slot re-fires on
+        // every subsequent wake-gap / startup catch-up, burning budget. Stamp
+        // in finally (success or failure) to bound catch-up to one attempt.
+        try {
+          const history = await readSessionHistory(name);
+          history[bestMissed.sessionType] = new Date().toISOString();
+          await writeSessionHistory(name, history);
+        } catch { /* non-critical — next scheduled session re-stamps */ }
         await releaseFundLock(name);
       }
     } catch (err) {

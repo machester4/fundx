@@ -146,7 +146,7 @@ import { checkStopLosses, executeStopLosses } from "../src/stoploss.js";
 import { generateDailyReport } from "../src/services/reports.service.js";
 import { startDaemon, stopDaemon, isDaemonRunning, checkMissedSessions, cleanOldAnalysisFiles, sendDailyDigest, sendWeeklyDigest, checkMilestonesAndDrawdown } from "../src/services/daemon.service.js";
 import { runFundSession } from "../src/services/session.service.js";
-import { readSessionHistory } from "../src/state.js";
+import { readSessionHistory, writeSessionHistory } from "../src/state.js";
 import type { FundConfig } from "../src/types.js";
 import { fundConfigSchema } from "../src/types.js";
 
@@ -431,6 +431,27 @@ describe("daemon catch-up on startup", () => {
       expect.objectContaining({
         focus: expect.stringContaining("[CATCH-UP]"),
       }),
+    );
+  });
+
+  it("stamps the base session type after catch-up so it does not re-fire", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-23T09:30:00Z"));
+
+    vi.mocked(listFundNames).mockResolvedValue(["test-fund"]);
+    vi.mocked(loadFundConfig).mockResolvedValue(makeFundConfig());
+    vi.mocked(readSessionHistory).mockResolvedValue({
+      pre_market: "2026-02-22T09:00:00.000Z", // missed since yesterday
+    });
+
+    await checkMissedSessions();
+
+    // History must be stamped under the REAL session type (pre_market), not
+    // "catchup_pre_market" — otherwise the missed-session check stays true and
+    // the catch-up re-fires on every subsequent wake-gap (the redundant-catchup bug).
+    expect(writeSessionHistory).toHaveBeenCalledWith(
+      "test-fund",
+      expect.objectContaining({ pre_market: "2026-02-23T09:30:00.000Z" }),
     );
   });
 
